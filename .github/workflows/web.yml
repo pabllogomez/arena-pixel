@@ -66,12 +66,14 @@ jobs:
 
       - name: Testar e exportar
         run: |
-          set -e
+          set -eo pipefail
           exportar() {  # $1 = pasta do projeto, $2 = pasta de saída
             echo "::group::$1"
             cd "$GITHUB_WORKSPACE/$1"
             ~/godot/godot --headless --import --path . || true
-            ~/godot/godot --headless --fixed-fps 60 --path . -s tools/teste.gd
+            # Reprova se o teste falhar OU se aparecer qualquer erro de script
+            ~/godot/godot --headless --fixed-fps 60 --path . -s tools/teste.gd 2>&1 | tee teste.log
+            if grep -q "SCRIPT ERROR" teste.log; then echo "::error::Erro de script no teste"; exit 1; fi
             mkdir -p "$2"
             ~/godot/godot --headless --path . --export-release "Web" "$2/index.html"
             test -f "$2/index.wasm"

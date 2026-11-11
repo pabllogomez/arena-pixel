@@ -85,6 +85,10 @@ func _jogar(main, config: Dictionary, max_quadros: int) -> Dictionary:
 	main._nova_partida(config)
 	await process_frame
 	var p = main._atual
+	# Se algum script quebrou, a partida não monta: isso tem que reprovar o teste
+	if p == null or p.get("mapa") == null or p.mapa.is_empty() or p.jogadores.size() != 2:
+		_falha("a partida não foi montada (erro de script?)")
+		return {}
 	var max_nivel := 0
 	var teleportes := 0
 	var pos_antes := {}
@@ -120,15 +124,23 @@ func _testar_partidas() -> void:
 	root.add_child(main)
 	await process_frame
 	var duelos := [[0, 0], [1, 1], [2, 2], [2, 0]]
+	var jogadas := 0
+	if main.get("_toque") == null:
+		_falha("main.gd não criou os controles na tela (erro de script?)")
 	for d in duelos:
 		var config := {"semente": 1000 + d[0] * 10 + d[1], "tempo": 45.0, "bots": {1: d[0], 2: d[1]}}
 		var r: Dictionary = await _jogar(main, config, 60 * 140)
+		if r.is_empty():
+			continue
+		jogadas += 1
 		print("bot %s x bot %s | %-9s x %-9s | nível máx %d | portas %d | súbita: %s | fim: %s" % [
 			NOMES_DIF[d[0]], NOMES_DIF[d[1]], r["classes"][1], r["classes"][2],
 			r["nivel"], r["teleportes"], r["morte_subita"],
 			("P%d venceu" % r["vencedor"]) if r["fim"] else "NÃO"])
 		if not r["fim"]:
 			_falha("partida não terminou mesmo com a Morte Súbita")
+	if jogadas != duelos.size():
+		_falha("só %d de %d partidas rodaram" % [jogadas, duelos.size()])
 	main.queue_free()
 
 

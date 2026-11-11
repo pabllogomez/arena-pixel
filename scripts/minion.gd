@@ -23,6 +23,12 @@ var velocidade := 40.0
 var visao := 70.0
 var xp_valor := 3
 var intervalo_ataque := 0.9
+## Defensivo: só persegue quem o atacou ou quem chegou bem perto
+var defensivo := false
+var _provocado := false
+const VISAO_DEFENSIVA := 22.0
+## Quem mata um monstro recupera esta fração da vida máxima
+const CURA_POR_ABATE := 0.08
 ## Lacaios do Rei também arremessam lanças (0 = não arremessa)
 var alcance_arremesso := 0.0
 var _cd_arremesso := 1.0
@@ -157,7 +163,7 @@ func _seguir_caminho(alvo, delta: float) -> bool:
 
 func _procurar_alvo():
 	var melhor = null
-	var melhor_d := visao
+	var melhor_d := visao if (not defensivo or _provocado) else VISAO_DEFENSIVA
 	for a in get_tree().get_nodes_in_group("alvo"):
 		if a == self or not Jogo.hostis(self, a) or not a.esta_vivo():
 			continue
@@ -206,6 +212,7 @@ func receber_dano(qtd: float, origem) -> void:
 		return
 	vida -= qtd
 	_flash = 0.12
+	_provocado = true
 	Jogo.tocar("acerto")
 	if vida <= 0.0:
 		_morrer(origem)
@@ -223,6 +230,8 @@ func _morrer(origem) -> void:
 		var xp_antes: int = origem.xp if origem is Lutador else 0
 		var nivel_antes: int = origem.nivel if origem is Lutador else 0
 		origem.ganhar_xp(xp_valor)
+		if origem is Lutador and equipe == 0:
+			origem.curar(origem.vida_max * CURA_POR_ABATE)
 		if origem is Lutador:
 			var ganho := xp_valor
 			if origem.nivel == nivel_antes:

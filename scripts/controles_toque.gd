@@ -73,10 +73,41 @@ func _botao_em(pos: Vector2) -> String:
 	return ""
 
 
+# ------------------------------------------------------------------ Tela cheia
+
+func _rect_tela_cheia() -> Rect2:
+	## Ao lado do cronômetro na partida; no canto superior direito no menu.
+	if modo == "menu":
+		return Rect2(get_viewport().get_visible_rect().size.x - 20, 4, 16, 16)
+	return Rect2(220, 1, 15, 15)
+
+
+func alternar_tela_cheia() -> void:
+	var cheia := DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_FULLSCREEN
+	if cheia:
+		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+	else:
+		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
+		# No Android, também tenta travar a tela na horizontal
+		if OS.has_feature("web"):
+			JavaScriptBridge.eval("try { screen.orientation.lock('landscape').catch(function(){}); } catch (e) {}")
+
+
 func _input(event: InputEvent) -> void:
 	if event is InputEventScreenTouch or event is InputEventScreenDrag:
 		if not Jogo.toque:
 			Jogo.toque = true
+	# Botão de tela cheia (o toque também chega aqui como clique) e tecla F
+	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		if _rect_tela_cheia().grow(4).has_point(event.position):
+			alternar_tela_cheia()
+			get_viewport().set_input_as_handled()
+			return
+	if event is InputEventKey and event.pressed and not event.echo and event.physical_keycode == KEY_F:
+		alternar_tela_cheia()
+		return
+	if event is InputEventScreenTouch and _rect_tela_cheia().grow(4).has_point(event.position):
+		return  # não aperta nenhum botão de jogo por baixo
 	if modo == "menu":
 		return
 	if event is InputEventScreenTouch:
@@ -132,6 +163,7 @@ func soltar_tudo() -> void:
 # ------------------------------------------------------------------ Desenho
 
 func _draw() -> void:
+	_desenhar_tela_cheia()
 	if not Jogo.toque:
 		return
 	var fonte := ThemeDB.fallback_font
@@ -163,6 +195,23 @@ func _draw() -> void:
 			var t := raio * 0.45
 			var lado := Vector2(-d.y, d.x)
 			draw_colored_polygon(PackedVector2Array([c + d * t, c - d * t * 0.7 + lado * t, c - d * t * 0.7 - lado * t]), COR_SIMBOLO)
+
+
+func _desenhar_tela_cheia() -> void:
+	var r := _rect_tela_cheia()
+	var cheia := DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_FULLSCREEN
+	draw_rect(r, Color(0, 0, 0, 0.55))
+	var cor := Color(1, 1, 1, 0.8)
+	var t := 3.0 if r.size.x < 16.0 else 4.0
+	var m := 3.0
+	# Quatro cantos: apontando para fora (entrar) ou para dentro (sair)
+	for canto in [Vector2(0, 0), Vector2(1, 0), Vector2(0, 1), Vector2(1, 1)]:
+		var c: Vector2 = canto
+		var p: Vector2 = r.position + Vector2(m, m) + c * (r.size - Vector2(m, m) * 2.0)
+		var dx := (1.0 if c.x == 0 else -1.0) * (-1.0 if cheia else 1.0)
+		var dy := (1.0 if c.y == 0 else -1.0) * (-1.0 if cheia else 1.0)
+		draw_line(p, p + Vector2(dx * t, 0), cor, 1.0)
+		draw_line(p, p + Vector2(0, dy * t), cor, 1.0)
 
 
 func _texto(fonte: Font, pos: Vector2, texto: String, tam: int, cor: Color) -> void:

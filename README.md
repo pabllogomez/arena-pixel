@@ -13,11 +13,11 @@ Combate 1x1 local em plataformas, 2D, pixel art, feito em **Godot 4.5** para rod
 | Descer da plataforma | `S` | `↓` |
 | Escolher melhoria | `Q` / `E` | `1` / `2` do teclado numérico (ou `K` / `L`) |
 
-No celular aparecem botões na tela: setas na esquerda, pulo na direita, e as melhorias são escolhidas tocando na opção.
+O botão ⛶ (ou a tecla `F`) liga a tela cheia. No celular aparecem botões na tela: setas na esquerda, pulo na direita, e as melhorias são escolhidas tocando na opção.
 Controles (gamepad) também funcionam.
 
 ### Regras
-- **Todos começam como Recruta:** fraco, ataca corpo a corpo e causa pouco dano em jogadores.
+- **Todos começam como Recruta:** fraco, ataca corpo a corpo e causa pouco dano em jogadores. Os monstros de nível 1 só revidam, e matar um monstro cura 8% da vida. A classe chega em ~1 minuto.
 - **No nível 2**, o Recruta vira uma **classe sorteada**, sem repetir a do oponente. Dos níveis 3 em diante, cada nível oferece 2 melhorias para escolher.
 - **O ataque é automático:** sai sozinho quando um inimigo entra no alcance.
 - **Monstros** dão XP e ficam mais fortes, rápidos e agressivos conforme o maior nível entre os jogadores. A cor indica a força: roxo, depois verde, laranja e vermelho.

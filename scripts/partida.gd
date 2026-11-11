@@ -28,9 +28,14 @@ const ATLAS_PLATAFORMA := Vector2i(1, 0)
 const ATLAS_CHAO := Vector2i(2, 0)
 
 ## Vida dos monstros de nível 1 (cresce 35% por nível)
-const VIDA_MONSTRO := 48.0
+const VIDA_MONSTRO := 36.0
 ## Dano dos monstros de nível 1 (cresce 20% por nível)
-const DANO_MONSTRO := 4.0
+const DANO_MONSTRO := 3.0
+## XP dos monstros de nível 1 (dos níveis seguintes: 4 + 2 por nível)
+const XP_MONSTRO_NIVEL_1 := 2
+## Enquanto houver Recruta, nascem mais monstros, mais rápido
+const INTERVALO_MONSTRO_RECRUTA := 3.0
+const MAX_MONSTROS_RECRUTA := 5
 ## Dano entre jogadores (fração do dano normal)
 const PVP_BASE := 0.4
 ## Recruta atacando jogador
@@ -164,6 +169,10 @@ func _physics_process(delta: float) -> void:
 		var nivel := nivel_monstros()
 		var intervalo := maxf(3.5, 6.0 - 0.4 * (nivel - 1))
 		var maximo := 4 if nivel < 4 else 5
+		if _tem_recruta():
+			# Fase de Recruta: muitos monstros fracos valendo pouco XP
+			intervalo = INTERVALO_MONSTRO_RECRUTA
+			maximo = MAX_MONSTROS_RECRUTA
 		if _t_monstro >= intervalo:
 			_t_monstro = 0.0
 			if _contar_equipe(0) < maximo:
@@ -302,6 +311,13 @@ func _atualizar_morte_subita(delta: float) -> void:
 
 # ------------------------------------------------------------------ Monstros
 
+func _tem_recruta() -> bool:
+	for l in jogadores.values():
+		if l.vivo and l.eh_recruta:
+			return true
+	return false
+
+
 func nivel_monstros() -> int:
 	## Média dos níveis dos jogadores (arredondada para baixo). Usar a média,
 	## e não o maior nível, evita que quem ficou para trás não consiga mais
@@ -335,8 +351,9 @@ func _criar_monstro() -> void:
 			DANO_MONSTRO * pow(1.2, n),      # dano
 			minf(30.0 * (1.0 + 0.08 * n), 60.0),  # velocidade
 			minf(70.0 + 15.0 * n, 170.0),    # visão
-			4 + 2 * n)                       # XP
+			XP_MONSTRO_NIVEL_1 if n == 0 else 4 + 2 * n)  # XP
 	m.intervalo_ataque = maxf(0.9 * pow(0.93, n), 0.5)
+	m.defensivo = n == 0  # nível 1: só revida
 	m.position = pos
 	entidades.add_child(m)
 	criar_brilho(m.position)
