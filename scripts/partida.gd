@@ -27,6 +27,10 @@ const ATLAS_PAREDE := Vector2i(0, 0)
 const ATLAS_PLATAFORMA := Vector2i(1, 0)
 const ATLAS_CHAO := Vector2i(2, 0)
 
+## Vida dos monstros de nível 1 (cresce 35% por nível)
+const VIDA_MONSTRO := 48.0
+## Dano dos monstros de nível 1 (cresce 20% por nível)
+const DANO_MONSTRO := 4.0
 ## Dano entre jogadores (fração do dano normal)
 const PVP_BASE := 0.4
 ## Recruta atacando jogador
@@ -64,6 +68,7 @@ var anuncio_cor := Color.WHITE
 var anuncio_t := 0.0
 
 var _t_monstro := 0.0
+var _tremor := 0.0
 var _t_nevoa := 0.0
 var _t_fim := 0.0
 var _vida_no_quadro := {}
@@ -94,7 +99,7 @@ func iniciar(config: Dictionary) -> void:
 		entidades.add_child(l)
 		jogadores[n] = l
 
-	for i in 3:
+	for i in 2:
 		_criar_monstro()
 
 
@@ -125,6 +130,13 @@ func _process(delta: float) -> void:
 				l.ativo = true
 	if anuncio_t > 0.0:
 		anuncio_t -= delta
+	# Tremor de tela (pouso pesado do Orc)
+	var mundo: Node2D = $Mundo
+	if _tremor > 0.05:
+		mundo.position = Vector2(0, 8) + Vector2(randf_range(-1, 1), randf_range(-1, 1)).round() * _tremor
+		_tremor = move_toward(_tremor, 0.0, delta * 10.0)
+	else:
+		mundo.position = Vector2(0, 8)
 
 	if fim:
 		_t_fim += delta
@@ -291,10 +303,13 @@ func _atualizar_morte_subita(delta: float) -> void:
 # ------------------------------------------------------------------ Monstros
 
 func nivel_monstros() -> int:
-	var n := 1
+	## Média dos níveis dos jogadores (arredondada para baixo). Usar a média,
+	## e não o maior nível, evita que quem ficou para trás não consiga mais
+	## matar monstros.
+	var soma := 0
 	for l in jogadores.values():
-		n = maxi(n, l.nivel)
-	return n
+		soma += l.nivel
+	return maxi(1, soma / maxi(jogadores.size(), 1))
 
 
 func _criar_monstro() -> void:
@@ -316,8 +331,8 @@ func _criar_monstro() -> void:
 	var faixa := clampi(1 + n / 2, 1, 4)  # níveis 1, 2-3, 4-5, 6+
 	var m: Minion = CENA_MINION.instantiate()
 	m.configurar(self, 0, null, TEX_GOSMA[faixa - 1],
-			30.0 * pow(1.35, n),             # vida
-			6.0 * pow(1.2, n),               # dano
+			VIDA_MONSTRO * pow(1.35, n),     # vida
+			DANO_MONSTRO * pow(1.2, n),      # dano
 			minf(30.0 * (1.0 + 0.08 * n), 60.0),  # velocidade
 			minf(70.0 + 15.0 * n, 170.0),    # visão
 			4 + 2 * n)                       # XP
@@ -383,6 +398,27 @@ func criar_corte(pos: Vector2, espelhar: bool) -> void:
 	tw.tween_callback(func() -> void: s.frame = 1)
 	tw.tween_interval(0.08)
 	tw.tween_callback(s.queue_free)
+
+
+func tremer(forca: float) -> void:
+	_tremor = maxf(_tremor, forca)
+
+
+func criar_poeira(pos: Vector2) -> void:
+	Jogo.tocar("pouso")
+	for lado in [-1.0, 1.0]:
+		for i in 3:
+			var s := Sprite2D.new()
+			s.texture = TEX_BRILHO
+			s.hframes = 3
+			s.scale = Vector2.ONE * 0.4
+			s.modulate = Color(0.75, 0.7, 0.6, 0.8)
+			s.position = pos + Vector2(lado * 3.0, -2.0)
+			entidades.add_child(s)
+			var tw := s.create_tween()
+			tw.tween_property(s, "position", s.position + Vector2(lado * (8.0 + i * 5.0), -3.0 - i * 2.0), 0.3)
+			tw.parallel().tween_property(s, "modulate:a", 0.0, 0.3)
+			tw.tween_callback(s.queue_free)
 
 
 func criar_brilho(pos: Vector2) -> void:

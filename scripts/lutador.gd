@@ -8,10 +8,14 @@ signal morreu(lutador: Lutador)
 
 const GRAVIDADE := 700.0
 const QUEDA_MAX := 360.0
-const ACELERACAO := 1000.0
-const ATRITO := 1200.0
 const TEMPO_COYOTE := 0.1
 const TEMPO_BUFFER := 0.12
+## XP que o Recruta precisa para ganhar a classe (~3 monstros iniciais)
+const XP_PARA_CLASSE := 10
+## Regeneração fora de combate: depois de REGEN_ESPERA s sem tomar dano,
+## recupera REGEN_TAXA da vida máxima por segundo.
+const REGEN_ESPERA := 5.0
+const REGEN_TAXA := 0.03
 const QUADROS := {
 	"parado": [0, 1],
 	"correr": [2, 3, 4, 5],
@@ -59,6 +63,7 @@ var _descer := 0.0
 var _anim := "parado"
 var _anim_t := 0.0
 var _flash := 0.0
+var _sem_dano := 0.0
 
 
 func configurar(n: int, d: ClasseDados, p: Node, c: Controle) -> void:
@@ -93,8 +98,10 @@ func receber_classe(d: ClasseDados) -> void:
 
 
 func nome_jogador() -> String:
-	var n := controle.nome()
-	return n if n != "" else "P%d" % numero
+	## "VOCÊ" e "CPU" no modo solo; "P1" e "P2" no multijogador.
+	if controle is ControleBot:
+		return "CPU"
+	return "VOCÊ" if Jogo.solo else "P%d" % numero
 
 
 func _ready() -> void:
@@ -109,7 +116,7 @@ func _physics_process(delta: float) -> void:
 		return
 
 	if not is_on_floor():
-		velocity.y = minf(velocity.y + GRAVIDADE * delta, QUEDA_MAX)
+		velocity.y = minf(velocity.y + GRAVIDADE * dados.mult_gravidade * delta, QUEDA_MAX)
 		_coyote -= delta
 	else:
 		_coyote = TEMPO_COYOTE
@@ -138,18 +145,27 @@ func _physics_process(delta: float) -> void:
 			set_collision_mask_value(5, true)
 
 	if dir != 0.0:
-		velocity.x = move_toward(velocity.x, dir * velocidade, ACELERACAO * delta)
+		velocity.x = move_toward(velocity.x, dir * velocidade, dados.aceleracao * delta)
 		sprite.flip_h = dir < 0.0
 	else:
-		velocity.x = move_toward(velocity.x, 0.0, ATRITO * delta)
+		velocity.x = move_toward(velocity.x, 0.0, dados.atrito * delta)
 
+	var estava_no_ar := not is_on_floor()
+	var queda := velocity.y
 	move_and_slide()
+	if estava_no_ar and is_on_floor() and queda > 200.0 and dados.pouso_pesado:
+		partida.tremer(clampf(queda / 150.0, 1.0, 2.5))
+		partida.criar_poeira(position + Vector2(0, 8))
 	_animar(delta)
 
 	if ativo:
 		_cd_ataque -= delta
 		if _cd_ataque <= 0.0:
 			_tentar_atacar()
+
+	_sem_dano += delta
+	if _sem_dano > REGEN_ESPERA and vida < vida_max and not partida.morte_subita:
+		curar(vida_max * REGEN_TAXA * delta)
 
 	if _flash > 0.0:
 		_flash -= delta
@@ -264,12 +280,14 @@ func receber_dano(qtd: float, origem) -> void:
 	if qtd <= 0.0:
 		return
 	vida -= qtd
+	_sem_dano = 0.0
 	_flash = 0.12
 	Jogo.tocar("acerto")
 	var texto := str(roundi(qtd)) if qtd >= 1.0 else "%.1f" % qtd
 	partida.mostrar_texto(global_position + Vector2(0, -12), texto, Color("ffcd75"))
 	if origem_valida:
-		velocity.x += signf(global_position.x - origem.global_position.x) * 70.0
+		var empurrao := 70.0 * (1.0 - dados.resistencia_empurrao)
+		velocity.x += signf(global_position.x - origem.global_position.x) * empurrao
 	if vida <= 0.0:
 		vida = 0.0
 		_morrer()
@@ -304,12 +322,18 @@ func hitbox() -> Rect2:
 # ------------------------------------------------------------------ Experiência
 
 func xp_para_proximo() -> int:
+	if eh_recruta:
+		return XP_PARA_CLASSE
 	return 4 + nivel * 2
 
 
 func ganhar_xp(qtd: int) -> void:
 	if not vivo:
 		return
+	# Quem está atrás em nível ganha 50% a mais (ajuda a alcançar o oponente)
+	var outro: Lutador = partida.oponente(self)
+	if outro.nivel > nivel:
+		qtd = ceili(qtd * 1.5)
 	xp += qtd
 	while xp >= xp_para_proximo():
 		xp -= xp_para_proximo()
@@ -353,7 +377,13 @@ func _draw() -> void:
 	if not vivo:
 		return
 	var cor: Color = Jogo.COR_TIME[equipe]
-	# Marcador do jogador e barra de vida acima da cabeça
+	# Rótulo ("VOCÊ", "CPU", "P1"...), seta e barra de vida acima da cabeça
+	var fonte := ThemeDB.fallback_font
+	var rotulo := nome_jogador()
+	var larg := fonte.get_string_size(rotulo, HORIZONTAL_ALIGNMENT_LEFT, -1, 7).x
+	var pos := Vector2(-larg / 2.0, -21)
+	draw_string_outline(fonte, pos, rotulo, HORIZONTAL_ALIGNMENT_LEFT, -1, 7, 3, Color("1a1c2c"))
+	draw_string(fonte, pos, rotulo, HORIZONTAL_ALIGNMENT_LEFT, -1, 7, cor)
 	draw_colored_polygon(PackedVector2Array([Vector2(-3, -19), Vector2(3, -19), Vector2(0, -16)]), cor)
 	draw_rect(Rect2(-8, -14, 16, 3), Color("1a1c2c"))
 	draw_rect(Rect2(-7, -13, 14.0 * vida / vida_max, 1), cor)

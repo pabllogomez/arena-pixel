@@ -201,9 +201,14 @@ func _morrer(origem) -> void:
 	remove_from_group("alvo")
 	remove_from_group("viajante")
 	if origem != null and is_instance_valid(origem) and origem != self:
+		var xp_antes: int = origem.xp if origem is Lutador else 0
+		var nivel_antes: int = origem.nivel if origem is Lutador else 0
 		origem.ganhar_xp(xp_valor)
 		if origem is Lutador:
-			partida.mostrar_texto(global_position + Vector2(0, -10), "+%d XP" % xp_valor, Color("a7f070"))
+			var ganho := xp_valor
+			if origem.nivel == nivel_antes:
+				ganho = origem.xp - xp_antes
+			partida.mostrar_texto(global_position + Vector2(0, -10), "+%d XP" % ganho, Color("a7f070"))
 	$CollisionShape2D.set_deferred("disabled", true)
 	var tw := create_tween()
 	tw.tween_property(sprite, "scale", Vector2(1.4, 0.3), 0.1)

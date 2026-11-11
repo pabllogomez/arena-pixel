@@ -18,3 +18,5 @@ dano = 7.0
 alcance = 150.0
 intervalo_ataque = 0.4
 velocidade_projetil = 300.0
+aceleracao = 1500.0
+atrito = 1600.0

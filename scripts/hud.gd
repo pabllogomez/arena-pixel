@@ -78,9 +78,13 @@ func _painel(fonte: Font, l: Lutador, n: int) -> void:
 	# Vida
 	draw_rect(Rect2(x, 12, LARG_PAINEL, 5), Color("333c57"))
 	draw_rect(Rect2(x, 12, LARG_PAINEL * l.vida / l.vida_max, 5), cor)
-	# Experiência
+	# Experiência (como Recruta, mostra quanto falta para ganhar a classe)
 	draw_rect(Rect2(x, 19, LARG_PAINEL, 2), Color("333c57"))
 	draw_rect(Rect2(x, 19, LARG_PAINEL * float(l.xp) / l.xp_para_proximo(), 2), Color("a7f070"))
+	if l.eh_recruta and l.vivo:
+		var rot := "CLASSE %d/%d" % [l.xp, l.xp_para_proximo()]
+		draw_string(fonte, Vector2(x, 30), rot, HORIZONTAL_ALIGNMENT_LEFT if n == 1 else HORIZONTAL_ALIGNMENT_RIGHT,
+				LARG_PAINEL, 7, Color("a7f070"))
 
 	# Escolha de melhoria (só para humanos; o bot escolhe sozinho)
 	if l.escolhas.is_empty() or not l.vivo or l.controle is ControleBot or partida.fim:

@@ -77,7 +77,10 @@ func _decidir(l) -> void:
 	_alvo = null
 	_modo = "cacar_monstro"
 
-	if p["foge"] and vida < 0.3 and inimigo.vivo and not inimigo.eh_recruta \
+	var monstro_perto = _monstro_perigoso(l)
+	if l.eh_recruta and vida < 0.35 and monstro_perto != null:
+		_modo = "fugir_monstro"  # Recruta ferido espera regenerar
+	elif p["foge"] and vida < 0.3 and inimigo.vivo and not inimigo.eh_recruta \
 			and l.position.distance_to(inimigo.position) < 130.0 and not partida.morte_subita:
 		_modo = "fugir"
 	elif l.dados.tipo_ataque == ClasseDados.TipoAtaque.INVOCAR and inimigo.vivo \
@@ -106,12 +109,27 @@ func _decidir(l) -> void:
 	var destino := Navegacao.INVALIDO
 	if _modo == "fugir":
 		destino = _no_longe_de(inimigo.position, nav)
+	elif _modo == "fugir_monstro":
+		destino = _no_longe_de(monstro_perto.position, nav)
 	elif _alvo != null:
 		destino = nav.no_mais_proximo(_alvo.position)
 		if l.dados.tipo_ataque == ClasseDados.TipoAtaque.INVOCAR:
 			destino = _no_perto_de(_alvo.position, 60.0, nav)
 	if destino != Navegacao.INVALIDO:
 		_seguidor.ir_para(meu_no, destino)
+
+
+func _monstro_perigoso(l):
+	## Monstro mais próximo a menos de 80 px (ou null).
+	var melhor = null
+	var melhor_d := 80.0
+	for a in l.get_tree().get_nodes_in_group("alvo"):
+		if a.equipe == 0 and a.esta_vivo():
+			var d: float = l.position.distance_to(a.position)
+			if d < melhor_d:
+				melhor_d = d
+				melhor = a
+	return melhor
 
 
 func _vale_atacar(l, inimigo) -> bool:

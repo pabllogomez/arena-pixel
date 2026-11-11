@@ -18,7 +18,7 @@ var _sons := {}
 func _ready() -> void:
 	_criar_controles()
 	for nome in ["pulo", "flecha", "espada", "magia", "invocar", "acerto",
-			"morte", "nivel", "porta", "vitoria"]:
+			"morte", "nivel", "porta", "vitoria", "pouso"]:
 		var p := AudioStreamPlayer.new()
 		p.stream = load("res://assets/sfx/%s.wav" % nome)
 		p.max_polyphony = 4

@@ -13,8 +13,21 @@ enum TipoAtaque { FLECHA, CORPO_A_CORPO, MAGIA, INVOCAR }
 @export_group("Atributos")
 @export var vida_max := 100.0
 @export var velocidade := 80.0
-## Altura do pulo. Abaixo de ~280 a classe não alcança as plataformas.
+## Altura do pulo. A altura real é forca_pulo² / (2 × 700 × mult_gravidade);
+## abaixo de ~52 px a classe não alcança as plataformas.
 @export var forca_pulo := 290.0
+
+@export_group("Peso")
+## Quão rápido chega à velocidade máxima (menor = mais pesado).
+@export var aceleracao := 1000.0
+## Quão rápido para ao soltar o direcional (menor = escorrega mais).
+@export var atrito := 1200.0
+## Gravidade da classe (maior = cai mais rápido, pulo mais curto).
+@export var mult_gravidade := 1.0
+## 0 = empurrado normalmente pelos golpes; 1 = não se mexe.
+@export_range(0.0, 1.0) var resistencia_empurrao := 0.0
+## Treme a tela e levanta poeira ao cair de uma altura.
+@export var pouso_pesado := false
 
 @export_group("Ataque")
 @export var tipo_ataque: TipoAtaque = TipoAtaque.FLECHA
