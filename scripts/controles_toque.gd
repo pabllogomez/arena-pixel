@@ -2,9 +2,12 @@ extends Control
 ## Controles na tela para celular/tablet (jogador 1).
 ##
 ## Aparecem automaticamente no navegador de celular, ou assim que a tela é
-## tocada. Cada botão "aperta" a mesma ação do teclado (p1_esquerda,
+## tocada. Cada comando "aperta" a mesma ação do teclado (p1_esquerda,
 ## p1_pular...), então o jogo não precisa saber se o comando veio do toque.
-## Suporta vários dedos ao mesmo tempo e deslizar o dedo entre ← e →.
+##
+## Lado esquerdo: joystick flutuante. Aparece onde o dedo encostar; para os
+## lados anda (mais longe = mais rápido), para baixo desce da plataforma.
+## Lado direito: botão de pular. Suporta vários dedos ao mesmo tempo.
 
 ## "menu", "jogo" ou "fim" (calculado a partir da partida atual)
 var modo := "menu"
@@ -13,6 +16,16 @@ var partida: Node
 
 ## índice do dedo -> nome do botão que ele está apertando
 var _dedos := {}
+
+const JOY_RAIO := 22.0
+const JOY_ZONA_MORTA := 0.2
+const JOY_DESCER := 0.6   ## quanto puxar para baixo para descer
+
+## Joystick: dedo que o controla (-1 = nenhum), centro e posição da bolinha
+var _joy_dedo := -1
+var _joy_centro := Vector2.ZERO
+var _joy_pos := Vector2.ZERO
+var _joy_descendo := false
 
 const COR_BOTAO := Color(1, 1, 1, 0.18)
 const COR_APERTADO := Color(1, 1, 1, 0.4)
@@ -42,11 +55,8 @@ func _botoes() -> Dictionary:
 	## nome -> {"area": Rect2 (ou círculo), "acao": String}
 	var b := {}
 	if modo == "jogo":
-		b["esquerda"] = {"centro": Vector2(30, 182), "raio": 21.0, "acao": "p1_esquerda", "seta": Vector2.LEFT}
-		b["direita"] = {"centro": Vector2(78, 182), "raio": 21.0, "acao": "p1_direita", "seta": Vector2.RIGHT}
-		b["descer"] = {"centro": Vector2(54, 146), "raio": 14.0, "acao": "p1_descer", "seta": Vector2.DOWN}
-		b["pular"] = {"centro": Vector2(350, 176), "raio": 26.0, "acao": "p1_pular", "seta": Vector2.UP}
-		b["sair"] = {"rect": Rect2(170, 196, 44, 16), "acao": "menu_voltar", "simbolo": "MENU"}
+		b["pular"] = {"centro": Vector2(346, 172), "raio": 28.0, "acao": "p1_pular", "seta": Vector2.UP}
+		b["sair"] = {"rect": Rect2(126, 1, 36, 15), "acao": "menu_voltar", "simbolo": "MENU"}
 		if partida != null and partida.jogadores.has(1):
 			var l = partida.jogadores[1]
 			if not l.escolhas.is_empty() and l.vivo:
@@ -113,17 +123,62 @@ func _input(event: InputEvent) -> void:
 	if event is InputEventScreenTouch:
 		var t := event as InputEventScreenTouch
 		if t.pressed:
-			_trocar(t.index, _botao_em(t.position))
+			var nome := _botao_em(t.position)
+			if nome != "":
+				_trocar(t.index, nome)
+			elif modo == "jogo" and _joy_dedo < 0 and t.position.x < get_viewport().get_visible_rect().size.x * 0.5:
+				_joy_dedo = t.index
+				_joy_centro = t.position
+				_joy_pos = t.position
+				get_viewport().set_input_as_handled()
+		elif t.index == _joy_dedo:
+			_soltar_joystick()
 		else:
 			_trocar(t.index, "")
 	elif event is InputEventScreenDrag:
 		var d := event as InputEventScreenDrag
-		var atual: String = _dedos.get(d.index, "")
-		var novo := _botao_em(d.position)
-		# Deslizar só troca entre botões de movimento (não dispara pulo sem querer)
-		if novo != atual and (novo in ["esquerda", "direita", "descer"] or novo == ""):
-			if atual in ["esquerda", "direita", "descer", ""]:
-				_trocar(d.index, novo)
+		if d.index == _joy_dedo:
+			_mover_joystick(d.position)
+
+
+# ------------------------------------------------------------------ Joystick
+
+func _mover_joystick(pos: Vector2) -> void:
+	var desvio := pos - _joy_centro
+	# Se o dedo for muito longe, a base acompanha (não precisa voltar ao centro)
+	if desvio.length() > JOY_RAIO * 1.6:
+		_joy_centro += desvio.normalized() * (desvio.length() - JOY_RAIO * 1.6)
+		desvio = pos - _joy_centro
+	desvio = desvio.limit_length(JOY_RAIO)
+	_joy_pos = _joy_centro + desvio
+	var x := desvio.x / JOY_RAIO
+	var y := desvio.y / JOY_RAIO
+	# Andar: força proporcional à distância (fora da zona morta)
+	var forca := clampf((absf(x) - JOY_ZONA_MORTA) / (0.7 - JOY_ZONA_MORTA), 0.0, 1.0)
+	if forca > 0.0:
+		forca = maxf(forca, 0.35)
+	Input.action_release("p1_esquerda")
+	Input.action_release("p1_direita")
+	if forca > 0.0:
+		Input.action_press("p1_direita" if x > 0.0 else "p1_esquerda", forca)
+	# Descer: puxar para baixo (sem estar andando muito para o lado)
+	var descer := y > JOY_DESCER and absf(x) < 0.75
+	if descer != _joy_descendo:
+		_joy_descendo = descer
+		if descer:
+			Input.action_press("p1_descer")
+		else:
+			Input.action_release("p1_descer")
+	get_viewport().set_input_as_handled()
+
+
+func _soltar_joystick() -> void:
+	if _joy_dedo >= 0:
+		Input.action_release("p1_esquerda")
+		Input.action_release("p1_direita")
+		Input.action_release("p1_descer")
+	_joy_dedo = -1
+	_joy_descendo = false
 
 
 func _trocar(dedo: int, nome: String) -> void:
@@ -147,7 +202,7 @@ func _algum_dedo_em(nome: String) -> bool:
 
 func _acao_de(nome: String) -> String:
 	var mapa := {
-		"esquerda": "p1_esquerda", "direita": "p1_direita", "descer": "p1_descer", "pular": "p1_pular",
+		"pular": "p1_pular",
 		"sair": "menu_voltar", "opcao1": "p1_opcao1", "opcao2": "p1_opcao2",
 		"revanche": "menu_ok", "menu": "menu_voltar",
 	}
@@ -158,6 +213,7 @@ func soltar_tudo() -> void:
 	for dedo in _dedos.keys():
 		Input.action_release(_acao_de(_dedos[dedo]))
 	_dedos.clear()
+	_soltar_joystick()
 
 
 # ------------------------------------------------------------------ Desenho
@@ -174,6 +230,8 @@ func _draw() -> void:
 		_texto(fonte, tela / 2.0 + Vector2(0, -8), "Gire o celular", 16, Color("ffcd75"))
 		_texto(fonte, tela / 2.0 + Vector2(0, 10), "para jogar na horizontal", 8, Color.WHITE)
 		return
+	if modo == "jogo":
+		_desenhar_joystick()
 	var botoes := _botoes()
 	var apertados := _dedos.values()
 	for nome in botoes:
@@ -195,6 +253,22 @@ func _draw() -> void:
 			var t := raio * 0.45
 			var lado := Vector2(-d.y, d.x)
 			draw_colored_polygon(PackedVector2Array([c + d * t, c - d * t * 0.7 + lado * t, c - d * t * 0.7 - lado * t]), COR_SIMBOLO)
+
+
+func _desenhar_joystick() -> void:
+	if _joy_dedo < 0:
+		# Dica fraca de onde fica o controle
+		var c := Vector2(60, 168)
+		draw_arc(c, JOY_RAIO, 0.0, TAU, 32, Color(1, 1, 1, 0.12), 1.0)
+		draw_circle(c, 9.0, Color(1, 1, 1, 0.08))
+		return
+	draw_circle(_joy_centro, JOY_RAIO, Color(1, 1, 1, 0.12))
+	draw_arc(_joy_centro, JOY_RAIO, 0.0, TAU, 32, Color(1, 1, 1, 0.35), 1.0)
+	# Marca de "descer" embaixo da base
+	var baixo := _joy_centro + Vector2(0, JOY_RAIO - 5)
+	var cor_baixo := Color(1, 1, 1, 0.7 if _joy_descendo else 0.25)
+	draw_colored_polygon(PackedVector2Array([baixo + Vector2(-3, -2), baixo + Vector2(3, -2), baixo + Vector2(0, 2)]), cor_baixo)
+	draw_circle(_joy_pos, 10.0, Color(1, 1, 1, 0.45))
 
 
 func _desenhar_tela_cheia() -> void:

@@ -93,7 +93,7 @@ func _draw() -> void:
 		_centro(fonte, Vector2(30, 12), "< voltar", 8, Color("94b0c2"))
 	if Jogo.toque:
 		_centro(fonte, Vector2(cx, 166), "Toque em uma opção", 8, Color("566c86"))
-		_centro(fonte, Vector2(cx, 184), "Setas na esquerda · pulo na direita · toque nas melhorias", 8, Color("41a6f6"))
+		_centro(fonte, Vector2(cx, 184), "Joystick: dedo na esquerda · pulo na direita · toque nas melhorias", 8, Color("41a6f6"))
 		_centro(fonte, Vector2(cx, 208), "O ataque é automático. Partidas de 3 minutos + Morte Súbita.", 8, Color("566c86"))
 		return
 	var ajuda := "W/S ou ↑/↓ escolher  ·  Espaço/Enter confirmar"

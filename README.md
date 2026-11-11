@@ -13,7 +13,7 @@ Combate 1x1 local em plataformas, 2D, pixel art, feito em **Godot 4.5** para rod
 | Descer da plataforma | `S` | `↓` |
 | Escolher melhoria | `Q` / `E` | `1` / `2` do teclado numérico (ou `K` / `L`) |
 
-O botão ⛶ (ou a tecla `F`) liga a tela cheia. No celular aparecem botões na tela: setas na esquerda, pulo na direita, e as melhorias são escolhidas tocando na opção.
+O botão ⛶ (ou a tecla `F`) liga a tela cheia. No celular: encoste o dedo em qualquer ponto da metade esquerda e aparece um joystick (para os lados anda, puxando para baixo desce da plataforma); o botão de pular fica na direita, e as melhorias são escolhidas tocando na opção.
 Controles (gamepad) também funcionam.
 
 ### Regras
