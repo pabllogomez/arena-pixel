@@ -364,10 +364,26 @@ func criar_lacaio(rei: Lutador) -> void:
 	m.configurar(self, rei.equipe, rei, TEX_LACAIO[rei.equipe],
 			rei.dados.vida_lacaio * rei.mult_lacaio, rei.dano * rei.mult_lacaio,
 			rei.dados.velocidade_lacaio, 2000.0, 2)
+	m.intervalo_ataque = 1.2
+	m.alcance_arremesso = 90.0
 	m.position = rei.position
 	entidades.add_child(m)
 	criar_brilho(m.position)
 	Jogo.tocar("invocar")
+
+
+func criar_lanca(lacaio: Minion, alvo) -> void:
+	## Lança arremessada por um lacaio: mais fraca e lenta que as flechas.
+	var p := Projetil.new()
+	p.partida = self
+	p.dono = lacaio.dono
+	p.equipe = lacaio.equipe
+	p.position = lacaio.position
+	p.velocity = (alvo.global_position - lacaio.global_position).normalized() * 130.0
+	p.dano = lacaio.dano * 0.6
+	p.alcance_max = 110.0
+	entidades.add_child(p)
+	Jogo.tocar("flecha")
 
 
 func contar_lacaios(rei: Lutador) -> int:

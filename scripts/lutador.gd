@@ -40,6 +40,7 @@ var forca_pulo := 290.0
 var dano := 10.0
 var alcance := 100.0
 var intervalo := 1.0
+var velocidade_projetil := 200.0
 var max_lacaios := 0
 var mult_lacaio := 1.0
 var flechas_extra := 0
@@ -84,6 +85,7 @@ func _aplicar_classe(d: ClasseDados) -> void:
 	dano = d.dano
 	alcance = d.alcance
 	intervalo = d.intervalo_ataque
+	velocidade_projetil = d.velocidade_projetil
 	max_lacaios = d.max_lacaios
 	if sprite != null:
 		sprite.texture = d.textura_p1 if numero == 1 else d.textura_p2
@@ -205,13 +207,13 @@ func _tentar_atacar() -> void:
 			var n := 1 + flechas_extra
 			for i in n:
 				var ang := (i - (n - 1) / 2.0) * 0.12
-				partida.criar_projetil(self, global_position, dir_alvo.rotated(ang) * dados.velocidade_projetil,
+				partida.criar_projetil(self, global_position, dir_alvo.rotated(ang) * velocidade_projetil,
 						dano, alcance * 1.5, false)
 			Jogo.tocar("flecha")
 		ClasseDados.TipoAtaque.CORPO_A_CORPO:
 			_golpear(dir_alvo.x)
 		ClasseDados.TipoAtaque.MAGIA:
-			partida.criar_projetil(self, global_position + dir_alvo * 4.0, dir_alvo * dados.velocidade_projetil,
+			partida.criar_projetil(self, global_position + dir_alvo * 4.0, dir_alvo * velocidade_projetil,
 					dano, alcance * 1.3, true)
 			Jogo.tocar("magia")
 

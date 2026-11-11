@@ -17,9 +17,9 @@ const PARAMS := {
 }
 ## Preferência de melhorias por tipo de ataque (da melhor para a pior)
 const PREFERENCIAS := {
-	ClasseDados.TipoAtaque.FLECHA: ["multi", "forca", "frenesi", "alcance", "agilidade", "vigor"],
+	ClasseDados.TipoAtaque.FLECHA: ["multi", "forca", "frenesi", "disparo", "alcance", "agilidade", "vigor"],
 	ClasseDados.TipoAtaque.CORPO_A_CORPO: ["sangue", "forca", "vigor", "frenesi", "agilidade", "alcance"],
-	ClasseDados.TipoAtaque.MAGIA: ["forca", "explosao", "frenesi", "vigor", "alcance", "agilidade"],
+	ClasseDados.TipoAtaque.MAGIA: ["forca", "explosao", "disparo", "frenesi", "vigor", "alcance", "agilidade"],
 	ClasseDados.TipoAtaque.INVOCAR: ["exercito", "frenesi", "forca", "vigor", "agilidade"],
 }
 

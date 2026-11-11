@@ -8,6 +8,7 @@ const GERAIS := [
 	{"id": "frenesi", "nome": "Frenesi", "desc": "ataca 15% mais rápido"},
 	{"id": "alcance", "nome": "Mira", "desc": "+15% de alcance"},
 	{"id": "agilidade", "nome": "Agilidade", "desc": "+10% de velocidade"},
+	{"id": "disparo", "nome": "Disparo veloz", "desc": "+20% vel. do projétil"},
 ]
 
 const ESPECIAIS := {
@@ -24,6 +25,9 @@ static func sortear(l) -> Array:
 	for m in GERAIS:
 		# Para o Rei, "Frenesi" = lacaios mais frequentes; "Mira" não faz sentido.
 		if m["id"] == "alcance" and tipo == ClasseDados.TipoAtaque.INVOCAR:
+			continue
+		# "Disparo veloz" só para quem atira (Arqueiro e Mago)
+		if m["id"] == "disparo" and tipo != ClasseDados.TipoAtaque.FLECHA and tipo != ClasseDados.TipoAtaque.MAGIA:
 			continue
 		opcoes.append(m)
 	opcoes.append(ESPECIAIS[tipo])
@@ -45,6 +49,8 @@ static func aplicar(l, m: Dictionary) -> void:
 		"agilidade":
 			l.velocidade *= 1.1
 			l.forca_pulo *= 1.03
+		"disparo":
+			l.velocidade_projetil *= 1.2
 		"multi":
 			l.flechas_extra += 1
 		"sangue":

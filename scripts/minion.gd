@@ -23,6 +23,9 @@ var velocidade := 40.0
 var visao := 70.0
 var xp_valor := 3
 var intervalo_ataque := 0.9
+## Lacaios do Rei também arremessam lanças (0 = não arremessa)
+var alcance_arremesso := 0.0
+var _cd_arremesso := 1.0
 var vivo := true
 var cooldown_porta := 0.0
 
@@ -63,11 +66,14 @@ func _physics_process(delta: float) -> void:
 	_t += delta
 	_cd -= delta
 	_pulo_cd -= delta
+	_cd_arremesso -= delta
 
 	if not is_on_floor():
 		velocity.y = minf(velocity.y + GRAVIDADE * delta, 360.0)
 
 	var alvo = _procurar_alvo()
+	if alvo != null and alcance_arremesso > 0.0 and _cd_arremesso <= 0.0:
+		_tentar_arremessar(alvo)
 	var mover := _dir
 	_passo_caminho = {}
 	if alvo != null and dono != null and _seguir_caminho(alvo, delta):
@@ -160,6 +166,19 @@ func _procurar_alvo():
 			melhor_d = d
 			melhor = a
 	return melhor
+
+
+func _tentar_arremessar(alvo) -> void:
+	## De longe (mas não colado), arremessa uma lança se a linha estiver livre.
+	var d: float = global_position.distance_to(alvo.global_position)
+	if d < 24.0 or d > alcance_arremesso:
+		return
+	var consulta := PhysicsRayQueryParameters2D.create(global_position, alvo.global_position, 1)
+	if not get_world_2d().direct_space_state.intersect_ray(consulta).is_empty():
+		return
+	_cd_arremesso = intervalo_ataque * 1.6
+	_dir = signf(alvo.global_position.x - global_position.x)
+	partida.criar_lanca(self, alvo)
 
 
 func _pular() -> void:
