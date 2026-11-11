@@ -47,7 +47,19 @@ tools/gerar_arte.py  gera a arte/sons provisórios (python3 + Pillow)
 tools/teste.gd       teste automático (2000 mapas + partidas simuladas)
 ```
 
-## Exportar para o navegador
+## Versões no ar
+
+| Versão | Ramo | Link |
+|---|---|---|
+| **Ativa** (para os amigos) | `main` | https://pabllogomez.github.io/arena-pixel/ |
+| **Teste** | `dev` | https://pabllogomez.github.io/arena-pixel/teste/ |
+
+O desenvolvimento acontece no ramo `dev`. A cada push, o GitHub Actions
+(`.github/workflows/web.yml`) roda o teste automático, exporta os dois ramos e publica.
+Se algum teste falhar, nada é publicado. Quando a versão de teste estiver aprovada,
+junte `dev` em `main` para atualizar a versão ativa.
+
+## Exportar manualmente para o navegador
 
 1. No Godot: **Editor → Gerenciar Modelos de Exportação → Baixar e instalar**.
 2. **Projeto → Exportar → Web → Exportar Projeto**. O arquivo vai para `build/web/index.html`.

@@ -1,0 +1,97 @@
+# Build e publicação automática no GitHub Pages.
+#
+#   main -> versão ATIVA  (https://<usuario>.github.io/arena-pixel/)
+#   dev  -> versão TESTE  (https://<usuario>.github.io/arena-pixel/teste/)
+#
+# A cada push em main ou dev, os dois ramos são testados e exportados.
+# Se qualquer teste falhar, nada é publicado e o site continua como estava.
+name: Build Web
+
+on:
+  push:
+    branches: [main, dev]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+env:
+  GODOT_VERSION: 4.5.1
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixar versão ativa (main)
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: ramo-main
+
+      - name: Baixar versão de teste (dev)
+        id: dev
+        continue-on-error: true
+        uses: actions/checkout@v4
+        with:
+          ref: dev
+          path: ramo-dev
+
+      - name: Cache do Godot
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/godot
+            ~/.local/share/godot/export_templates
+          key: godot-${{ env.GODOT_VERSION }}-web
+
+      - name: Instalar Godot e modelos de exportação Web
+        run: |
+          if [ ! -x ~/godot/godot ]; then
+            URL=https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable
+            mkdir -p ~/godot && cd ~/godot
+            wget -q $URL/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip
+            unzip -q Godot_v*.zip && mv Godot_v*_linux.x86_64 godot && rm -f *.zip
+            wget -q $URL/Godot_v${GODOT_VERSION}-stable_export_templates.tpz
+            unzip -q *.tpz
+            DEST=~/.local/share/godot/export_templates/${GODOT_VERSION}.stable
+            mkdir -p $DEST && mv templates/web_* templates/version.txt $DEST/
+            rm -rf templates *.tpz
+          fi
+
+      - name: Testar e exportar
+        run: |
+          set -e
+          exportar() {  # $1 = pasta do projeto, $2 = pasta de saída
+            echo "::group::$1"
+            cd "$GITHUB_WORKSPACE/$1"
+            ~/godot/godot --headless --import --path . || true
+            ~/godot/godot --headless --fixed-fps 60 --path . -s tools/teste.gd
+            mkdir -p "$2"
+            ~/godot/godot --headless --path . --export-release "Web" "$2/index.html"
+            test -f "$2/index.wasm"
+            echo "::endgroup::"
+          }
+          exportar ramo-main "$GITHUB_WORKSPACE/site"
+          if [ -d "$GITHUB_WORKSPACE/ramo-dev" ]; then
+            exportar ramo-dev "$GITHUB_WORKSPACE/site/teste"
+          fi
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  publicar:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4
