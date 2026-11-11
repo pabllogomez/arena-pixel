@@ -1,0 +1,186 @@
+class_name Minion
+extends CharacterBody2D
+## Criatura controlada pela IA. Usada para:
+##  - lacaios do Rei (equipe do Rei, caçam qualquer inimigo pela arena);
+##  - monstros neutros (equipe 0, patrulham e atacam quem chegar perto).
+## Quem dá o golpe final ganha a experiência (lacaios dão XP ao seu Rei).
+
+const GRAVIDADE := 700.0
+const FORCA_PULO := 295.0
+const ALCANCE_ATAQUE := 14.0
+
+@onready var sprite: Sprite2D = $Sprite2D
+@onready var sensor_chao: RayCast2D = $SensorChao
+
+var equipe := 0
+var dono = null
+var partida: Node
+var textura: Texture2D
+var vida_max := 20.0
+var vida := 20.0
+var dano := 5.0
+var velocidade := 40.0
+var visao := 70.0
+var xp_valor := 3
+var vivo := true
+var cooldown_porta := 0.0
+
+var _dir := 1.0
+var _cd := 0.6
+var _pulo_cd := 0.0
+var _descer := 0.0
+var _t := 0.0
+var _flash := 0.0
+
+
+func configurar(p: Node, p_equipe: int, p_dono, tex: Texture2D, p_vida: float, p_dano: float,
+		p_velocidade: float, p_visao: float, p_xp: int) -> void:
+	partida = p
+	equipe = p_equipe
+	dono = p_dono
+	textura = tex
+	vida_max = p_vida
+	vida = p_vida
+	dano = p_dano
+	velocidade = p_velocidade
+	visao = p_visao
+	xp_valor = p_xp
+	_dir = -1.0 if randf() < 0.5 else 1.0
+
+
+func _ready() -> void:
+	add_to_group("alvo")
+	add_to_group("viajante")
+	sprite.texture = textura
+
+
+func _physics_process(delta: float) -> void:
+	if not vivo:
+		return
+	_t += delta
+	_cd -= delta
+	_pulo_cd -= delta
+
+	if not is_on_floor():
+		velocity.y = minf(velocity.y + GRAVIDADE * delta, 360.0)
+
+	var alvo = _procurar_alvo()
+	var mover := _dir
+	if alvo != null:
+		var dif: Vector2 = alvo.global_position - global_position
+		if absf(dif.x) > 4.0:
+			_dir = signf(dif.x)
+		mover = _dir
+		if absf(dif.x) <= ALCANCE_ATAQUE and absf(dif.y) <= 14.0:
+			mover = 0.0
+			if _cd <= 0.0:
+				_atacar(alvo)
+		elif is_on_floor():
+			if dif.y < -24.0 and absf(dif.x) < 72.0 and _pulo_cd <= 0.0:
+				_pular()
+			elif dif.y > 24.0 and absf(dif.x) < 56.0 and _descer <= 0.0:
+				_descer = 0.3
+				set_collision_mask_value(5, false)
+	elif is_on_floor() and not sensor_chao.is_colliding():
+		_dir *= -1.0  # patrulha: vira na beirada
+		mover = _dir
+
+	if is_on_floor() and is_on_wall():
+		if alvo != null and _pulo_cd <= 0.0:
+			_pular()
+		elif alvo == null:
+			_dir *= -1.0
+			mover = _dir
+
+	if _descer > 0.0:
+		_descer -= delta
+		if _descer <= 0.0:
+			set_collision_mask_value(5, true)
+
+	velocity.x = mover * velocidade
+	move_and_slide()
+
+	sensor_chao.position.x = 6.0 * _dir
+	sprite.flip_h = _dir < 0.0
+	sprite.frame = int(_t * 5.0) % 2 if absf(velocity.x) > 1.0 else 0
+	if _flash > 0.0:
+		_flash -= delta
+	sprite.modulate = Color(1, 0.35, 0.35) if _flash > 0.0 else Color.WHITE
+	queue_redraw()
+
+
+func _procurar_alvo():
+	var melhor = null
+	var melhor_d := visao
+	for a in get_tree().get_nodes_in_group("alvo"):
+		if a == self or not Jogo.hostis(self, a) or not a.esta_vivo():
+			continue
+		var d: float = global_position.distance_to(a.global_position)
+		if d < melhor_d:
+			melhor_d = d
+			melhor = a
+	return melhor
+
+
+func _pular() -> void:
+	velocity.y = -FORCA_PULO
+	_pulo_cd = 0.6
+
+
+func _atacar(alvo) -> void:
+	_cd = 0.9
+	alvo.receber_dano(dano, _origem())
+	var tw := create_tween()
+	tw.tween_property(sprite, "position:x", _dir * 3.0, 0.05)
+	tw.tween_property(sprite, "position:x", 0.0, 0.1)
+
+
+func _origem():
+	## Quem leva o crédito pelos golpes deste minion.
+	if dono != null and is_instance_valid(dono):
+		return dono
+	return self
+
+
+func receber_dano(qtd: float, origem) -> void:
+	if not vivo:
+		return
+	vida -= qtd
+	_flash = 0.12
+	Jogo.tocar("acerto")
+	if vida <= 0.0:
+		_morrer(origem)
+
+
+func ganhar_xp(_qtd: int) -> void:
+	pass  # monstros neutros não evoluem
+
+
+func _morrer(origem) -> void:
+	vivo = false
+	remove_from_group("alvo")
+	remove_from_group("viajante")
+	if origem != null and is_instance_valid(origem) and origem != self:
+		origem.ganhar_xp(xp_valor)
+		if origem is Lutador:
+			partida.mostrar_texto(global_position + Vector2(0, -10), "+%d XP" % xp_valor, Color("a7f070"))
+	$CollisionShape2D.set_deferred("disabled", true)
+	var tw := create_tween()
+	tw.tween_property(sprite, "scale", Vector2(1.4, 0.3), 0.1)
+	tw.tween_property(sprite, "modulate:a", 0.0, 0.25)
+	tw.tween_callback(queue_free)
+
+
+func esta_vivo() -> bool:
+	return vivo
+
+
+func hitbox() -> Rect2:
+	return Rect2(global_position + Vector2(-5, -2), Vector2(10, 10))
+
+
+func _draw() -> void:
+	if not vivo or vida >= vida_max:
+		return
+	draw_rect(Rect2(-6, -9, 12, 3), Color("1a1c2c"))
+	draw_rect(Rect2(-5, -8, 10.0 * vida / vida_max, 1), Jogo.COR_TIME[equipe])

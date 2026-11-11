@@ -1,0 +1,23 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/minion.gd" id="1_minion"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_corpo"]
+size = Vector2(10, 10)
+
+[node name="Minion" type="CharacterBody2D"]
+collision_layer = 4
+collision_mask = 17
+script = ExtResource("1_minion")
+
+[node name="Sprite2D" type="Sprite2D" parent="."]
+hframes = 2
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+position = Vector2(0, 3)
+shape = SubResource("RectangleShape2D_corpo")
+
+[node name="SensorChao" type="RayCast2D" parent="."]
+position = Vector2(6, 0)
+target_position = Vector2(0, 12)
+collision_mask = 17

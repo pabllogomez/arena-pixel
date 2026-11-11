@@ -1,0 +1,92 @@
+extends Node
+## Autoload "Jogo": controles dos dois jogadores, sons e escolhas de classe.
+
+const COR_TIME := {0: Color("94b0c2"), 1: Color("41a6f6"), 2: Color("ef7d57")}
+const CLASSES: Array[String] = ["arqueiro", "orc", "mago", "rei"]
+
+## Classe escolhida por cada jogador (índice em CLASSES)
+var escolha := {1: 0, 2: 1}
+
+var _sons := {}
+
+
+func _ready() -> void:
+	_criar_controles()
+	for nome in ["pulo", "flecha", "espada", "magia", "invocar", "acerto",
+			"morte", "nivel", "porta", "vitoria"]:
+		var p := AudioStreamPlayer.new()
+		p.stream = load("res://assets/sfx/%s.wav" % nome)
+		p.max_polyphony = 4
+		add_child(p)
+		_sons[nome] = p
+
+
+func dados_classe(indice: int) -> ClasseDados:
+	return load("res://resources/classes/%s.tres" % CLASSES[indice])
+
+
+func tocar(nome: String) -> void:
+	if _sons.has(nome):
+		_sons[nome].pitch_scale = randf_range(0.92, 1.08)
+		_sons[nome].play()
+
+
+func hostis(a, b) -> bool:
+	## Times: 1 e 2 = jogadores (e seus lacaios); 0 = monstros neutros.
+	return a.equipe != b.equipe
+
+
+static func acao(jogador: int, nome: String) -> String:
+	return "p%d_%s" % [jogador, nome]
+
+
+func _criar_controles() -> void:
+	# Jogador 1: WASD + Espaço | Jogador 2: setas + 0
+	_acao("p1_esquerda", [KEY_A])
+	_acao("p1_direita", [KEY_D])
+	_acao("p1_pular", [KEY_W, KEY_SPACE])
+	_acao("p1_descer", [KEY_S])
+	_acao("p1_opcao1", [KEY_Q])
+	_acao("p1_opcao2", [KEY_E])
+	_acao("p2_esquerda", [KEY_LEFT])
+	_acao("p2_direita", [KEY_RIGHT])
+	_acao("p2_pular", [KEY_UP, KEY_KP_0, KEY_0])
+	_acao("p2_descer", [KEY_DOWN])
+	_acao("p2_opcao1", [KEY_KP_1, KEY_K])
+	_acao("p2_opcao2", [KEY_KP_2, KEY_L])
+	# Controles (gamepad): 1º controle = P1, 2º controle = P2
+	for j in [1, 2]:
+		var dev: int = j - 1
+		_botao("p%d_esquerda" % j, dev, JOY_BUTTON_DPAD_LEFT)
+		_botao("p%d_direita" % j, dev, JOY_BUTTON_DPAD_RIGHT)
+		_botao("p%d_descer" % j, dev, JOY_BUTTON_DPAD_DOWN)
+		_botao("p%d_pular" % j, dev, JOY_BUTTON_A)
+		_botao("p%d_opcao1" % j, dev, JOY_BUTTON_X)
+		_botao("p%d_opcao2" % j, dev, JOY_BUTTON_Y)
+		_eixo("p%d_esquerda" % j, dev, JOY_AXIS_LEFT_X, -1.0)
+		_eixo("p%d_direita" % j, dev, JOY_AXIS_LEFT_X, 1.0)
+		_eixo("p%d_descer" % j, dev, JOY_AXIS_LEFT_Y, 1.0)
+
+
+func _acao(nome: String, teclas: Array) -> void:
+	if not InputMap.has_action(nome):
+		InputMap.add_action(nome, 0.3)
+	for t in teclas:
+		var ev := InputEventKey.new()
+		ev.physical_keycode = t
+		InputMap.action_add_event(nome, ev)
+
+
+func _botao(nome: String, dispositivo: int, botao: JoyButton) -> void:
+	var ev := InputEventJoypadButton.new()
+	ev.device = dispositivo
+	ev.button_index = botao
+	InputMap.action_add_event(nome, ev)
+
+
+func _eixo(nome: String, dispositivo: int, eixo: JoyAxis, valor: float) -> void:
+	var ev := InputEventJoypadMotion.new()
+	ev.device = dispositivo
+	ev.axis = eixo
+	ev.axis_value = valor
+	InputMap.action_add_event(nome, ev)
