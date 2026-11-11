@@ -4,7 +4,7 @@ extends RefCounted
 
 const GERAIS := [
 	{"id": "forca", "nome": "Força", "desc": "+20% de dano"},
-	{"id": "vigor", "nome": "Vigor", "desc": "+25 de vida máx."},
+	{"id": "vigor", "nome": "Vigor", "desc": "+40 de vida máx."},
 	{"id": "frenesi", "nome": "Frenesi", "desc": "ataca 15% mais rápido"},
 	{"id": "alcance", "nome": "Mira", "desc": "+15% de alcance"},
 	{"id": "agilidade", "nome": "Agilidade", "desc": "+10% de velocidade"},
@@ -36,8 +36,8 @@ static func aplicar(l, m: Dictionary) -> void:
 		"forca":
 			l.dano *= 1.2
 		"vigor":
-			l.vida_max += 25.0
-			l.curar(25.0)
+			l.vida_max += 40.0
+			l.curar(40.0)
 		"frenesi":
 			l.intervalo *= 0.85
 		"alcance":

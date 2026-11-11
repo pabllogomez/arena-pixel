@@ -1,10 +1,12 @@
 extends Node2D
 ## Desenha as portas da arena. Portas com a mesma cor estão conectadas.
+## Na Morte Súbita elas aparecem fechadas (riscadas).
 
 var portas: Array = []:
 	set(valor):
 		portas = valor
 		queue_redraw()
+var fechadas := false
 
 var _t := 0.0
 
@@ -19,7 +21,12 @@ func _draw() -> void:
 	for porta in portas:
 		var r: Rect2 = porta["abertura"]
 		var cor: Color = porta["cor"]
-		draw_rect(r, Color(cor, pulso))
+		if fechadas:
+			cor = Color(cor, 0.35)
+			draw_line(r.position, r.end, Color("b13e53"), 2.0)
+			draw_line(Vector2(r.end.x, r.position.y), Vector2(r.position.x, r.end.y), Color("b13e53"), 2.0)
+		else:
+			draw_rect(r, Color(cor, pulso))
 		# Moldura colorida nas bordas do vão
 		if porta["tipo"] == "teto":
 			draw_rect(Rect2(r.position.x - 2, r.position.y, 2, r.size.y), cor)

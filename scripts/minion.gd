@@ -22,6 +22,7 @@ var dano := 5.0
 var velocidade := 40.0
 var visao := 70.0
 var xp_valor := 3
+var intervalo_ataque := 0.9
 var vivo := true
 var cooldown_porta := 0.0
 
@@ -31,6 +32,8 @@ var _pulo_cd := 0.0
 var _descer := 0.0
 var _t := 0.0
 var _flash := 0.0
+var _seguidor: SeguidorCaminho   # só lacaios do Rei usam caminhos
+var _t_caminho := 0.0
 
 
 func configurar(p: Node, p_equipe: int, p_dono, tex: Texture2D, p_vida: float, p_dano: float,
@@ -66,7 +69,10 @@ func _physics_process(delta: float) -> void:
 
 	var alvo = _procurar_alvo()
 	var mover := _dir
-	if alvo != null:
+	_passo_caminho = {}
+	if alvo != null and dono != null and _seguir_caminho(alvo, delta):
+		pass  # lacaio indo até o alvo por um caminho
+	elif alvo != null:
 		var dif: Vector2 = alvo.global_position - global_position
 		if absf(dif.x) > 4.0:
 			_dir = signf(dif.x)
@@ -97,6 +103,15 @@ func _physics_process(delta: float) -> void:
 		if _descer <= 0.0:
 			set_collision_mask_value(5, true)
 
+	if _passo_caminho.size() > 0:
+		mover = _passo_caminho["eixo"]
+		if _passo_caminho["pular"] and is_on_floor() and _pulo_cd <= 0.0:
+			_pular()
+		if _passo_caminho["descer"] and is_on_floor() and _descer <= 0.0:
+			_descer = 0.3
+			set_collision_mask_value(5, false)
+		if mover != 0.0:
+			_dir = mover
 	velocity.x = mover * velocidade
 	move_and_slide()
 
@@ -107,6 +122,31 @@ func _physics_process(delta: float) -> void:
 		_flash -= delta
 	sprite.modulate = Color(1, 0.35, 0.35) if _flash > 0.0 else Color.WHITE
 	queue_redraw()
+
+
+var _passo_caminho := {}
+
+
+func _seguir_caminho(alvo, delta: float) -> bool:
+	## Lacaios usam a navegação para caçar alvos longe ou em outro andar.
+	## Retorna false quando o alvo está perto (aí o ataque normal assume).
+	_passo_caminho = {}
+	var dif: Vector2 = alvo.global_position - global_position
+	if absf(dif.y) <= 14.0 and absf(dif.x) <= 48.0:
+		return false
+	if _seguidor == null:
+		_seguidor = SeguidorCaminho.new(partida.nav)
+	_t_caminho -= delta
+	if (_t_caminho <= 0.0 or _seguidor.replanejar) and is_on_floor():
+		_t_caminho = 0.5
+		var nav: Navegacao = partida.nav
+		var meu_no := nav.no_de_posicao(position)
+		if meu_no != Navegacao.INVALIDO:
+			_seguidor.ir_para(meu_no, nav.no_mais_proximo(alvo.position))
+	if _seguidor.chegou():
+		return false
+	_passo_caminho = _seguidor.passo(self, delta)
+	return true
 
 
 func _procurar_alvo():
@@ -128,7 +168,7 @@ func _pular() -> void:
 
 
 func _atacar(alvo) -> void:
-	_cd = 0.9
+	_cd = intervalo_ataque
 	alvo.receber_dano(dano, _origem())
 	var tw := create_tween()
 	tw.tween_property(sprite, "position:x", _dir * 3.0, 0.05)

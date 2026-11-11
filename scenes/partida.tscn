@@ -1,10 +1,11 @@
-[gd_scene load_steps=6 format=3]
+[gd_scene load_steps=7 format=3]
 
 [ext_resource type="Script" path="res://scripts/partida.gd" id="1_partida"]
 [ext_resource type="Texture2D" path="res://assets/sprites/fundo.png" id="2_fundo"]
 [ext_resource type="TileSet" path="res://resources/tiles.tres" id="3_tiles"]
 [ext_resource type="Script" path="res://scripts/portas_visual.gd" id="4_portas"]
 [ext_resource type="Script" path="res://scripts/hud.gd" id="5_hud"]
+[ext_resource type="Script" path="res://scripts/nevoa.gd" id="6_nevoa"]
 
 [node name="Partida" type="Node2D"]
 script = ExtResource("1_partida")
@@ -23,6 +24,10 @@ tile_set = ExtResource("3_tiles")
 script = ExtResource("4_portas")
 
 [node name="Entidades" type="Node2D" parent="Mundo"]
+
+[node name="Nevoa" type="Node2D" parent="Mundo"]
+z_index = 5
+script = ExtResource("6_nevoa")
 
 [node name="HUD" type="CanvasLayer" parent="."]
 

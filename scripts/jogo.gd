@@ -1,11 +1,16 @@
 extends Node
-## Autoload "Jogo": controles dos dois jogadores, sons e escolhas de classe.
+## Autoload "Jogo": controles, sons, modo de jogo e dados das classes.
 
 const COR_TIME := {0: Color("94b0c2"), 1: Color("41a6f6"), 2: Color("ef7d57")}
+## Classes sorteadas no nível 2 (o Recruta é a classe inicial de todos)
 const CLASSES: Array[String] = ["arqueiro", "orc", "mago", "rei"]
+const TEMPO_PARTIDA := 180.0
 
-## Classe escolhida por cada jogador (índice em CLASSES)
-var escolha := {1: 0, 2: 1}
+## Modo escolhido no menu
+var solo := true
+var dificuldade := 1  ## 0 fácil, 1 normal, 2 difícil
+## true em celular/tablet (mostra os controles na tela)
+var toque := false
 
 var _sons := {}
 
@@ -23,6 +28,18 @@ func _ready() -> void:
 
 func dados_classe(indice: int) -> ClasseDados:
 	return load("res://resources/classes/%s.tres" % CLASSES[indice])
+
+
+func dados_recruta() -> ClasseDados:
+	return load("res://resources/classes/recruta.tres")
+
+
+func config_partida() -> Dictionary:
+	return {
+		"semente": randi(),
+		"tempo": TEMPO_PARTIDA,
+		"bots": {1: -1, 2: dificuldade if solo else -1},
+	}
 
 
 func tocar(nome: String) -> void:
@@ -54,6 +71,16 @@ func _criar_controles() -> void:
 	_acao("p2_descer", [KEY_DOWN])
 	_acao("p2_opcao1", [KEY_KP_1, KEY_K])
 	_acao("p2_opcao2", [KEY_KP_2, KEY_L])
+	# Menus
+	_acao("menu_cima", [KEY_W, KEY_UP])
+	_acao("menu_baixo", [KEY_S, KEY_DOWN])
+	_acao("menu_ok", [KEY_SPACE, KEY_ENTER, KEY_KP_ENTER, KEY_KP_0, KEY_0])
+	_acao("menu_voltar", [KEY_ESCAPE, KEY_BACKSPACE])
+	for dev in [0, 1]:
+		_botao("menu_cima", dev, JOY_BUTTON_DPAD_UP)
+		_botao("menu_baixo", dev, JOY_BUTTON_DPAD_DOWN)
+		_botao("menu_ok", dev, JOY_BUTTON_A)
+		_botao("menu_voltar", dev, JOY_BUTTON_B)
 	# Controles (gamepad): 1º controle = P1, 2º controle = P2
 	for j in [1, 2]:
 		var dev: int = j - 1

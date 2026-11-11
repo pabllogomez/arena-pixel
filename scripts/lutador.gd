@@ -1,7 +1,8 @@
 class_name Lutador
 extends CharacterBody2D
-## Personagem controlado por um jogador. Anda, pula e ataca sozinho
-## quando um inimigo entra no alcance.
+## Personagem de um jogador (humano ou bot). Começa como Recruta, ganha uma
+## classe sorteada no nível 2 e melhorias nos níveis seguintes. Anda, pula e
+## ataca sozinho quando um inimigo entra no alcance.
 
 signal morreu(lutador: Lutador)
 
@@ -24,6 +25,8 @@ var numero := 1
 var equipe := 1
 var dados: ClasseDados
 var partida: Node
+var controle: Controle
+var eh_recruta := true
 
 # Atributos atuais (começam iguais aos da classe e crescem com as melhorias)
 var vida_max := 100.0
@@ -58,19 +61,40 @@ var _anim_t := 0.0
 var _flash := 0.0
 
 
-func configurar(n: int, d: ClasseDados, p: Node) -> void:
+func configurar(n: int, d: ClasseDados, p: Node, c: Controle) -> void:
 	numero = n
 	equipe = n
-	dados = d
 	partida = p
+	controle = c
+	_aplicar_classe(d)
+
+
+func _aplicar_classe(d: ClasseDados) -> void:
+	var proporcao := vida / vida_max if dados != null else 1.0
+	dados = d
 	vida_max = d.vida_max
-	vida = vida_max
+	vida = vida_max * proporcao
 	velocidade = d.velocidade
 	forca_pulo = d.forca_pulo
 	dano = d.dano
 	alcance = d.alcance
 	intervalo = d.intervalo_ataque
 	max_lacaios = d.max_lacaios
+	if sprite != null:
+		sprite.texture = d.textura_p1 if numero == 1 else d.textura_p2
+
+
+func receber_classe(d: ClasseDados) -> void:
+	## Recruta vira uma classe (chamado pela partida no nível 2).
+	eh_recruta = false
+	_aplicar_classe(d)
+	curar(vida_max * 0.25)
+	_cd_ataque = 0.4
+
+
+func nome_jogador() -> String:
+	var n := controle.nome()
+	return n if n != "" else "P%d" % numero
 
 
 func _ready() -> void:
@@ -78,10 +102,6 @@ func _ready() -> void:
 	add_to_group("viajante")
 	sprite.texture = dados.textura_p1 if numero == 1 else dados.textura_p2
 	sprite.flip_h = numero == 2
-
-
-func _a(nome: String) -> String:
-	return Jogo.acao(numero, nome)
 
 
 func _physics_process(delta: float) -> void:
@@ -96,18 +116,19 @@ func _physics_process(delta: float) -> void:
 
 	var dir := 0.0
 	if ativo:
-		dir = Input.get_axis(_a("esquerda"), _a("direita"))
+		controle.atualizar(self, delta)
+		dir = controle.eixo
 		_buffer -= delta
-		if Input.is_action_just_pressed(_a("pular")):
+		if controle.pulo_apertou:
 			_buffer = TEMPO_BUFFER
 		if _buffer > 0.0 and _coyote > 0.0:
 			velocity.y = -forca_pulo
 			_buffer = 0.0
 			_coyote = 0.0
 			Jogo.tocar("pulo")
-		if Input.is_action_just_released(_a("pular")) and velocity.y < 0.0:
+		if controle.pulo_soltou and velocity.y < 0.0:
 			velocity.y *= 0.5
-		if Input.is_action_just_pressed(_a("descer")) and is_on_floor():
+		if controle.descer_apertou and is_on_floor():
 			_atravessar_plataforma()
 		_ler_escolhas()
 
@@ -180,7 +201,8 @@ func _tentar_atacar() -> void:
 
 
 func _escolher_alvo():
-	## Inimigo mais próximo dentro do alcance (jogador inimigo tem prioridade).
+	## Inimigo mais próximo dentro do alcance. Com classe, o jogador inimigo
+	## tem prioridade; o Recruta prefere monstros.
 	var melhor = null
 	var melhor_d := INF
 	var corpo_a_corpo := dados.tipo_ataque == ClasseDados.TipoAtaque.CORPO_A_CORPO
@@ -196,7 +218,7 @@ func _escolher_alvo():
 		if not corpo_a_corpo and not _linha_livre(a.global_position):
 			continue
 		if a is Lutador:
-			d *= 0.6
+			d *= 3.0 if eh_recruta else 0.6
 		if d < melhor_d:
 			melhor_d = d
 			melhor = a
@@ -235,11 +257,18 @@ func _investida(lado: float) -> void:
 func receber_dano(qtd: float, origem) -> void:
 	if not vivo:
 		return
+	var origem_valida: bool = origem != null and is_instance_valid(origem)
+	# Dano entre jogadores passa pelas regras da partida (Recruta, PvP, morte súbita)
+	if origem_valida and origem is Lutador and origem != self:
+		qtd *= partida.mult_pvp(origem, self)
+	if qtd <= 0.0:
+		return
 	vida -= qtd
 	_flash = 0.12
 	Jogo.tocar("acerto")
-	partida.mostrar_texto(global_position + Vector2(0, -12), str(roundi(qtd)), Color("ffcd75"))
-	if origem != null and is_instance_valid(origem):
+	var texto := str(roundi(qtd)) if qtd >= 1.0 else "%.1f" % qtd
+	partida.mostrar_texto(global_position + Vector2(0, -12), texto, Color("ffcd75"))
+	if origem_valida:
 		velocity.x += signf(global_position.x - origem.global_position.x) * 70.0
 	if vida <= 0.0:
 		vida = 0.0
@@ -275,7 +304,7 @@ func hitbox() -> Rect2:
 # ------------------------------------------------------------------ Experiência
 
 func xp_para_proximo() -> int:
-	return 5 + nivel * 3
+	return 4 + nivel * 2
 
 
 func ganhar_xp(qtd: int) -> void:
@@ -286,23 +315,21 @@ func ganhar_xp(qtd: int) -> void:
 		xp -= xp_para_proximo()
 		nivel += 1
 		curar(vida_max * 0.15)
-		escolhas.append(Melhorias.sortear(self))
 		Jogo.tocar("nivel")
-		partida.mostrar_texto(global_position + Vector2(0, -20), "NÍVEL %d!" % nivel, Color("a7f070"))
+		if eh_recruta:
+			partida.sortear_classe(self)
+		else:
+			escolhas.append(Melhorias.sortear(self))
+			partida.mostrar_texto(global_position + Vector2(0, -20), "NÍVEL %d!" % nivel, Color("a7f070"))
 
 
 func _ler_escolhas() -> void:
-	if escolhas.is_empty():
+	if escolhas.is_empty() or controle.opcao < 0:
 		return
-	var op := -1
-	if Input.is_action_just_pressed(_a("opcao1")):
-		op = 0
-	elif Input.is_action_just_pressed(_a("opcao2")):
-		op = 1
-	if op >= 0:
-		var par: Array = escolhas.pop_front()
-		Melhorias.aplicar(self, par[op])
-		partida.mostrar_texto(global_position + Vector2(0, -20), par[op]["nome"], Color.WHITE)
+	var par: Array = escolhas.pop_front()
+	var m: Dictionary = par[controle.opcao]
+	Melhorias.aplicar(self, m)
+	partida.mostrar_texto(global_position + Vector2(0, -20), m["nome"], Color.WHITE)
 
 
 # ------------------------------------------------------------------ Visual

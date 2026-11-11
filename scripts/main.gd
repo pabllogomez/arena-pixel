@@ -1,14 +1,21 @@
 extends Node
-## Alterna entre a tela de seleção e a partida.
+## Alterna entre o menu e a partida.
 
-const CENA_SELECAO := preload("res://scenes/selecao.tscn")
+const CENA_MENU := preload("res://scenes/menu.tscn")
 const CENA_PARTIDA := preload("res://scenes/partida.tscn")
 
 var _atual: Node
+var _toque: Control
 
 
 func _ready() -> void:
-	_abrir_selecao()
+	# Controles na tela para celular (ficam por cima de tudo)
+	var camada := CanvasLayer.new()
+	camada.layer = 10
+	add_child(camada)
+	_toque = preload("res://scripts/controles_toque.gd").new()
+	camada.add_child(_toque)
+	_abrir_menu()
 
 
 func _trocar(nova: Node) -> void:
@@ -18,15 +25,17 @@ func _trocar(nova: Node) -> void:
 	add_child(nova)
 
 
-func _abrir_selecao() -> void:
-	var s = CENA_SELECAO.instantiate()
-	s.pronto.connect(_nova_partida)
-	_trocar(s)
+func _abrir_menu() -> void:
+	var m = CENA_MENU.instantiate()
+	m.jogar.connect(_nova_partida, CONNECT_DEFERRED)
+	_toque.partida = null
+	_trocar(m)
 
 
-func _nova_partida() -> void:
+func _nova_partida(config: Dictionary = {}) -> void:
 	var p = CENA_PARTIDA.instantiate()
 	_trocar(p)
-	p.iniciar(Jogo.dados_classe(Jogo.escolha[1]), Jogo.dados_classe(Jogo.escolha[2]), randi())
+	_toque.partida = p
+	p.iniciar(config if not config.is_empty() else Jogo.config_partida())
 	p.revanche.connect(_nova_partida, CONNECT_DEFERRED)
-	p.voltar.connect(_abrir_selecao, CONNECT_DEFERRED)
+	p.voltar.connect(_abrir_menu, CONNECT_DEFERRED)

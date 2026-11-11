@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="ClasseDados" load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://scripts/classe_dados.gd" id="1_script"]
+[ext_resource type="Texture2D" path="res://assets/sprites/recruta_1.png" id="2_p1"]
+[ext_resource type="Texture2D" path="res://assets/sprites/recruta_2.png" id="3_p2"]
+
+[resource]
+script = ExtResource("1_script")
+textura_p1 = ExtResource("2_p1")
+textura_p2 = ExtResource("3_p2")
+nome = "Recruta"
+descricao = "Todo guerreiro começa assim. Cace monstros para ganhar sua classe no nível 2."
+vida_max = 110.0
+velocidade = 85.0
+forca_pulo = 295.0
+tipo_ataque = 1
+dano = 8.0
+alcance = 18.0
+intervalo_ataque = 0.55

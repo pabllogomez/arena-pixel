@@ -6,7 +6,7 @@ Requer: Pillow (pip install pillow)
 Tudo aqui é provisório: substitua os PNG/WAV em assets/ pelos definitivos
 mantendo o tamanho de quadro (16x16) e a ordem dos quadros:
   personagens: 0-1 parado | 2-5 correndo | 6 pulando | 7 caindo
-  lacaio/gosma: 0-1 andando
+  lacaio/gosma_N: 0-1 andando (N = faixa de nível do monstro)
 """
 import math
 import os
@@ -115,6 +115,23 @@ CLASSES = {
         ],
         "pernas": pernas("h"),
     },
+    "recruta": {
+        "corpo": [
+            "................",
+            "................",
+            ".....kkkkkk.....",
+            "....khhhhhhk....",
+            "...khhhhhhhhk...",
+            "...kheeeeeek....",
+            "...keekeekek..k.",
+            "...keeeeeek..kjk",
+            "....kXXXXXXk.kj.",
+            "...kXXXXXXXXkej.",
+            "...keXXhhXXk.j..",
+            "....kXXXXXXk....",
+        ],
+        "pernas": pernas("h"),
+    },
     "orc": {
         "corpo": [
             "................",
@@ -213,7 +230,11 @@ GOSMA_B = [
     ".....kkkkkk.....", "...kkpprpppkk...", ".kkpprppppppppk.", ".kppwkpppwkpppk.",
     "kpppwkpppwkppppk", "kppppppppppppppk", "knnnnnnnnnnnnnnk", ".kkkkkkkkkkkkkk.",
 ]
-folha([grade(GOSMA_A), grade(GOSMA_B)]).save(os.path.join(SPR, "gosma.png"))
+# Uma cor por faixa de nível: roxo -> verde -> laranja -> vermelho
+for faixa, (corpo, brilho, sombra) in enumerate([("p", "r", "n"), ("g", "l", "t"), ("o", "y", "h"), ("r", "o", "p")], 1):
+    troca = str.maketrans({"p": corpo, "r": brilho, "n": sombra})
+    quadros = [[l.translate(troca) for l in q] for q in (GOSMA_A, GOSMA_B)]
+    folha([grade(q) for q in quadros]).save(os.path.join(SPR, f"gosma_{faixa}.png"))
 
 # ---------------------------------------------------------------- Projéteis e efeitos
 grade([

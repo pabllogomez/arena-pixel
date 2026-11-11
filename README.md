@@ -4,6 +4,8 @@ Combate 1x1 local em plataformas, 2D, pixel art, feito em **Godot 4.5** para rod
 
 ## Como jogar
 
+**Modos:** 1 jogador (contra a máquina: Fácil, Normal ou Difícil) ou 2 jogadores no mesmo teclado.
+
 | | Jogador 1 | Jogador 2 |
 |---|---|---|
 | Andar | `A` / `D` | `←` / `→` |
@@ -11,17 +13,30 @@ Combate 1x1 local em plataformas, 2D, pixel art, feito em **Godot 4.5** para rod
 | Descer da plataforma | `S` | `↓` |
 | Escolher melhoria | `Q` / `E` | `1` / `2` do teclado numérico (ou `K` / `L`) |
 
-Controles (gamepad) também funcionam: o 1º controle é o P1 e o 2º é o P2.
+No celular aparecem botões na tela: setas na esquerda, pulo na direita, e as melhorias são escolhidas tocando na opção.
+Controles (gamepad) também funcionam.
 
+### Regras
+- **Todos começam como Recruta:** fraco, ataca corpo a corpo e causa pouco dano em jogadores.
+- **No nível 2**, o Recruta vira uma **classe sorteada**, sem repetir a do oponente. Dos níveis 3 em diante, cada nível oferece 2 melhorias para escolher.
 - **O ataque é automático:** sai sozinho quando um inimigo entra no alcance.
-- **Portas:** portas de mesma cor são ligadas. Entrou por uma, sai pela outra.
-- **Monstros roxos** são neutros e atacam qualquer um. Matá-los dá XP. Cada nível oferece 2 melhorias para escolher.
-- **Vence quem sobrar vivo.** Depois, `Pular` = revanche com mapa novo e `Esc` = trocar classes.
+- **Monstros** dão XP e ficam mais fortes, rápidos e agressivos conforme o maior nível entre os jogadores. A cor indica a força: roxo, depois verde, laranja e vermelho.
+- **Dano entre jogadores** é reduzido:
+  - o Recruta causa pouco dano em jogadores;
+  - um jogador com classe causa 1/3 do dano em um Recruta;
+  - com os dois já com classe, vale o dano normal de PvP.
+- **Portas** de mesma cor são ligadas. Há sempre pelo menos 2 pares.
+- **Cada partida dura 3 minutos.** Se ninguém vencer até lá, começa a **Morte Súbita**:
+  - as portas fecham e param de nascer monstros;
+  - uma fumaça tóxica sobe do chão;
+  - o dano entre jogadores aumenta a cada 15 s.
+- **Vence quem sobrar vivo.**
 
 ## Classes
 
 | Classe | Estilo |
 |---|---|
+| Recruta | Classe inicial de todos. Fraco, só serve para caçar monstros |
 | Arqueiro | Rápido, atira flechas sem parar, dano baixo |
 | Orc | Corpo a corpo, muito dano e vida, lento |
 | Mago | Orbe lento que causa mais dano quanto menos distância percorre. Frágil e lento |
@@ -33,18 +48,18 @@ Os atributos ficam em `resources/classes/*.tres` e podem ser editados no Inspect
 
 ```
 scripts/
-  gerador_arena.gd   geração procedural do mapa e das portas
-  partida.gd         partida: portas, monstros, vitória
-  lutador.gd         personagem do jogador (movimento + ataque automático)
-  minion.gd          IA dos lacaios do Rei e dos monstros neutros
-  projetil.gd        flechas e orbes
-  melhorias.gd       melhorias de nível
-  classe_dados.gd    recurso com os atributos de cada classe
-  hud.gd, selecao.gd, main.gd, jogo.gd (autoload)
-resources/classes/   atributos das 4 classes
-assets/              arte e sons PROVISÓRIOS
-tools/gerar_arte.py  gera a arte/sons provisórios (python3 + Pillow)
-tools/teste.gd       teste automático (2000 mapas + partidas simuladas)
+  gerador_arena.gd     arena procedural por peças (escadaria, torre, ponte, ilha...) e portas
+  navegacao.gd         grafo de navegação: valida mapas e guia o bot e os lacaios
+  partida.gd           regras: PvP, sorteio de classe, cronômetro, Morte Súbita, monstros
+  lutador.gd           personagem (movimento + ataque automático + XP)
+  controle*.gd         quem comanda o lutador: humano (teclado/controle) ou bot
+  seguidor_caminho.gd  segue caminhos da navegação
+  minion.gd            lacaios do Rei e monstros neutros
+  controles_toque.gd   botões na tela para celular
+  projetil.gd, melhorias.gd, classe_dados.gd, hud.gd, menu.gd, nevoa.gd, main.gd, jogo.gd
+resources/classes/     atributos das classes
+assets/                arte e sons PROVISÓRIOS (gerados por tools/gerar_arte.py)
+tools/teste.gd         teste automático (mapas + partidas bot x bot + equilíbrio)
 ```
 
 ## Versões no ar
@@ -72,4 +87,7 @@ junte `dev` em `main` para atualizar a versão ativa.
 
 ```
 godot --headless --fixed-fps 60 --path . -s tools/teste.gd
+godot --headless --fixed-fps 60 --path . -s tools/teste.gd -- --equilibrio 30
 ```
+
+O segundo comando simula 30 partidas de bot difícil contra bot difícil e mostra a taxa de vitória de cada classe.
