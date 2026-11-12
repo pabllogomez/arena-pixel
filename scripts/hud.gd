@@ -50,13 +50,17 @@ func _draw() -> void:
 		if v != 0:
 			var l: Lutador = partida.jogadores[v]
 			cor = Jogo.COR_TIME[v]
-			if Jogo.solo:
+			if partida.rede != "":
+				texto = "VOCÊ VENCEU!" if v == Rede.numero_local() else "SEU AMIGO VENCEU!"
+			elif Jogo.solo:
 				texto = "VOCÊ VENCEU!" if v == 1 else "A MÁQUINA VENCEU!"
 			else:
 				texto = "JOGADOR %d VENCEU!" % v
 			texto += "  (" + l.dados.nome.to_upper() + ")"
 		_texto_centro(fonte, centro + Vector2(0, -4), texto, 18, cor)
-		if not Jogo.toque:
+		if partida.rede == "convidado":
+			_texto_centro(fonte, centro + Vector2(0, 14), "Aguardando quem criou a partida pedir revanche...", 8, Color.WHITE)
+		elif not Jogo.toque:
 			_texto_centro(fonte, centro + Vector2(0, 14), "Espaço: revanche (mapa novo)   ·   Esc: menu", 8, Color.WHITE)
 		else:
 			_texto_centro(fonte, centro + Vector2(0, 14), "Revanche joga em um mapa novo", 8, Color.WHITE)
@@ -98,13 +102,15 @@ func mostra_cartas(n: int) -> bool:
 	if partida == null or not partida.jogadores.has(n):
 		return false
 	var l: Lutador = partida.jogadores[n]
-	return not l.escolhas.is_empty() and l.vivo and not (l.controle is ControleBot) and not partida.fim
+	return not l.escolhas.is_empty() and l.vivo and partida.e_local(n) and not partida.fim
 
 
 func rects_cartas(n: int) -> Array:
 	## Duas cartas grandes empilhadas, centralizadas na vertical
 	## (P1 no lado esquerdo, P2 no direito).
-	var x := 8.0 if n == 1 else size.x - 8.0 - LARG_CARTA
+	# Em rede, as cartas de quem está olhando a tela ficam sempre na esquerda
+	var esquerda: bool = n == 1 or partida.rede != ""
+	var x := 8.0 if esquerda else size.x - 8.0 - LARG_CARTA
 	var y0 := size.y / 2.0 - ALT_CARTA - 2.0
 	return [Rect2(x, y0, LARG_CARTA, ALT_CARTA), Rect2(x, y0 + ALT_CARTA + 6.0, LARG_CARTA, ALT_CARTA)]
 
@@ -121,14 +127,15 @@ func _cartas(fonte: Font, n: int) -> void:
 	var r0: Rect2 = rects[0]
 	draw_string_outline(fonte, r0.position + Vector2(2, -6), titulo, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, 4, Color("1a1c2c"))
 	draw_string(fonte, r0.position + Vector2(2, -6), titulo, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, verde)
-	var teclas := ["Q", "E"] if n == 1 else ["1", "2"]
+	var usa_p1: bool = n == 1 or partida.rede != ""  # em rede, cada um joga com os controles do P1
+	var teclas := ["Q", "E"] if usa_p1 else ["1", "2"]
 	for i in 2:
 		var r: Rect2 = rects[i]
 		var m: Dictionary = par[i]
 		draw_rect(r, Color(0.06, 0.06, 0.09, 1.0))
 		draw_rect(r, Color(verde, pulso), false, 1.0)
 		var tx := r.position.x + 8.0
-		if not (Jogo.toque and n == 1):
+		if not (Jogo.toque and usa_p1):
 			# Tecla correspondente
 			var badge := Rect2(r.position + Vector2(6, r.size.y / 2.0 - 8), Vector2(16, 16))
 			draw_rect(badge, Color("333c57"))
@@ -150,7 +157,7 @@ func _gui_input(event: InputEvent) -> void:
 			for i in 2:
 				var r: Rect2 = rects[i]
 				if r.has_point(event.position):
-					partida.jogadores[n].escolher_melhoria(i)
+					partida.escolher(n, i)
 					accept_event()
 					return
 

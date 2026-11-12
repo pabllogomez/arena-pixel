@@ -82,10 +82,27 @@ var _t_nevoa := 0.0
 var _t_fim := 0.0
 var _vida_no_quadro := {}
 
+# ------------------------------------------------------------------ Rede
+## "" (partida local), "anfitriao" (simula e envia) ou "convidado" (só desenha)
+var rede := ""
+var _quadro := 0
+var _fantasmas := {}      ## convidado: id da entidade no anfitrião -> Sprite2D
+var _alvos := {}          ## convidado: nó -> posição recebida (para suavizar)
+var _pulos_enviados := 0
+var _descidas_enviadas := 0
+const TEX_PROJETIL := {
+	"flecha": preload("res://assets/sprites/flecha.png"),
+	"orbe": preload("res://assets/sprites/orbe.png"),
+}
+
 
 func iniciar(config: Dictionary) -> void:
 	## config: {"semente": int, "tempo": float, "bots": {1: dif, 2: dif}}
 	##   dificuldade -1 = humano; 0, 1, 2 = bot fácil, normal, difícil.
+	rede = config.get("rede", "")
+	if rede != "":
+		Rede.partida = self
+		Rede.desconectado.connect(_ao_perder_conexao)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = config.get("semente", randi())
 	tempo_restante = config.get("tempo", Jogo.TEMPO_PARTIDA)
@@ -105,26 +122,40 @@ func iniciar(config: Dictionary) -> void:
 	for n in [1, 2]:
 		var dif: int = bots.get(n, -1)
 		var c: Controle = ControleHumano.new(n) if dif < 0 else ControleBot.new(dif, self)
+		if rede == "anfitriao" and n == 2:
+			c = ControleRede.new()      # comandos do convidado chegam pela rede
+		elif rede == "convidado":
+			c = Controle.new()          # no convidado os personagens só são desenhados
 		var l: Lutador = CENA_LUTADOR.instantiate()
 		l.configurar(n, Jogo.dados_recruta(), self, c)
 		l.position = mapa["inicio"][n]
 		l.morreu.connect(_ao_morrer)
 		entidades.add_child(l)
 		l.add_child(masmorra.criar_luz(Color(0.85, 0.85, 1.0), 52.0, 0.8))
+		if rede == "convidado":
+			l.process_mode = Node.PROCESS_MODE_DISABLED
 		jogadores[n] = l
 
+	if rede == "convidado":
+		return  # quem simula monstros, tempo e regras é o anfitrião
 	for i in 2:
 		_criar_monstro()
 	_congelar(true)  # tudo parado durante a contagem inicial
+	if rede == "anfitriao":
+		var remoto := config.duplicate()
+		remoto["rede"] = "convidado"
+		Rede.iniciar_partida_remota(remoto)
 
 
 func _congelar(sim: bool) -> void:
 	## Congela personagens, monstros, lacaios e projéteis (tochas e pingos seguem).
+	if rede == "convidado":
+		return
 	entidades.process_mode = Node.PROCESS_MODE_DISABLED if sim else Node.PROCESS_MODE_INHERIT
 
 
 func congelado() -> bool:
-	return pausado or contagem > 0.0
+	return (pausado and rede == "") or contagem > 0.0
 
 
 func _retomar_com_contagem() -> void:
@@ -137,7 +168,8 @@ func pausar() -> void:
 	if pausado or fim:
 		return
 	pausado = true
-	_congelar(true)
+	if rede == "":
+		_congelar(true)  # em rede o jogo não para (o outro continua jogando)
 	_painel_pausa = preload("res://scripts/painel_opcoes.gd").new()
 	_painel_pausa.na_pausa = true
 	_painel_pausa.continuar.connect(_despausar)
@@ -150,7 +182,8 @@ func _despausar() -> void:
 		_painel_pausa.queue_free()
 		_painel_pausa = null
 	pausado = false
-	_retomar_com_contagem()
+	if rede == "":
+		_retomar_com_contagem()
 
 
 func _atualizar_escolhas() -> void:
@@ -183,7 +216,10 @@ func oponente(l: Lutador) -> Lutador:
 # ------------------------------------------------------------------ Laço principal
 
 func _process(delta: float) -> void:
-	if contagem > -1.0 and not pausado:
+	if rede == "convidado":
+		_process_convidado(delta)
+		return
+	if contagem > -1.0 and (not pausado or rede != ""):
 		var antes := contagem
 		contagem -= delta
 		if antes > 0.0 and contagem <= 0.0:
@@ -213,9 +249,16 @@ func _process(delta: float) -> void:
 
 
 func _physics_process(delta: float) -> void:
+	if rede == "convidado":
+		_physics_convidado()
+		return
+	if rede == "anfitriao":
+		_quadro += 1
+		if _quadro % 2 == 0:
+			Rede.enviar_estado(_montar_estado())
 	for n in jogadores:
 		_vida_no_quadro[n] = jogadores[n].vida
-	if congelado():
+	if contagem > 0.0 or (pausado and rede == ""):
 		return
 	if portas_abertas:
 		_atravessar_portas(delta)
@@ -271,10 +314,19 @@ func sortear_classe(l: Lutador) -> void:
 	l.receber_classe(d)
 	criar_brilho(l.position)
 	criar_brilho(l.position + Vector2(0, -6))
-	mostrar_anuncio("%s VIROU %s!" % [l.nome_jogador(), d.nome.to_upper()], Jogo.COR_TIME[l.numero])
+	_anunciar_classe(l.numero, d.nome)
+	_evento(["classe", l.numero, Jogo.CLASSES.find(d.nome.to_lower())])
 
 
-func mostrar_anuncio(texto: String, cor: Color, duracao := 2.0) -> void:
+func _anunciar_classe(n: int, nome_classe: String) -> void:
+	# Cada tela monta o texto do seu ponto de vista ("VOCÊ VIROU..." / "AMIGO VIROU...")
+	var l: Lutador = jogadores[n]
+	mostrar_anuncio("%s VIROU %s!" % [l.nome_jogador(), nome_classe.to_upper()], Jogo.COR_TIME[n], 2.0, false)
+
+
+func mostrar_anuncio(texto: String, cor: Color, duracao := 2.0, enviar := true) -> void:
+	if enviar:
+		_evento(["anuncio", texto, cor.to_html(), duracao])
 	anuncio = texto
 	anuncio_cor = cor
 	anuncio_t = duracao
@@ -486,6 +538,7 @@ func _contar_equipe(equipe: int) -> int:
 
 
 func criar_corte(pos: Vector2, espelhar: bool) -> void:
+	_evento(["corte", pos.x, pos.y, espelhar])
 	var s := Sprite2D.new()
 	s.texture = TEX_CORTE
 	s.material = masmorra.material_sem_sombra()
@@ -501,11 +554,14 @@ func criar_corte(pos: Vector2, espelhar: bool) -> void:
 
 
 func tremer(forca: float) -> void:
+	_evento(["tremer", forca])
 	_tremor = maxf(_tremor, forca)
 
 
 func criar_poeira(pos: Vector2) -> void:
-	Jogo.tocar("pouso")
+	_evento(["poeira", pos.x, pos.y])
+	if rede != "convidado":
+		Jogo.tocar("pouso")  # no convidado o som chega como evento próprio
 	for lado in [-1.0, 1.0]:
 		for i in 3:
 			var s := Sprite2D.new()
@@ -522,6 +578,7 @@ func criar_poeira(pos: Vector2) -> void:
 
 
 func criar_brilho(pos: Vector2) -> void:
+	_evento(["brilho", pos.x, pos.y])
 	var s := Sprite2D.new()
 	s.texture = TEX_BRILHO
 	s.hframes = 3
@@ -534,6 +591,7 @@ func criar_brilho(pos: Vector2) -> void:
 
 
 func mostrar_texto(pos: Vector2, texto: String, cor: Color) -> void:
+	_evento(["texto", pos.x, pos.y, texto, cor.to_html()])
 	var l := Label.new()
 	l.text = texto
 	var ls := LabelSettings.new()
@@ -557,7 +615,7 @@ func mostrar_texto(pos: Vector2, texto: String, cor: Color) -> void:
 # ------------------------------------------------------------------ Fim de partida
 
 func _ao_morrer(_l: Lutador) -> void:
-	if not fim:
+	if not fim and rede != "convidado":
 		call_deferred("_decidir_vencedor")
 
 
@@ -585,3 +643,211 @@ func _decidir_vencedor() -> void:
 
 func _exit_tree() -> void:
 	Engine.time_scale = 1.0
+
+
+# ------------------------------------------------------------------ Rede: anfitrião
+
+func _evento(e: Array) -> void:
+	if rede == "anfitriao":
+		Rede.evento(e)
+
+
+func escolher(n: int, op: int) -> void:
+	## Escolha de melhoria vinda do HUD (clique/toque na carta).
+	if rede == "convidado":
+		Rede.enviar_escolha(op)
+	else:
+		jogadores[n].escolher_melhoria(op)
+
+
+func e_local(n: int) -> bool:
+	## Este jogador é controlado por quem está olhando esta tela?
+	if rede != "":
+		return n == Rede.numero_local()
+	return jogadores[n].controle is ControleHumano
+
+
+func receber_entrada_remota(estado: Array) -> void:
+	var c = jogadores[2].controle
+	if c is ControleRede:
+		c.receber(estado)
+
+
+func receber_escolha_remota(op: int) -> void:
+	jogadores[2].escolher_melhoria(op)
+
+
+func _indice_classe(l: Lutador) -> int:
+	return -1 if l.eh_recruta else Jogo.CLASSES.find(l.dados.nome.to_lower())
+
+
+func _montar_estado() -> Dictionary:
+	var js: Array = []
+	for n in [1, 2]:
+		var l: Lutador = jogadores[n]
+		var esc: Array = []
+		if not l.escolhas.is_empty():
+			esc = [l.escolhas[0][0]["id"], l.escolhas[0][1]["id"], l.escolhas.size()]
+		js.append([l.position.x, l.position.y, l.sprite.frame, l.sprite.flip_h, l.vida, l.vida_max,
+				l.nivel, l.xp, l.xp_para_proximo(), _indice_classe(l), l.vivo, esc, l._flash > 0.0])
+	var es: Array = []
+	for e in entidades.get_children():
+		if e is Minion and e.vivo:
+			es.append([e.get_instance_id(), e.textura.resource_path.get_file().get_basename(),
+					e.position.x, e.position.y, e.sprite.frame, e.sprite.flip_h, 0.0, 1.0])
+		elif e is Projetil and e._sprite != null:
+			es.append([e.get_instance_id(), "orbe" if e.magia else "flecha",
+					e.position.x, e.position.y, e._sprite.frame, false, e.rotation, e._sprite.scale.x])
+	return {"t": tempo_restante, "c": contagem, "ms": morte_subita, "tm": tempo_morte_subita,
+			"nv": nivel_nevoa, "f": fim, "v": vencedor, "pa": portas_abertas, "j": js, "e": es}
+
+
+func _ao_perder_conexao() -> void:
+	if not is_inside_tree():
+		return
+	mostrar_anuncio("CONEXÃO PERDIDA", Color("b13e53"), 3.0, false)
+	await get_tree().create_timer(2.5).timeout
+	voltar.emit()
+
+
+# ------------------------------------------------------------------ Rede: convidado
+
+func _process_convidado(delta: float) -> void:
+	if anuncio_t > 0.0:
+		anuncio_t -= delta
+	var mundo: Node2D = $Mundo
+	if _tremor > 0.05:
+		mundo.position = Vector2(0, 8) + Vector2(randf_range(-1, 1), randf_range(-1, 1)).round() * _tremor
+		_tremor = move_toward(_tremor, 0.0, delta * 10.0)
+	else:
+		mundo.position = Vector2(0, 8)
+	var eu: Lutador = jogadores[2]
+	if not eu.escolhas.is_empty() and not pausado:
+		if Input.is_action_just_pressed("p1_opcao1"):
+			Rede.enviar_escolha(0)
+		elif Input.is_action_just_pressed("p1_opcao2"):
+			Rede.enviar_escolha(1)
+	if not fim and not pausado and Input.is_action_just_pressed("pausar"):
+		pausar()
+	if fim and Input.is_action_just_pressed("menu_voltar"):
+		voltar.emit()
+
+
+func _physics_convidado() -> void:
+	# Comandos deste jogador vão para o anfitrião (o convidado usa os controles do P1)
+	if not pausado:
+		if Input.is_action_just_pressed("p1_pular"):
+			_pulos_enviados += 1
+		if Input.is_action_just_pressed("p1_descer"):
+			_descidas_enviadas += 1
+		Rede.enviar_entrada([Input.get_axis("p1_esquerda", "p1_direita"), _pulos_enviados,
+				Input.is_action_pressed("p1_pular"), _descidas_enviadas])
+	else:
+		Rede.enviar_entrada([0.0, _pulos_enviados, false, _descidas_enviadas])
+	# Suaviza o movimento entre um pacote e outro
+	for no in _alvos.keys():
+		if not is_instance_valid(no):
+			_alvos.erase(no)
+			continue
+		var alvo: Vector2 = _alvos[no]
+		if no.position.distance_to(alvo) > 48.0:
+			no.position = alvo  # teleporte (porta)
+		else:
+			no.position = no.position.lerp(alvo, 0.5)
+
+
+func aplicar_estado(s: Dictionary) -> void:
+	tempo_restante = s["t"]
+	contagem = s["c"]
+	tempo_morte_subita = s["tm"]
+	nivel_nevoa = s["nv"]
+	vencedor = s["v"]
+	if s["ms"] and not morte_subita:
+		morte_subita = true
+		Jogo.musica_tensa(true)
+	if not s["pa"] and portas_abertas:
+		_fechar_portas()
+	if s["f"] and not fim:
+		fim = true
+	for i in 2:
+		_aplicar_jogador(jogadores[i + 1], s["j"][i])
+	# Monstros, lacaios e projéteis: cria, move e remove "fantasmas"
+	var vistos := {}
+	for e in s["e"]:
+		var id: int = e[0]
+		vistos[id] = true
+		var f: Sprite2D = _fantasmas.get(id)
+		if f == null:
+			f = _criar_fantasma(e[1])
+			f.position = Vector2(e[2], e[3])
+			_fantasmas[id] = f
+		_alvos[f] = Vector2(e[2], e[3])
+		f.frame = mini(int(e[4]), f.hframes - 1)
+		f.flip_h = e[5]
+		f.rotation = e[6]
+		f.scale = Vector2.ONE * float(e[7])
+	for id in _fantasmas.keys():
+		if not vistos.has(id):
+			_fantasmas[id].queue_free()
+			_fantasmas.erase(id)
+
+
+func _criar_fantasma(tipo: String) -> Sprite2D:
+	var f := Sprite2D.new()
+	if TEX_PROJETIL.has(tipo):
+		f.texture = TEX_PROJETIL[tipo]
+		f.hframes = 2 if tipo == "orbe" else 1
+		f.material = masmorra.material_sem_sombra()
+	else:
+		f.texture = load("res://assets/sprites/%s.png" % tipo)
+		f.hframes = 2
+	entidades.add_child(f)
+	return f
+
+
+func _aplicar_jogador(l: Lutador, d: Array) -> void:
+	_alvos[l] = Vector2(d[0], d[1])
+	var classe: int = d[9]
+	if classe >= 0 and (l.eh_recruta or Jogo.CLASSES.find(l.dados.nome.to_lower()) != classe):
+		l.eh_recruta = false
+		l.dados = Jogo.dados_classe(classe)
+		l.sprite.texture = l.dados.textura_p1 if l.numero == 1 else l.dados.textura_p2
+	l.sprite.frame = d[2]
+	l.sprite.flip_h = d[3]
+	l.vida = d[4]
+	l.vida_max = d[5]
+	l.nivel = d[6]
+	l.xp = d[7]
+	l.sprite.modulate = Color(1, 0.35, 0.35) if d[12] else Color.WHITE
+	var esc: Array = d[11]
+	l.escolhas.clear()
+	if not esc.is_empty():
+		var par := [Melhorias.por_id(esc[0]), Melhorias.por_id(esc[1])]
+		for k in int(esc[2]):
+			l.escolhas.append(par)
+	if l.vivo and not d[10]:
+		l.vivo = false
+		l.sprite.rotation = PI * 0.5
+		l.sprite.modulate.a = 0.4
+	l.queue_redraw()
+
+
+func aplicar_evento(e: Array) -> void:
+	match e[0]:
+		"som":
+			Jogo.tocar(e[1])
+		"texto":
+			mostrar_texto(Vector2(e[1], e[2]), e[3], Color(e[4]))
+		"brilho":
+			criar_brilho(Vector2(e[1], e[2]))
+		"corte":
+			criar_corte(Vector2(e[1], e[2]), e[3])
+		"poeira":
+			criar_poeira(Vector2(e[1], e[2]))
+		"tremer":
+			tremer(e[1])
+		"anuncio":
+			mostrar_anuncio(e[1], Color(e[2]), e[3], false)
+		"classe":
+			if int(e[2]) >= 0:
+				_anunciar_classe(e[1], Jogo.dados_classe(e[2]).nome)

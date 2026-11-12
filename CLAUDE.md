@@ -15,7 +15,12 @@ godot --headless --path . --import
 godot --headless --fixed-fps 60 --path . -s tools/teste.gd
 godot --headless --fixed-fps 60 --path . -s tools/teste.gd -- --equilibrio 30   # vitórias por classe (bot x bot)
 ```
-O teste roda no CI antes de cada publicação; se falhar, nada é publicado.
+Rede (duas instâncias, ENet em localhost):
+```
+PAPEL=anfitriao godot --headless --path . -s tools/teste_rede.gd &
+PAPEL=convidado godot --headless --path . -s tools/teste_rede.gd
+```
+Os testes rodam no CI antes de cada publicação; se falharem, nada é publicado.
 
 ## Arquitetura
 - `scripts/gerador_arena.gd`: arena procedural por peças + portas (mínimo 2 pares).
@@ -24,5 +29,6 @@ O teste roda no CI antes de cada publicação; se falhar, nada é publicado.
 - `scripts/partida.gd`: regras (PvP, Recruta, sorteio de classe, cronômetro, Morte Súbita, monstros).
 - `scripts/controles_toque.gd`: botões na tela para celular.
 - `resources/classes/*.tres`: atributos das classes (balanceamento).
+- `scripts/rede.gd` (autoload Rede) + `scripts/lobby.gd`: jogo em rede 1x1 por WebRTC com códigos de copiar e colar; o anfitrião simula, o convidado só desenha (`partida.rede`).
 - `scripts/masmorra.gd`: tochas, iluminação (opcional) e pingos.
 - Arte/sons provisórios gerados por `tools/gerar_arte.py`; músicas por `tools/gerar_musica.py` (numpy + ffmpeg).

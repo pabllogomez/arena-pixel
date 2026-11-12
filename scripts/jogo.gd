@@ -47,6 +47,12 @@ func dados_recruta() -> ClasseDados:
 	return load("res://resources/classes/recruta.tres")
 
 
+func config_rede() -> Dictionary:
+	## Partida em rede criada pelo anfitrião (P1 = anfitrião, P2 = convidado).
+	solo = false
+	return {"semente": randi(), "tempo": TEMPO_PARTIDA, "bots": {1: -1, 2: -1}, "rede": "anfitriao"}
+
+
 func config_partida() -> Dictionary:
 	return {
 		"semente": randi(),
@@ -111,6 +117,9 @@ func _salvar_opcoes() -> void:
 
 
 func tocar(nome: String) -> void:
+	# Em rede, o anfitrião repassa os sons da partida para o convidado
+	if Rede.e_anfitriao() and Rede.partida != null:
+		Rede.evento(["som", nome])
 	if _sons.has(nome):
 		_sons[nome].pitch_scale = randf_range(0.92, 1.08)
 		_sons[nome].play()

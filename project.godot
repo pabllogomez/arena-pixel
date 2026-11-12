@@ -13,6 +13,7 @@ config/icon="res://icon.png"
 [autoload]
 
 Jogo="*res://scripts/jogo.gd"
+Rede="*res://scripts/rede.gd"
 
 [display]
 

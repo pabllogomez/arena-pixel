@@ -2,8 +2,11 @@ extends Control
 ## Menu inicial: modo de jogo (1 ou 2 jogadores) e dificuldade do bot.
 
 signal jogar
+signal jogar_rede
 
-const MODOS := ["1 JOGADOR", "2 JOGADORES", "OPÇÕES"]
+const MODOS := ["1 JOGADOR", "2 JOGADORES", "JOGAR EM REDE", "OPÇÕES"]
+const Y_OPCOES := 100.0
+const ESPACO_OPCOES := 16.0
 const DIFICULDADES := ["FÁCIL", "NORMAL", "DIFÍCIL"]
 
 var _tela := "modo"  # "modo" ou "dificuldade"
@@ -42,7 +45,7 @@ func _gui_input(event: InputEvent) -> void:
 			return
 		var opcoes := MODOS if _tela == "modo" else DIFICULDADES
 		for i in opcoes.size():
-			if Rect2(size.x / 2.0 - 80, 104.0 + i * 18.0 - 9, 160, 18).has_point(pos):
+			if Rect2(size.x / 2.0 - 80, Y_OPCOES + i * ESPACO_OPCOES - 8, 160, ESPACO_OPCOES).has_point(pos):
 				_sel = i
 				_confirmar()
 
@@ -51,6 +54,9 @@ func _confirmar() -> void:
 	Jogo.tocar("nivel")
 	if _tela == "modo" and MODOS[_sel] == "OPÇÕES":
 		_abrir_opcoes()
+		return
+	if _tela == "modo" and MODOS[_sel] == "JOGAR EM REDE":
+		jogar_rede.emit()
 		return
 	if _tela == "modo":
 		Jogo.solo = _sel == 0
@@ -108,7 +114,7 @@ func _draw() -> void:
 	_centro(fonte, Vector2(cx, 88), titulo, 8, Color("566c86"))
 	var opcoes := MODOS if _tela == "modo" else DIFICULDADES
 	for i in opcoes.size():
-		var y := 104.0 + i * 18.0
+		var y := Y_OPCOES + i * ESPACO_OPCOES
 		var sel := i == _sel
 		if sel:
 			draw_rect(Rect2(cx - 70, y - 8, 140, 16), Color("333c57"))

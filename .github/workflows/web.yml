@@ -74,6 +74,18 @@ jobs:
             # Reprova se o teste falhar OU se aparecer qualquer erro de script
             ~/godot/godot --headless --fixed-fps 60 --path . -s tools/teste.gd 2>&1 | tee teste.log
             if grep -q "SCRIPT ERROR" teste.log; then echo "::error::Erro de script no teste"; exit 1; fi
+            # Jogo em rede: duas instâncias conectadas (anfitrião + convidado)
+            if [ -f tools/teste_rede.gd ]; then
+              PAPEL=anfitriao timeout 90 ~/godot/godot --headless --path . -s tools/teste_rede.gd > rede_anf.log 2>&1 &
+              sleep 1
+              PAPEL=convidado timeout 90 ~/godot/godot --headless --path . -s tools/teste_rede.gd > rede_conv.log 2>&1 || true
+              wait
+              cat rede_anf.log rede_conv.log | grep -E "REDE|FALHOU|SCRIPT ERROR" || true
+              if [ "$(grep -c '^REDE OK' rede_anf.log rede_conv.log | awk -F: '{s+=$2} END {print s}')" != "2" ] \
+                  || grep -q "SCRIPT ERROR" rede_anf.log rede_conv.log; then
+                echo "::error::Teste de rede falhou"; exit 1
+              fi
+            fi
             mkdir -p "$2"
             ~/godot/godot --headless --path . --export-release "Web" "$2/index.html"
             test -f "$2/index.wasm"

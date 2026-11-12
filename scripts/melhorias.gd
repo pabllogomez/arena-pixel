@@ -19,6 +19,16 @@ const ESPECIAIS := {
 }
 
 
+static func por_id(id: String) -> Dictionary:
+	for m in GERAIS:
+		if m["id"] == id:
+			return m
+	for m in ESPECIAIS.values():
+		if m["id"] == id:
+			return m
+	return {"id": id, "nome": id, "desc": ""}
+
+
 static func sortear(l) -> Array:
 	var tipo: ClasseDados.TipoAtaque = l.dados.tipo_ataque
 	var opcoes: Array = []

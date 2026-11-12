@@ -4,7 +4,15 @@ Combate 1x1 local em plataformas, 2D, pixel art, feito em **Godot 4.5** para rod
 
 ## Como jogar
 
-**Modos:** 1 jogador (contra a máquina: Fácil, Normal ou Difícil) ou 2 jogadores no mesmo teclado.
+**Modos:** 1 jogador (contra a máquina: Fácil, Normal ou Difícil), 2 jogadores no mesmo teclado, ou **jogar em rede** (1x1 entre dois aparelhos).
+
+### Jogar em rede
+1. Quem cria: **JOGAR EM REDE → CRIAR PARTIDA → COPIAR CONVITE** e manda o código para o amigo (WhatsApp, por exemplo).
+2. O amigo: **JOGAR EM REDE → ENTRAR → COLAR CONVITE**; o jogo gera a **RESPOSTA**, que ele copia e manda de volta.
+3. Quem criou: **COLAR RESPOSTA**. A partida começa sozinha para os dois.
+
+Funciona no mesmo Wi-Fi e, na maioria das redes, pela internet. Cada um joga com os controles do P1 (teclado WASD ou toque).
+Por baixo é WebRTC ponto a ponto, sem servidor: quem criou a partida "roda" o jogo e o outro recebe o estado.
 
 | | Jogador 1 | Jogador 2 |
 |---|---|---|
@@ -56,12 +64,15 @@ scripts/
   controle*.gd         quem comanda o lutador: humano (teclado/controle) ou bot
   seguidor_caminho.gd  segue caminhos da navegação
   minion.gd            lacaios do Rei e monstros neutros
+  rede.gd              jogo em rede (WebRTC, códigos de copiar e colar)
+  lobby.gd             tela "JOGAR EM REDE"
   controles_toque.gd   joystick e botões na tela para celular, ícones de opções
   masmorra.gd          tochas, iluminação e pingos
   projetil.gd, melhorias.gd, classe_dados.gd, hud.gd, menu.gd, nevoa.gd, main.gd, jogo.gd
 resources/classes/     atributos das classes
 assets/                arte e sons PROVISÓRIOS (gerados por tools/gerar_arte.py; músicas em tools/gerar_musica.py)
 tools/teste.gd         teste automático (mapas + partidas bot x bot + equilíbrio)
+tools/teste_rede.gd    teste do jogo em rede (duas instâncias conectadas)
 ```
 
 ## Versões no ar

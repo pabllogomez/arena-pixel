@@ -1,3 +1,5 @@
 .godot/
 build/
 *.zip
+# extensão WebRTC só para testes locais sem navegador (o navegador já tem WebRTC)
+webrtc/

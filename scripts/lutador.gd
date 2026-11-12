@@ -101,6 +101,8 @@ func receber_classe(d: ClasseDados) -> void:
 
 func nome_jogador() -> String:
 	## "VOCÊ" e "CPU" no modo solo; "P1" e "P2" no multijogador.
+	if partida != null and partida.rede != "":
+		return "VOCÊ" if numero == Rede.numero_local() else "AMIGO"
 	if controle is ControleBot:
 		return "CPU"
 	return "VOCÊ" if Jogo.solo else "P%d" % numero

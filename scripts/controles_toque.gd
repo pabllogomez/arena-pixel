@@ -99,9 +99,10 @@ func _sobre_cartas(pos: Vector2) -> bool:
 	if partida == null or not is_instance_valid(partida):
 		return false
 	var hud = partida.hud
-	if not hud.mostra_cartas(1):
+	var n: int = Rede.numero_local() if partida.rede != "" else 1
+	if not hud.mostra_cartas(n):
 		return false
-	for r in hud.rects_cartas(1):
+	for r in hud.rects_cartas(n):
 		if (r as Rect2).has_point(pos):
 			return true
 	return false
