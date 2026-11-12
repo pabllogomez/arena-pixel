@@ -30,7 +30,11 @@ func _ready() -> void:
 		_sprite.hframes = 2
 	else:
 		_sprite.texture = TEX_FLECHA
+	_sprite.material = CanvasItemMaterial.new()
+	(_sprite.material as CanvasItemMaterial).light_mode = CanvasItemMaterial.LIGHT_MODE_UNSHADED
 	add_child(_sprite)
+	if magia and partida != null and partida.get("masmorra") != null:
+		add_child(partida.masmorra.criar_luz(Color(0.45, 0.9, 1.0), 36.0, 0.9))
 
 
 func _fracao() -> float:

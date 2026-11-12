@@ -54,6 +54,7 @@ const MORTE_SUBITA_AUMENTO := 0.3
 @onready var desenho_portas: Node2D = $Mundo/Portas
 @onready var nevoa_visual: Node2D = $Mundo/Nevoa
 @onready var entidades: Node2D = $Mundo/Entidades
+@onready var masmorra: Node2D = $Mundo/Masmorra
 @onready var hud: Control = $HUD/Painel
 
 var mapa: Dictionary
@@ -91,7 +92,11 @@ func iniciar(config: Dictionary) -> void:
 	_montar_tiles(mapa["grade"])
 	desenho_portas.portas = portas
 	nevoa_visual.partida = self
+	nevoa_visual.material = masmorra.material_sem_sombra()
 	hud.partida = self
+	masmorra.configurar(mapa["grade"], rng, $Escuridao)
+	Jogo.tocar_musica("batalha")
+	Jogo.musica_tensa(false)
 
 	var bots: Dictionary = config.get("bots", {1: -1, 2: -1})
 	for n in [1, 2]:
@@ -102,6 +107,7 @@ func iniciar(config: Dictionary) -> void:
 		l.position = mapa["inicio"][n]
 		l.morreu.connect(_ao_morrer)
 		entidades.add_child(l)
+		l.add_child(masmorra.criar_luz(Color(0.85, 0.85, 1.0), 52.0, 0.8))
 		jogadores[n] = l
 
 	for i in 2:
@@ -289,6 +295,7 @@ func _fechar_portas() -> void:
 func _iniciar_morte_subita() -> void:
 	morte_subita = true
 	tempo_morte_subita = 0.0
+	Jogo.musica_tensa(true)
 	_fechar_portas()
 	for l in jogadores.values():
 		if l.vivo and l.eh_recruta:
@@ -422,6 +429,7 @@ func _contar_equipe(equipe: int) -> int:
 func criar_corte(pos: Vector2, espelhar: bool) -> void:
 	var s := Sprite2D.new()
 	s.texture = TEX_CORTE
+	s.material = masmorra.material_sem_sombra()
 	s.hframes = 2
 	s.flip_h = espelhar
 	s.position = pos
@@ -459,6 +467,7 @@ func criar_brilho(pos: Vector2) -> void:
 	s.texture = TEX_BRILHO
 	s.hframes = 3
 	s.position = pos
+	s.material = masmorra.material_sem_sombra()
 	entidades.add_child(s)
 	var tw := s.create_tween()
 	tw.tween_property(s, "frame", 2, 0.2)
@@ -478,6 +487,7 @@ func mostrar_texto(pos: Vector2, texto: String, cor: Color) -> void:
 	l.size = Vector2(80, 12)
 	l.position = pos - Vector2(40, 6)
 	l.z_index = 10
+	l.material = masmorra.material_sem_sombra()
 	entidades.add_child(l)
 	var tw := l.create_tween()
 	tw.tween_property(l, "position:y", l.position.y - 12.0, 0.6)

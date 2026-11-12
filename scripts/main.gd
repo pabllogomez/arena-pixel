@@ -30,6 +30,7 @@ func _abrir_menu() -> void:
 	m.jogar.connect(_nova_partida, CONNECT_DEFERRED)
 	_toque.partida = null
 	_trocar(m)
+	Jogo.tocar_musica("menu")
 
 
 func _nova_partida(config: Dictionary = {}) -> void:

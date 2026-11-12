@@ -21,7 +21,7 @@ func _ready() -> void:
 func _gui_input(event: InputEvent) -> void:
 	# Toque ou clique: escolhe a opção tocada (o toque vira clique automaticamente)
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-		var pos: Vector2 = event.position
+		var pos: Vector2 = event.position - _deslocamento()
 		if _tela == "dificuldade" and Rect2(4, 4, 60, 18).has_point(pos):
 			_tela = "modo"
 			_sel = 0
@@ -64,10 +64,16 @@ func _process(delta: float) -> void:
 	queue_redraw()
 
 
+func _deslocamento() -> Vector2:
+	## O layout foi desenhado para 216 px de altura; centraliza na tela atual.
+	return Vector2(0, (size.y - 216.0) / 2.0)
+
+
 func _draw() -> void:
 	var fonte := ThemeDB.fallback_font
 	var cx := size.x / 2.0
-	draw_rect(Rect2(Vector2.ZERO, size), Color("1a1c2c"))
+	draw_rect(Rect2(Vector2.ZERO, size), Color(0.07, 0.065, 0.085))
+	draw_set_transform(_deslocamento())
 	_centro(fonte, Vector2(cx, 22), "ARENA PIXEL", 24, Color("ffcd75"))
 	_centro(fonte, Vector2(cx, 38), "Comece como Recruta. Cace monstros. Ganhe uma classe. Vença!", 8, Color("94b0c2"))
 

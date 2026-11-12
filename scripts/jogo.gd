@@ -12,13 +12,26 @@ var dificuldade := 1  ## 0 fácil, 1 normal, 2 difícil
 ## true em celular/tablet (mostra os controles na tela)
 var toque := false
 
+## Opções (salvas no navegador)
+signal opcoes_mudaram
+var som := true
+var iluminacao := true
+const ARQUIVO_OPCOES := "user://opcoes.cfg"
+
+var _musica: AudioStreamPlayer
+var _musica_atual := ""
+
 var _sons := {}
 
 
 func _ready() -> void:
 	_criar_controles()
+	_carregar_opcoes()
+	_musica = AudioStreamPlayer.new()
+	_musica.volume_db = -8.0
+	add_child(_musica)
 	for nome in ["pulo", "flecha", "espada", "magia", "invocar", "acerto",
-			"morte", "nivel", "porta", "vitoria", "pouso"]:
+			"morte", "nivel", "porta", "vitoria", "pouso", "pingo"]:
 		var p := AudioStreamPlayer.new()
 		p.stream = load("res://assets/sfx/%s.wav" % nome)
 		p.max_polyphony = 4
@@ -40,6 +53,61 @@ func config_partida() -> Dictionary:
 		"tempo": TEMPO_PARTIDA,
 		"bots": {1: -1, 2: dificuldade if solo else -1},
 	}
+
+
+# ------------------------------------------------------------------ Música
+
+func tocar_musica(nome: String) -> void:
+	## "menu" (calma) ou "batalha" (tensa). Troca com um fade curto.
+	if nome == _musica_atual:
+		return
+	_musica_atual = nome
+	var stream: AudioStream = load("res://assets/musica/%s.ogg" % nome)
+	if stream is AudioStreamOggVorbis:
+		(stream as AudioStreamOggVorbis).loop = true
+	var tw := create_tween()
+	if _musica.playing:
+		tw.tween_property(_musica, "volume_db", -40.0, 0.4)
+	tw.tween_callback(func() -> void:
+		_musica.stream = stream
+		_musica.pitch_scale = 1.0
+		_musica.volume_db = -8.0
+		_musica.play())
+
+
+func musica_tensa(ligada: bool) -> void:
+	## Morte Súbita: a música acelera.
+	create_tween().tween_property(_musica, "pitch_scale", 1.18 if ligada else 1.0, 1.0)
+
+
+# ------------------------------------------------------------------ Opções
+
+func definir_som(ligado: bool) -> void:
+	som = ligado
+	AudioServer.set_bus_mute(0, not ligado)
+	_salvar_opcoes()
+	opcoes_mudaram.emit()
+
+
+func definir_iluminacao(ligada: bool) -> void:
+	iluminacao = ligada
+	_salvar_opcoes()
+	opcoes_mudaram.emit()
+
+
+func _carregar_opcoes() -> void:
+	var cfg := ConfigFile.new()
+	if cfg.load(ARQUIVO_OPCOES) == OK:
+		som = cfg.get_value("opcoes", "som", true)
+		iluminacao = cfg.get_value("opcoes", "iluminacao", true)
+	AudioServer.set_bus_mute(0, not som)
+
+
+func _salvar_opcoes() -> void:
+	var cfg := ConfigFile.new()
+	cfg.set_value("opcoes", "som", som)
+	cfg.set_value("opcoes", "iluminacao", iluminacao)
+	cfg.save(ARQUIVO_OPCOES)
 
 
 func tocar(nome: String) -> void:

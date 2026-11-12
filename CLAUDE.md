@@ -24,4 +24,5 @@ O teste roda no CI antes de cada publicação; se falhar, nada é publicado.
 - `scripts/partida.gd`: regras (PvP, Recruta, sorteio de classe, cronômetro, Morte Súbita, monstros).
 - `scripts/controles_toque.gd`: botões na tela para celular.
 - `resources/classes/*.tres`: atributos das classes (balanceamento).
-- Arte/sons provisórios gerados por `tools/gerar_arte.py`.
+- `scripts/masmorra.gd`: tochas, iluminação (opcional) e pingos.
+- Arte/sons provisórios gerados por `tools/gerar_arte.py`; músicas por `tools/gerar_musica.py` (numpy + ffmpeg).

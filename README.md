@@ -13,7 +13,7 @@ Combate 1x1 local em plataformas, 2D, pixel art, feito em **Godot 4.5** para rod
 | Descer da plataforma | `S` | `↓` |
 | Escolher melhoria | `Q` / `E` | `1` / `2` do teclado numérico (ou `K` / `L`) |
 
-O botão ⛶ (ou a tecla `F`) liga a tela cheia. No celular: encoste o dedo em qualquer ponto da metade esquerda e aparece um joystick (para os lados anda, puxando para baixo desce da plataforma); o botão de pular fica na direita, e as melhorias são escolhidas tocando na opção.
+Ícones no topo: tela cheia (tecla `F`), som (tecla `M`) e iluminação das tochas (tecla `I`, desligue se pesar no celular). As escolhas ficam salvas. No celular: encoste o dedo em qualquer ponto da metade esquerda e aparece um joystick (para os lados anda, puxando para baixo desce da plataforma); o botão de pular fica na direita, e as melhorias são escolhidas tocando na opção.
 Controles (gamepad) também funcionam.
 
 ### Regras
@@ -25,7 +25,8 @@ Controles (gamepad) também funcionam.
   - o Recruta causa pouco dano em jogadores;
   - um jogador com classe causa 1/3 do dano em um Recruta;
   - com os dois já com classe, vale o dano normal de PvP.
-- **Portas** de mesma cor são ligadas. Há sempre pelo menos 2 pares.
+- **Portas** são todas iguais: só descobre para onde cada uma leva quem entra. Há sempre pelo menos 2 pares.
+- **Ambiente:** masmorra escura com tochas, esqueletos acorrentados e pingos d'água; música própria para o menu e para a partida (que acelera na Morte Súbita).
 - **Cada partida dura 3 minutos.** Se ninguém vencer até lá, começa a **Morte Súbita**:
   - as portas fecham e param de nascer monstros;
   - uma fumaça tóxica sobe do chão;
@@ -55,10 +56,11 @@ scripts/
   controle*.gd         quem comanda o lutador: humano (teclado/controle) ou bot
   seguidor_caminho.gd  segue caminhos da navegação
   minion.gd            lacaios do Rei e monstros neutros
-  controles_toque.gd   botões na tela para celular
+  controles_toque.gd   joystick e botões na tela para celular, ícones de opções
+  masmorra.gd          tochas, iluminação e pingos
   projetil.gd, melhorias.gd, classe_dados.gd, hud.gd, menu.gd, nevoa.gd, main.gd, jogo.gd
 resources/classes/     atributos das classes
-assets/                arte e sons PROVISÓRIOS (gerados por tools/gerar_arte.py)
+assets/                arte e sons PROVISÓRIOS (gerados por tools/gerar_arte.py; músicas em tools/gerar_musica.py)
 tools/teste.gd         teste automático (mapas + partidas bot x bot + equilíbrio)
 ```
 

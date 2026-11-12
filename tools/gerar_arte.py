@@ -273,76 +273,233 @@ def brilho(r):
 
 folha([brilho(2), brilho(4.5), brilho(7)]).save(os.path.join(SPR, "brilho.png"))
 
-# ---------------------------------------------------------------- Tiles (atlas 3x1)
+# ---------------------------------------------------------------- Masmorra: cores extras
+M = {
+    "pedra": (46, 42, 50), "pedra_clara": (62, 57, 64), "pedra_escura": (31, 28, 35),
+    "rejunte": (19, 17, 22), "musgo": (52, 70, 44), "musgo_claro": (74, 96, 58),
+    "madeira": (78, 56, 40), "madeira_clara": (98, 72, 50), "madeira_escura": (48, 34, 26),
+    "ferro": (70, 72, 80), "ferro_claro": (110, 112, 120),
+    "osso": (196, 186, 160), "osso_sombra": (140, 130, 110),
+    "fundo": (24, 22, 28), "fundo_claro": (32, 29, 36), "fundo_rejunte": (15, 14, 18),
+}
+
+
+def cor(nome, a=255):
+    return M[nome] + (a,)
+
+
 random.seed(7)
 
 
+# ---------------------------------------------------------------- Tiles (atlas 3x1)
 def tile_parede():
-    linhas = [
-        "kkkkkkkkkkkkkkkk", "kmmmmmmkmmmmmmmk", "kmddddmkmddddddk", "kmddddmkmddddddk",
-        "kmddddmkmddddddk", "kdddddmkdddddddk", "kkkkkkkkkkkkkkkk", "kmmmkmmmmmmmkmmk",
-        "kmddkmddddddkmdk", "kmddkmddddddkmdk", "kmddkmddddddkmdk", "kmddkmddddddkmdk",
-        "kdddkdddddddkddk", "kkkkkkkkkkkkkkkk", "kmmmmmmmkmmmmmmm", "kddddddddddddddd",
-    ]
-    return grade(linhas)
+    img = Image.new("RGBA", (16, 16), cor("rejunte"))
+    # dois blocos de pedra por fileira, fileiras desencontradas
+    for linha, (y0, desloc) in enumerate([(0, 0), (8, 8)]):
+        for bx in range(-8, 16, 16):
+            x0 = bx + desloc
+            for y in range(y0 + 1, y0 + 7):
+                for x in range(max(0, x0 + 1), min(16, x0 + 15)):
+                    c = "pedra"
+                    if y == y0 + 1 or x == x0 + 1:
+                        c = "pedra_clara"
+                    elif y == y0 + 6 or x == x0 + 14:
+                        c = "pedra_escura"
+                    img.putpixel((x, y), cor(c))
+    for _ in range(6):
+        img.putpixel((random.randrange(16), random.randrange(16)), cor("pedra_escura"))
+    return img
 
 
 def tile_plataforma():
     img = Image.new("RGBA", (16, 16), (0, 0, 0, 0))
     for x in range(16):
-        for y, c in enumerate("kyjjhk"):
-            img.putpixel((x, y), P[c] + (255,))
-    for x in (2, 13):
+        img.putpixel((x, 0), cor("rejunte"))
+        img.putpixel((x, 1), cor("madeira_clara"))
+        img.putpixel((x, 2), cor("madeira"))
+        img.putpixel((x, 3), cor("madeira"))
+        img.putpixel((x, 4), cor("madeira_escura"))
+        img.putpixel((x, 5), cor("rejunte"))
+    for x in (5, 11):  # junta entre tábuas
+        for y in range(1, 5):
+            img.putpixel((x, y), cor("madeira_escura"))
+    for x in (2, 13):  # pregos de ferro e suportes
+        img.putpixel((x, 2), cor("ferro_claro"))
         for y in range(6, 9):
-            img.putpixel((x, y), P["h"] + (255,))
+            img.putpixel((x, y), cor("ferro"))
     return img
 
 
 def tile_chao():
     img = tile_parede()
     for x in range(16):
-        img.putpixel((x, 0), P["k"] + (255,))
-        img.putpixel((x, 1), P["s"] + (255,))
-        img.putpixel((x, 2), P["m"] + (255,))
+        img.putpixel((x, 0), cor("rejunte"))
+        img.putpixel((x, 1), cor("pedra_clara"))
+        # musgo/limo escorrendo pelo topo
+        if random.random() < 0.6:
+            img.putpixel((x, 1), cor("musgo"))
+            if random.random() < 0.5:
+                img.putpixel((x, 2), cor("musgo"))
+            if random.random() < 0.25:
+                img.putpixel((x, 3), cor("musgo"))
+        if random.random() < 0.2:
+            img.putpixel((x, 1), cor("musgo_claro"))
     return img
 
 
 folha([tile_parede(), tile_plataforma(), tile_chao()]).save(os.path.join(SPR, "tiles.png"))
 
-# ---------------------------------------------------------------- Fundo 384x216 (salão do castelo)
-fundo = Image.new("RGBA", (384, 216), (30, 32, 52, 255))
-for y in range(216):
-    for x in range(384):
-        lin = y // 8
-        off = 8 if lin % 2 else 0
-        borda = (y % 8 == 7) or ((x + off) % 16 == 15)
-        if borda:
-            fundo.putpixel((x, y), (24, 25, 41, 255))
-        elif random.random() < 0.04:
-            fundo.putpixel((x, y), (38, 41, 64, 255))
-# janelas com luar
-for jx in (64, 176, 288):
-    for y in range(40, 104):
-        for x in range(jx, jx + 32):
-            dx = x - (jx + 16)
-            topo = 40 + 16 - int(math.sqrt(max(0, 256 - dx * dx)))
-            if y >= topo:
-                cor = (41, 54, 111, 255) if (x + y) % 5 else (59, 93, 201, 255)
-                if x in (jx, jx + 31) or y == 103 or y == topo:
-                    cor = (20, 20, 34, 255)
-                if x == jx + 16 or y == 72:
-                    cor = (20, 20, 34, 255)
-                fundo.putpixel((x, y), cor)
-# estandartes
-for bx, cor in ((24, P["b"]), (344, P["r"])):
-    for y in range(24, 88):
-        for x in range(bx, bx + 16):
-            if y > 80 and abs(x - (bx + 8)) < (y - 80):
-                continue
-            fundo.putpixel((x, y), cor + (255,))
-    for x in range(bx - 2, bx + 18):
-        fundo.putpixel((x, 23), P["y"] + (255,))
+# ---------------------------------------------------------------- Esqueleto acorrentado pelos braços (16x24)
+ESQUELETO = [
+    "mm............mm",
+    "mmo..........omm",
+    "..o..........o..",
+    "...o........o...",
+    "...o........o...",
+    "....o.oooo.o....",
+    "....o.kook.o....",
+    "....o.oooo.o....",
+    "....o.okko.o....",
+    "....o..oo..o....",
+    "....o..oo..o....",
+    ".....oooooo.....",
+    "......oOOo......",
+    ".....oOooOo.....",
+    "......oOOo......",
+    ".....oOooOo.....",
+    "......oOOo......",
+    ".......oo.......",
+    "......oooo......",
+    ".....oo..oo.....",
+    ".....o....o.....",
+    ".....o....o.....",
+    ".....o....o.....",
+    "....oo....oo....",
+]
+CORES_ESQ = {"m": cor("ferro_claro"), "o": cor("osso"), "O": cor("osso_sombra"), "k": cor("rejunte")}
+
+
+def esqueleto():
+    img = Image.new("RGBA", (16, 24), (0, 0, 0, 0))
+    for y, l in enumerate(ESQUELETO):
+        for x, ch in enumerate(l):
+            if ch in CORES_ESQ:
+                img.putpixel((x, y), CORES_ESQ[ch])
+    return img
+
+
+# ---------------------------------------------------------------- Fundo 480x270 (masmorra)
+LF, AF = 480, 270
+fundo = Image.new("RGBA", (LF, AF), cor("fundo"))
+for y in range(AF):
+    for x in range(LF):
+        lin = y // 10
+        off = 10 if lin % 2 else 0
+        if y % 10 == 9 or (x + off) % 20 == 19:
+            fundo.putpixel((x, y), cor("fundo_rejunte"))
+        elif random.random() < 0.05:
+            fundo.putpixel((x, y), cor("fundo_claro"))
+# manchas de umidade escorrendo
+for _ in range(14):
+    x0 = random.randrange(LF)
+    y0 = random.randrange(0, AF // 2)
+    for y in range(y0, min(AF, y0 + random.randint(20, 70))):
+        for dx in range(random.randint(1, 3)):
+            if 0 <= x0 + dx < LF and random.random() < 0.7:
+                r, g, b, a = fundo.getpixel((x0 + dx, y))
+                fundo.putpixel((x0 + dx, y), (max(r - 5, 0), min(g + 2, 255), max(b - 3, 0), a))
+# celas com grades (nichos escuros)
+for cx in (70, 240, 410):
+    larg, alt, topo = 64, 70, 70
+    for y in range(topo, topo + alt):
+        for x in range(cx - larg // 2, cx + larg // 2):
+            dx = x - cx
+            arco = topo + 12 - int(math.sqrt(max(0, (larg // 2) ** 2 - dx * dx)) * 12 / (larg // 2))
+            if y >= arco:
+                fundo.putpixel((x, y), (12, 11, 15, 255))
+    for x in range(cx - larg // 2 + 4, cx + larg // 2 - 2, 7):
+        for y in range(topo + 6, topo + alt):
+            fundo.putpixel((x, y), cor("ferro"))
+            fundo.putpixel((x + 1, y), (40, 41, 47, 255))
+    for x in range(cx - larg // 2, cx + larg // 2):
+        for y in (topo + 24, topo + alt - 8):
+            fundo.putpixel((x, y), cor("ferro"))
+# esqueletos acorrentados pelos braços, com correntes até o alto
+esq = esqueleto()
+for ex, ey in ((150, 60), (325, 50), (44, 150), (436, 140), (240, 175)):
+    fundo.paste(esq, (ex - 8, ey), esq)
+    for lado in (0, 15):
+        for y in range(max(0, ey - 34), ey):
+            if (y // 2) % 2 == 0:
+                fundo.putpixel((ex - 8 + lado, y), cor("ferro"))
+            else:
+                fundo.putpixel((ex - 8 + lado, y), (45, 46, 52, 255))
+# correntes soltas penduradas
+for _ in range(8):
+    x = random.randrange(10, LF - 10)
+    comp = random.randint(20, 60)
+    for y in range(0, comp):
+        fundo.putpixel((x, y), cor("ferro") if (y // 2) % 2 == 0 else (45, 46, 52, 255))
+    fundo.putpixel((x - 1, comp), cor("ferro"))
+    fundo.putpixel((x + 1, comp), cor("ferro"))
+    fundo.putpixel((x - 1, comp - 1), cor("ferro"))
+    fundo.putpixel((x + 1, comp - 1), cor("ferro"))
+# escurece em direção ao chão
+for y in range(AF):
+    f = 1.0 - 0.35 * (y / AF)
+    for x in range(LF):
+        r, g, b, a = fundo.getpixel((x, y))
+        fundo.putpixel((x, y), (int(r * f), int(g * f), int(b * f), a))
 fundo.save(os.path.join(SPR, "fundo.png"))
+
+# ---------------------------------------------------------------- Tocha (4 quadros 8x16: chama animada + suporte)
+def tocha(q):
+    img = Image.new("RGBA", (8, 16), (0, 0, 0, 0))
+    formas = [
+        ["...y....", "..yoy...", "..yoy...", ".yoroy..", ".yorry..", "..yrry..", "...rr..."],
+        ["....y...", "...yoy..", "..yoy...", ".yorry..", ".yorroy.", "..yrry..", "...rr..."],
+        ["...y....", "...yo...", "..yooy..", "..yorry.", ".yorroy.", "..yrry..", "...rr..."],
+        ["..y.....", "..yoy...", "..yooy..", ".yorry..", ".yorry..", "..yrr...", "...rr..."],
+    ]
+    cores = {"y": (255, 205, 117, 255), "o": (239, 125, 87, 255), "r": (177, 62, 83, 255)}
+    for y, l in enumerate(formas[q]):
+        for x, ch in enumerate(l):
+            if ch in cores:
+                img.putpixel((x, y + 1), cores[ch])
+    for y in range(8, 11):  # cesto
+        for x in range(2, 6):
+            img.putpixel((x, y), cor("madeira_escura") if y > 8 else cor("ferro"))
+    for y in range(11, 15):  # cabo
+        img.putpixel((3, y), cor("madeira"))
+        img.putpixel((4, y), cor("madeira_escura"))
+    for x in range(2, 7):  # suporte na parede
+        img.putpixel((x, 13), cor("ferro"))
+    return img
+
+
+folha([tocha(q) for q in range(4)]).save(os.path.join(SPR, "tocha.png"))
+
+# ---------------------------------------------------------------- Pingo (quadro 0) + respingo (quadros 1-3), 8x8
+def pingo(q):
+    img = Image.new("RGBA", (8, 8), (0, 0, 0, 0))
+    agua, brilho = (110, 150, 170, 220), (190, 220, 235, 255)
+    if q == 0:
+        img.putpixel((3, 3), brilho)
+        img.putpixel((3, 4), agua)
+        img.putpixel((3, 5), agua)
+    elif q == 1:
+        for x, y in ((2, 6), (4, 6), (1, 5), (5, 5), (3, 7)):
+            img.putpixel((x, y), agua)
+    elif q == 2:
+        for x, y in ((1, 6), (5, 6), (0, 5), (6, 5)):
+            img.putpixel((x, y), agua)
+    else:
+        for x, y in ((0, 7), (6, 7)):
+            img.putpixel((x, y), (110, 150, 170, 120))
+    return img
+
+
+folha([pingo(q) for q in range(4)]).save(os.path.join(SPR, "pingo.png"))
 
 # ---------------------------------------------------------------- Ícone
 icone = grade(personagem(CLASSES["rei"], "parado"), 1).resize((128, 128), Image.NEAREST)
@@ -377,6 +534,7 @@ som("invocar.wav", [(300, 300, 0.08), (450, 450, 0.08), (600, 600, 0.15)], 0.15)
 som("acerto.wav", [(220, 80, 0.08)], 0.2)
 som("morte.wav", [(0, 0, 0.1), (300, 50, 0.3)])
 som("nivel.wav", [(523, 523, 0.08), (784, 784, 0.08), (1047, 1047, 0.2)], 0.18)
+som("pingo.wav", [(1800, 1400, 0.05), (1400, 1100, 0.08)], 0.05)
 som("pouso.wav", [(0, 0, 0.05), (120, 40, 0.18)], 0.3)
 som("porta.wav", [(800, 200, 0.1), (200, 800, 0.1)], 0.12)
 som("vitoria.wav", [(523, 523, 0.12), (659, 659, 0.12), (784, 784, 0.12), (1047, 1047, 0.45)])

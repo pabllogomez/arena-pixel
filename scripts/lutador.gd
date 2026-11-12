@@ -11,7 +11,7 @@ const QUEDA_MAX := 360.0
 const TEMPO_COYOTE := 0.1
 const TEMPO_BUFFER := 0.12
 ## XP que o Recruta precisa para ganhar a classe (~3 monstros iniciais)
-const XP_PARA_CLASSE := 18
+const XP_PARA_CLASSE := 16
 ## Regeneração fora de combate: depois de REGEN_ESPERA s sem tomar dano,
 ## recupera REGEN_TAXA da vida máxima por segundo.
 const REGEN_ESPERA := 5.0

@@ -12,8 +12,8 @@ extends RefCounted
 ## alcançável e ter caminho de volta. Plataformas inalcançáveis são removidas;
 ## se o mapa não passar, outro é gerado.
 
-const COLUNAS := 24
-const LINHAS := 13
+const COLUNAS := 30
+const LINHAS := 16
 const TAM := 16
 const LARGURA := COLUNAS * TAM
 const ALTURA := LINHAS * TAM
@@ -31,7 +31,7 @@ const CORES_PORTAS: Array[Color] = [
 	Color("73eff7"), Color("ffcd75"), Color("a7f070"), Color("f4a2f4"),
 ]
 
-const NO_INICIO := {1: Vector2i(2, 11), 2: Vector2i(21, 11)}
+const NO_INICIO := {1: Vector2i(2, LINHAS - 2), 2: Vector2i(COLUNAS - 3, LINHAS - 2)}
 
 
 static func gerar(rng: RandomNumberGenerator) -> Dictionary:
@@ -66,13 +66,13 @@ static func _tentar(rng: RandomNumberGenerator) -> Dictionary:
 		g[y][COLUNAS - 1] = SOLIDO
 
 	# Área livre perto de onde os jogadores nascem
-	for y in range(8, LINHAS - 1):
+	for y in range(LINHAS - 5, LINHAS - 1):
 		for x in [1, 2, 3, COLUNAS - 4, COLUNAS - 3, COLUNAS - 2]:
 			ocupado[y][x] = true
 
-	var alvo_pecas := rng.randi_range(6, 8)
+	var alvo_pecas := rng.randi_range(9, 12)
 	var colocadas := 0
-	for i in 60:
+	for i in 90:
 		if colocadas >= alvo_pecas:
 			break
 		var tipo: String = PECAS[rng.randi() % PECAS.size()]
@@ -121,9 +121,9 @@ static func _tentar(rng: RandomNumberGenerator) -> Dictionary:
 	# Qualidade: o mapa precisa ter vida no alto
 	var altos := 0
 	for no in nav.nos:
-		if no.y <= 6:
+		if no.y <= 8:
 			altos += 1
-	if altos < 12:
+	if altos < 18:
 		return {}
 
 	var pontos: Array = []
@@ -168,14 +168,14 @@ static func _peca(tipo: String, rng: RandomNumberGenerator) -> Array:
 			# Degraus de 2 tiles subindo em diagonal
 			var dir := 1 if rng.randf() < 0.5 else -1
 			var n := rng.randi_range(3, 4)
-			var x0 := rng.randi_range(4, 10) if dir == 1 else rng.randi_range(13, 19)
-			var y0 := rng.randi_range(9, 10)
+			var x0 := rng.randi_range(4, COLUNAS / 2) if dir == 1 else rng.randi_range(COLUNAS / 2, COLUNAS - 5)
+			var y0 := rng.randi_range(LINHAS - 4, LINHAS - 3)
 			for i in n:
 				for k in 2:
 					c.append([Vector2i(x0 + dir * (i * 3 + k), y0 - i * 2), PLATAFORMA])
 		"torre":
 			# Coluna de pedra com plataformas para escalar
-			var x := rng.randi_range(5, 18)
+			var x := rng.randi_range(5, COLUNAS - 6)
 			var h := rng.randi_range(3, 5)
 			var topo := LINHAS - 1 - h
 			for y in range(topo, LINHAS - 1):
@@ -189,14 +189,14 @@ static func _peca(tipo: String, rng: RandomNumberGenerator) -> Array:
 				for k in [1, 2, 3]:
 					c.append([Vector2i(x - lado * k, topo - 3), PLATAFORMA])
 		"ponte":
-			var comp := rng.randi_range(5, 8)
-			var y := rng.randi_range(4, 8)
+			var comp := rng.randi_range(5, 9)
+			var y := rng.randi_range(4, LINHAS - 5)
 			var x0 := rng.randi_range(3, COLUNAS - 3 - comp)
 			for i in comp:
 				c.append([Vector2i(x0 + i, y), PLATAFORMA])
 		"ilha":
 			var larg := rng.randi_range(1, 3)
-			var y := rng.randi_range(3, 9)
+			var y := rng.randi_range(3, LINHAS - 4)
 			var x0 := rng.randi_range(3, COLUNAS - 3 - larg)
 			var valor := SOLIDO if rng.randf() < 0.4 else PLATAFORMA
 			for i in larg:
@@ -210,8 +210,8 @@ static func _peca(tipo: String, rng: RandomNumberGenerator) -> Array:
 					c.append([Vector2i(x0 + i, LINHAS - 2 - k), SOLIDO])
 		"mezanino":
 			# Andar largo com buracos
-			var comp := rng.randi_range(8, 12)
-			var y := rng.randi_range(5, 7)
+			var comp := rng.randi_range(8, 14)
+			var y := rng.randi_range(5, LINHAS - 6)
 			var x0 := rng.randi_range(3, COLUNAS - 3 - comp)
 			var buracos := {}
 			for b in rng.randi_range(1, 2):
@@ -267,8 +267,10 @@ static func _portas_laterais(g: Array, ocupado: Array, esquerda: bool, n: int,
 	var dentro2 := 2 if esquerda else COLUNAS - 3
 	# Níveis possíveis: precisa de vão livre de 2 tiles e espaço para o apoio
 	var candidatos: Array[int] = []
-	# (níveis 10 e 11 ficariam em cima de onde os jogadores nascem)
-	for nivel in [3, 4, 5, 6, 7, 8, 9, LINHAS - 1]:
+	# (os 2 níveis logo acima do chão ficariam em cima de onde os jogadores nascem)
+	var niveis: Array = range(3, LINHAS - 3)
+	niveis.append(LINHAS - 1)
+	for nivel in niveis:
 		var ok := true
 		for y in [nivel - 1, nivel - 2]:
 			if g[y][dentro] != VAZIO or g[y][dentro2] != VAZIO:
@@ -317,9 +319,9 @@ static func _portas_laterais(g: Array, ocupado: Array, esquerda: bool, n: int,
 
 
 static func _porta_teto(g: Array, rng: RandomNumberGenerator, usadas: Array[int]) -> Dictionary:
-	# Só no centro do teto, para não ficar atrás do HUD dos jogadores
+	# Entre os painéis dos jogadores e o cronômetro, para não ficar atrás do HUD
 	var cols: Array[int] = []
-	for c in range(8, 15):
+	for c in [8, 9, COLUNAS - 11, COLUNAS - 10]:
 		cols.append(c)
 	_embaralhar(cols, rng)
 	for c in cols:

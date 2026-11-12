@@ -1,6 +1,6 @@
 extends Node2D
-## Desenha as portas da arena. Portas com a mesma cor estão conectadas.
-## Na Morte Súbita elas aparecem fechadas (riscadas).
+## Desenha as portas da arena. Todas iguais: ninguém sabe para onde cada uma
+## leva até entrar. Na Morte Súbita elas aparecem fechadas (riscadas).
 
 var portas: Array = []:
 	set(valor):
@@ -17,16 +17,16 @@ func _process(delta: float) -> void:
 
 
 func _draw() -> void:
-	var pulso := 0.25 + 0.15 * sin(_t * 4.0)
+	var pulso := 0.35 + 0.1 * sin(_t * 2.0)
 	for porta in portas:
 		var r: Rect2 = porta["abertura"]
-		var cor: Color = porta["cor"]
+		var cor := Color(0.42, 0.40, 0.46)  # moldura de pedra, igual para todas
 		if fechadas:
-			cor = Color(cor, 0.35)
+			cor = Color(cor, 0.5)
 			draw_line(r.position, r.end, Color("b13e53"), 2.0)
 			draw_line(Vector2(r.end.x, r.position.y), Vector2(r.position.x, r.end.y), Color("b13e53"), 2.0)
 		else:
-			draw_rect(r, Color(cor, pulso))
+			draw_rect(r, Color(0.02, 0.02, 0.04, pulso + 0.3))  # escuridão do túnel
 		# Moldura colorida nas bordas do vão
 		if porta["tipo"] == "teto":
 			draw_rect(Rect2(r.position.x - 2, r.position.y, 2, r.size.y), cor)
