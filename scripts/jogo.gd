@@ -144,11 +144,13 @@ func _criar_controles() -> void:
 	_acao("menu_baixo", [KEY_S, KEY_DOWN])
 	_acao("menu_ok", [KEY_SPACE, KEY_ENTER, KEY_KP_ENTER, KEY_KP_0, KEY_0])
 	_acao("menu_voltar", [KEY_ESCAPE, KEY_BACKSPACE])
+	_acao("pausar", [KEY_ESCAPE, KEY_P])
 	for dev in [0, 1]:
 		_botao("menu_cima", dev, JOY_BUTTON_DPAD_UP)
 		_botao("menu_baixo", dev, JOY_BUTTON_DPAD_DOWN)
 		_botao("menu_ok", dev, JOY_BUTTON_A)
 		_botao("menu_voltar", dev, JOY_BUTTON_B)
+		_botao("pausar", dev, JOY_BUTTON_START)
 	# Controles (gamepad): 1º controle = P1, 2º controle = P2
 	for j in [1, 2]:
 		var dev: int = j - 1

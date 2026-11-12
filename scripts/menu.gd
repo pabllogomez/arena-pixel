@@ -3,7 +3,7 @@ extends Control
 
 signal jogar
 
-const MODOS := ["1 JOGADOR", "2 JOGADORES"]
+const MODOS := ["1 JOGADOR", "2 JOGADORES", "OPÇÕES"]
 const DIFICULDADES := ["FÁCIL", "NORMAL", "DIFÍCIL"]
 
 var _tela := "modo"  # "modo" ou "dificuldade"
@@ -18,7 +18,21 @@ func _ready() -> void:
 		_texturas.append(load("res://assets/sprites/%s_1.png" % c))
 
 
+var _painel: Control = null
+
+
+func _abrir_opcoes() -> void:
+	_painel = preload("res://scripts/painel_opcoes.gd").new()
+	_painel.na_pausa = false
+	_painel.continuar.connect(func() -> void:
+		_painel.queue_free()
+		_painel = null)
+	add_child(_painel)
+
+
 func _gui_input(event: InputEvent) -> void:
+	if _painel != null:
+		return
 	# Toque ou clique: escolhe a opção tocada (o toque vira clique automaticamente)
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 		var pos: Vector2 = event.position - _deslocamento()
@@ -35,6 +49,9 @@ func _gui_input(event: InputEvent) -> void:
 
 func _confirmar() -> void:
 	Jogo.tocar("nivel")
+	if _tela == "modo" and MODOS[_sel] == "OPÇÕES":
+		_abrir_opcoes()
+		return
 	if _tela == "modo":
 		Jogo.solo = _sel == 0
 		if Jogo.solo:
@@ -49,6 +66,9 @@ func _confirmar() -> void:
 
 func _process(delta: float) -> void:
 	_t += delta
+	queue_redraw()
+	if _painel != null:
+		return  # o painel de opções cuida do teclado enquanto está aberto
 	var opcoes := MODOS if _tela == "modo" else DIFICULDADES
 	if Input.is_action_just_pressed("menu_cima"):
 		_sel = wrapi(_sel - 1, 0, opcoes.size())

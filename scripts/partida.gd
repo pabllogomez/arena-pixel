@@ -74,6 +74,11 @@ var anuncio_cor := Color.WHITE
 var anuncio_t := 0.0
 
 var _t_monstro := 0.0
+## Jogo pausado pelo botão de pausa / Esc
+var pausado := false
+## Modo solo: jogo parado enquanto o jogador escolhe a melhoria
+var escolhendo := false
+var _painel_pausa: Control
 var _tremor := 0.0
 var _t_nevoa := 0.0
 var _t_fim := 0.0
@@ -112,6 +117,71 @@ func iniciar(config: Dictionary) -> void:
 
 	for i in 2:
 		_criar_monstro()
+	_congelar(true)  # tudo parado durante a contagem inicial
+
+
+func _congelar(sim: bool) -> void:
+	## Congela personagens, monstros, lacaios e projéteis (tochas e pingos seguem).
+	entidades.process_mode = Node.PROCESS_MODE_DISABLED if sim else Node.PROCESS_MODE_INHERIT
+
+
+func congelado() -> bool:
+	return pausado or escolhendo or contagem > 0.0
+
+
+func _retomar_com_contagem() -> void:
+	contagem = 3.0
+	for l in jogadores.values():
+		l.ativo = false
+
+
+func pausar() -> void:
+	if pausado or fim:
+		return
+	pausado = true
+	_congelar(true)
+	_painel_pausa = preload("res://scripts/painel_opcoes.gd").new()
+	_painel_pausa.na_pausa = true
+	_painel_pausa.continuar.connect(_despausar)
+	_painel_pausa.sair_para_menu.connect(func() -> void: voltar.emit())
+	$HUD.add_child(_painel_pausa)
+
+
+func _despausar() -> void:
+	if _painel_pausa != null:
+		_painel_pausa.queue_free()
+		_painel_pausa = null
+	pausado = false
+	if not escolhendo:
+		_retomar_com_contagem()
+
+
+func _humano_solo() -> Lutador:
+	## No modo solo, o jogador humano (null se não for solo).
+	var humanos: Array = jogadores.values().filter(func(j): return j.controle is ControleHumano)
+	return humanos[0] if humanos.size() == 1 else null
+
+
+func _atualizar_escolhas() -> void:
+	# Teclas de melhoria dos humanos (funcionam mesmo com o jogo parado)
+	for n in jogadores:
+		var l: Lutador = jogadores[n]
+		if l.controle is ControleHumano and l.vivo and not l.escolhas.is_empty() and not pausado:
+			if Input.is_action_just_pressed(Jogo.acao(n, "opcao1")):
+				l.escolher_melhoria(0)
+			elif Input.is_action_just_pressed(Jogo.acao(n, "opcao2")):
+				l.escolher_melhoria(1)
+	# Solo: o jogo para enquanto o jogador escolhe e volta com contagem de 3 s
+	var h := _humano_solo()
+	if h == null or fim:
+		return
+	if not escolhendo and h.vivo and not h.escolhas.is_empty() and contagem <= 0.0 and not pausado:
+		escolhendo = true
+		_congelar(true)
+	elif escolhendo and (h.escolhas.is_empty() or not h.vivo):
+		escolhendo = false
+		if not pausado:
+			_retomar_com_contagem()
 
 
 func _montar_tiles(g: Array) -> void:
@@ -133,12 +203,17 @@ func oponente(l: Lutador) -> Lutador:
 # ------------------------------------------------------------------ Laço principal
 
 func _process(delta: float) -> void:
-	if contagem > -1.0:
+	if contagem > -1.0 and not pausado and not escolhendo:
 		var antes := contagem
 		contagem -= delta
 		if antes > 0.0 and contagem <= 0.0:
+			_congelar(false)
 			for l in jogadores.values():
-				l.ativo = true
+				if l.vivo:
+					l.ativo = true
+	_atualizar_escolhas()
+	if not fim and not pausado and Input.is_action_just_pressed("pausar"):
+		pausar()
 	if anuncio_t > 0.0:
 		anuncio_t -= delta
 	# Tremor de tela (pouso pesado do Orc)
@@ -153,17 +228,19 @@ func _process(delta: float) -> void:
 		_t_fim += delta
 		if _t_fim > 1.0 and (Input.is_action_just_pressed("p1_pular") or Input.is_action_just_pressed("menu_ok")):
 			revanche.emit()
-	if Input.is_action_just_pressed("menu_voltar"):
+	if fim and Input.is_action_just_pressed("menu_voltar"):
 		voltar.emit()
 
 
 func _physics_process(delta: float) -> void:
 	for n in jogadores:
 		_vida_no_quadro[n] = jogadores[n].vida
+	if congelado():
+		return
 	if portas_abertas:
 		_atravessar_portas(delta)
 	_resgatar_fugitivos()
-	if fim or contagem > 0.0:
+	if fim:
 		return
 
 	if not morte_subita:
@@ -339,16 +416,18 @@ func _criar_monstro() -> void:
 	var pontos: Array = mapa["pontos_monstro"]
 	if pontos.is_empty():
 		return
-	# Evita nascer em cima de um jogador
+	# Nasce longe dos jogadores: entre vários pontos sorteados, fica com o
+	# que está mais distante do jogador mais próximo
 	var pos: Vector2 = pontos.pick_random()
-	for tentativa in 8:
-		var longe := true
+	var melhor_d := -1.0
+	for tentativa in 12:
+		var p: Vector2 = pontos.pick_random()
+		var d := INF
 		for l in jogadores.values():
-			if l.position.distance_to(pos) < 48.0:
-				longe = false
-		if longe:
-			break
-		pos = pontos.pick_random()
+			d = minf(d, l.position.distance_to(p))
+		if d > melhor_d:
+			melhor_d = d
+			pos = p
 
 	var n := nivel_monstros() - 1
 	var faixa := clampi(1 + n / 2, 1, 4)  # níveis 1, 2-3, 4-5, 6+

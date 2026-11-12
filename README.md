@@ -13,12 +13,12 @@ Combate 1x1 local em plataformas, 2D, pixel art, feito em **Godot 4.5** para rod
 | Descer da plataforma | `S` | `↓` |
 | Escolher melhoria | `Q` / `E` | `1` / `2` do teclado numérico (ou `K` / `L`) |
 
-Ícones no topo: tela cheia (tecla `F`), som (tecla `M`) e iluminação das tochas (tecla `I`, desligue se pesar no celular). As escolhas ficam salvas. No celular: encoste o dedo em qualquer ponto da metade esquerda e aparece um joystick (para os lados anda, puxando para baixo desce da plataforma); o botão de pular fica na direita, e as melhorias são escolhidas tocando na opção.
+**Pausa:** botão ⏸ ao lado do cronômetro (ou `Esc`/`P`): continuar, tela cheia, som, iluminação e voltar ao menu. As mesmas opções ficam em **OPÇÕES** no menu inicial (atalhos: `F` tela cheia, `M` som, `I` iluminação). As escolhas ficam salvas. No celular: encoste o dedo em qualquer ponto da metade esquerda e aparece um joystick (para os lados anda, puxando para baixo desce da plataforma); o botão de pular fica na direita, e as melhorias são escolhidas tocando na opção.
 Controles (gamepad) também funcionam.
 
 ### Regras
 - **Todos começam como Recruta:** fraco, ataca corpo a corpo e causa pouco dano em jogadores. Os monstros de nível 1 só revidam, e matar um monstro cura 8% da vida. A classe chega em ~1 minuto.
-- **No nível 2**, o Recruta vira uma **classe sorteada**, sem repetir a do oponente. Dos níveis 3 em diante, cada nível oferece 2 melhorias para escolher.
+- **No nível 2**, o Recruta vira uma **classe sorteada**, sem repetir a do oponente. Dos níveis 3 em diante, cada nível oferece 2 melhorias (cartas grandes na lateral; toque, clique ou `Q`/`E`). No modo solo o jogo pausa enquanto você escolhe e volta com contagem de 3 s.
 - **O ataque é automático:** sai sozinho quando um inimigo entra no alcance.
 - **Monstros** dão XP e ficam mais fortes, rápidos e agressivos conforme o maior nível entre os jogadores. A cor indica a força: roxo, depois verde, laranja e vermelho.
 - **Dano entre jogadores** é reduzido:

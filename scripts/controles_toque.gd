@@ -9,7 +9,7 @@ extends Control
 ## lados anda (mais longe = mais rápido), para baixo desce da plataforma.
 ## Lado direito: botão de pular. Suporta vários dedos ao mesmo tempo.
 
-## "menu", "jogo" ou "fim" (calculado a partir da partida atual)
+## "menu", "jogo", "pausa" ou "fim" (calculado a partir da partida atual)
 var modo := "menu"
 ## Partida em andamento (o main.gd preenche; null no menu)
 var partida: Node
@@ -42,7 +42,12 @@ func _ready() -> void:
 func _process(_delta: float) -> void:
 	var novo := "menu"
 	if partida != null and is_instance_valid(partida):
-		novo = "fim" if partida.fim else "jogo"
+		if partida.fim:
+			novo = "fim"
+		elif partida.pausado or partida.escolhendo:
+			novo = "pausa"
+		else:
+			novo = "jogo"
 	if novo != modo:
 		soltar_tudo()
 		modo = novo
@@ -57,13 +62,6 @@ func _botoes() -> Dictionary:
 	if modo == "jogo":
 		var tela := get_viewport().get_visible_rect().size
 		b["pular"] = {"centro": Vector2(tela.x - 40, tela.y - 46), "raio": 28.0, "acao": "p1_pular", "seta": Vector2.UP}
-		b["sair"] = {"rect": Rect2(tela.x / 2.0 - 66, 1, 36, 15), "acao": "menu_voltar", "simbolo": "MENU"}
-		if partida != null and partida.jogadores.has(1):
-			var l = partida.jogadores[1]
-			if not l.escolhas.is_empty() and l.vivo:
-				# Mesmas posições das linhas do painel de escolha no HUD
-				b["opcao1"] = {"rect": Rect2(3, 37, 156, 10), "acao": "p1_opcao1"}
-				b["opcao2"] = {"rect": Rect2(3, 47, 156, 10), "acao": "p1_opcao2"}
 	elif modo == "fim":
 		var c := get_viewport().get_visible_rect().size / 2.0
 		b["revanche"] = {"rect": Rect2(c.x - 92, c.y + 32, 88, 18), "acao": "menu_ok", "simbolo": "REVANCHE"}
@@ -86,36 +84,27 @@ func _botao_em(pos: Vector2) -> String:
 
 # ------------------------------------------------------------------ Tela cheia
 
-const ICONES := ["tela_cheia", "som", "luz"]
-
-
-func _rect_icone(i: int) -> Rect2:
-	## Ícones ao lado do cronômetro na partida; no canto superior direito no menu.
+func _rect_pausa() -> Rect2:
+	## Botão de pausa ao lado do cronômetro (só durante a partida).
 	var tela := get_viewport().get_visible_rect().size
-	if modo == "menu":
-		return Rect2(tela.x - 20 - i * 19, 4, 16, 16)
-	return Rect2(tela.x / 2.0 + 28 + i * 17, 1, 15, 15)
+	return Rect2(tela.x / 2.0 + 28, 1, 17, 15)
 
 
-func _rect_tela_cheia() -> Rect2:
-	return _rect_icone(0)
+func _na_pausa(pos: Vector2) -> bool:
+	return modo == "jogo" and _rect_pausa().grow(3).has_point(pos)
 
 
-func _icone_em(pos: Vector2) -> int:
-	for i in ICONES.size():
-		if _rect_icone(i).grow(2).has_point(pos):
-			return i
-	return -1
-
-
-func _acionar_icone(i: int) -> void:
-	match ICONES[i]:
-		"tela_cheia":
-			alternar_tela_cheia()
-		"som":
-			Jogo.definir_som(not Jogo.som)
-		"luz":
-			Jogo.definir_iluminacao(not Jogo.iluminacao)
+func _sobre_cartas(pos: Vector2) -> bool:
+	## Toque numa carta de melhoria não deve criar o joystick.
+	if partida == null or not is_instance_valid(partida):
+		return false
+	var hud = partida.hud
+	if not hud.mostra_cartas(1):
+		return false
+	for r in hud.rects_cartas(1):
+		if (r as Rect2).has_point(pos):
+			return true
+	return false
 
 
 func alternar_tela_cheia() -> void:
@@ -133,24 +122,24 @@ func _input(event: InputEvent) -> void:
 	if event is InputEventScreenTouch or event is InputEventScreenDrag:
 		if not Jogo.toque:
 			Jogo.toque = true
-	# Ícones do topo (o toque também chega aqui como clique) e atalhos F / M / I
+	# Botão de pausa (o toque também chega aqui como clique)
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-		var i := _icone_em(event.position)
-		if i >= 0:
-			_acionar_icone(i)
+		if _na_pausa(event.position):
+			partida.pausar()
 			get_viewport().set_input_as_handled()
 			return
+	# Atalhos de teclado: F tela cheia, M som, I iluminação
 	if event is InputEventKey and event.pressed and not event.echo:
 		match event.physical_keycode:
 			KEY_F:
-				_acionar_icone(0)
+				alternar_tela_cheia()
 			KEY_M:
-				_acionar_icone(1)
+				Jogo.definir_som(not Jogo.som)
 			KEY_I:
-				_acionar_icone(2)
-	if event is InputEventScreenTouch and _icone_em(event.position) >= 0:
-		return  # não aperta nenhum botão de jogo por baixo
-	if modo == "menu":
+				Jogo.definir_iluminacao(not Jogo.iluminacao)
+	if event is InputEventScreenTouch and (_na_pausa(event.position) or _sobre_cartas(event.position)):
+		return  # deixa o clique chegar ao botão/carta
+	if modo == "menu" or modo == "pausa":
 		return
 	if event is InputEventScreenTouch:
 		var t := event as InputEventScreenTouch
@@ -235,7 +224,6 @@ func _algum_dedo_em(nome: String) -> bool:
 func _acao_de(nome: String) -> String:
 	var mapa := {
 		"pular": "p1_pular",
-		"sair": "menu_voltar", "opcao1": "p1_opcao1", "opcao2": "p1_opcao2",
 		"revanche": "menu_ok", "menu": "menu_voltar",
 	}
 	return mapa.get(nome, "")
@@ -251,7 +239,8 @@ func soltar_tudo() -> void:
 # ------------------------------------------------------------------ Desenho
 
 func _draw() -> void:
-	_desenhar_icones()
+	if modo == "jogo":
+		_desenhar_botao_pausa()
 	if not Jogo.toque:
 		return
 	var fonte := ThemeDB.fallback_font
@@ -303,50 +292,13 @@ func _desenhar_joystick() -> void:
 	draw_circle(_joy_pos, 10.0, Color(1, 1, 1, 0.45))
 
 
-func _desenhar_icones() -> void:
-	_desenhar_tela_cheia()
-	var cor := Color(1, 1, 1, 0.8)
-	# Som: alto-falante + ondas (ou X quando mudo)
-	var r := _rect_icone(1)
-	draw_rect(r, Color(0, 0, 0, 0.55))
+func _desenhar_botao_pausa() -> void:
+	var r := _rect_pausa()
+	draw_rect(r, Color(0, 0, 0, 0.6))
+	draw_rect(r, Color(1, 1, 1, 0.3), false, 1.0)
 	var c := r.get_center()
-	var k := r.size.x / 15.0
-	draw_colored_polygon(PackedVector2Array([c + Vector2(-5, -2) * k, c + Vector2(-3, -2) * k, c + Vector2(0, -5) * k,
-			c + Vector2(0, 5) * k, c + Vector2(-3, 2) * k, c + Vector2(-5, 2) * k]), cor)
-	if Jogo.som:
-		draw_arc(c + Vector2(0, 0), 3.0 * k, -0.9, 0.9, 6, cor, 1.0)
-		draw_arc(c + Vector2(0, 0), 5.0 * k, -0.9, 0.9, 8, cor, 1.0)
-	else:
-		draw_line(c + Vector2(2, -3) * k, c + Vector2(6, 3) * k, Color("b13e53"), 1.0)
-		draw_line(c + Vector2(6, -3) * k, c + Vector2(2, 3) * k, Color("b13e53"), 1.0)
-	# Iluminação: chama de tocha (apagada = cinza)
-	r = _rect_icone(2)
-	draw_rect(r, Color(0, 0, 0, 0.55))
-	c = r.get_center()
-	var chama := Color("ffcd75") if Jogo.iluminacao else Color(0.5, 0.5, 0.55)
-	draw_colored_polygon(PackedVector2Array([c + Vector2(0, -6) * k, c + Vector2(3, 0) * k, c + Vector2(2, 3) * k,
-			c + Vector2(-2, 3) * k, c + Vector2(-3, 0) * k]), chama)
-	if Jogo.iluminacao:
-		draw_colored_polygon(PackedVector2Array([c + Vector2(0, -2) * k, c + Vector2(1.5, 1) * k, c + Vector2(0, 2.5) * k,
-				c + Vector2(-1.5, 1) * k]), Color("ef7d57"))
-	draw_rect(Rect2(c + Vector2(-1, 3) * k, Vector2(2, 3) * k), Color("8a6a50"))
-
-
-func _desenhar_tela_cheia() -> void:
-	var r := _rect_tela_cheia()
-	var cheia := DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_FULLSCREEN
-	draw_rect(r, Color(0, 0, 0, 0.55))
-	var cor := Color(1, 1, 1, 0.8)
-	var t := 3.0 if r.size.x < 16.0 else 4.0
-	var m := 3.0
-	# Quatro cantos: apontando para fora (entrar) ou para dentro (sair)
-	for canto in [Vector2(0, 0), Vector2(1, 0), Vector2(0, 1), Vector2(1, 1)]:
-		var c: Vector2 = canto
-		var p: Vector2 = r.position + Vector2(m, m) + c * (r.size - Vector2(m, m) * 2.0)
-		var dx := (1.0 if c.x == 0 else -1.0) * (-1.0 if cheia else 1.0)
-		var dy := (1.0 if c.y == 0 else -1.0) * (-1.0 if cheia else 1.0)
-		draw_line(p, p + Vector2(dx * t, 0), cor, 1.0)
-		draw_line(p, p + Vector2(0, dy * t), cor, 1.0)
+	draw_rect(Rect2(c + Vector2(-4, -4), Vector2(3, 8)), Color(1, 1, 1, 0.85))
+	draw_rect(Rect2(c + Vector2(1, -4), Vector2(3, 8)), Color(1, 1, 1, 0.85))
 
 
 func _texto(fonte: Font, pos: Vector2, texto: String, tam: int, cor: Color) -> void:

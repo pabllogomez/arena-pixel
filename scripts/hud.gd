@@ -3,9 +3,14 @@ extends Control
 ## anúncios, contagem regressiva e tela de fim de partida.
 
 const LARG_PAINEL := 112.0
-const LARG_ESCOLHA := 150.0
+const LARG_CARTA := 168.0
+const ALT_CARTA := 36.0
 
 var partida: Node
+
+
+func _ready() -> void:
+	mouse_filter = MOUSE_FILTER_PASS  # recebe cliques/toques nas cartas de melhoria
 
 
 func _process(_delta: float) -> void:
@@ -32,6 +37,13 @@ func _draw() -> void:
 		var a: float = clampf(partida.anuncio_t * 2.0, 0.0, 1.0)
 		var cor: Color = partida.anuncio_cor
 		_texto_centro(fonte, centro + Vector2(0, -30), partida.anuncio, 16, Color(cor, a))
+
+	# Solo: jogo parado enquanto escolhe a melhoria
+	if partida.escolhendo:
+		draw_rect(Rect2(Vector2.ZERO, size), Color(0, 0, 0, 0.35))
+	for n in [1, 2]:
+		if mostra_cartas(n):
+			_cartas(fonte, n)
 
 	if partida.fim:
 		draw_rect(Rect2(0, centro.y - 30, size.x, 52), Color(0, 0, 0, 0.7))
@@ -82,24 +94,68 @@ func _painel(fonte: Font, l: Lutador, n: int) -> void:
 	draw_rect(Rect2(x, 19, LARG_PAINEL, 2), Color("333c57"))
 	draw_rect(Rect2(x, 19, LARG_PAINEL * float(l.xp) / l.xp_para_proximo(), 2), Color("a7f070"))
 
-	# Escolha de melhoria (só para humanos; o bot escolhe sozinho)
-	if l.escolhas.is_empty() or not l.vivo or l.controle is ControleBot or partida.fim:
-		return
+	# As cartas de melhoria são desenhadas em _cartas() (ficam por cima de tudo)
+
+
+func mostra_cartas(n: int) -> bool:
+	if partida == null or not partida.jogadores.has(n):
+		return false
+	var l: Lutador = partida.jogadores[n]
+	return not l.escolhas.is_empty() and l.vivo and not (l.controle is ControleBot) and not partida.fim
+
+
+func rects_cartas(n: int) -> Array:
+	## Duas cartas grandes empilhadas, centralizadas na vertical
+	## (P1 no lado esquerdo, P2 no direito).
+	var x := 8.0 if n == 1 else size.x - 8.0 - LARG_CARTA
+	var y0 := size.y / 2.0 - ALT_CARTA - 2.0
+	return [Rect2(x, y0, LARG_CARTA, ALT_CARTA), Rect2(x, y0 + ALT_CARTA + 6.0, LARG_CARTA, ALT_CARTA)]
+
+
+func _cartas(fonte: Font, n: int) -> void:
+	var l: Lutador = partida.jogadores[n]
 	var par: Array = l.escolhas[0]
+	var rects := rects_cartas(n)
+	var pulso := 0.55 + 0.45 * sin(Time.get_ticks_msec() / 160.0)
+	var verde := Color("a7f070")
+	var titulo := "SUBIU DE NÍVEL!"
+	if l.escolhas.size() > 1:
+		titulo += "  (+%d)" % (l.escolhas.size() - 1)
+	var r0: Rect2 = rects[0]
+	draw_string_outline(fonte, r0.position + Vector2(2, -6), titulo, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, 4, Color("1a1c2c"))
+	draw_string(fonte, r0.position + Vector2(2, -6), titulo, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, verde)
 	var teclas := ["Q", "E"] if n == 1 else ["1", "2"]
-	if Jogo.toque and n == 1:
-		teclas = ["toque", "toque"]
-	var ex := 6.0 if n == 1 else size.x - 6.0 - LARG_ESCOLHA
-	var y := 27.0
-	draw_rect(Rect2(ex - 3, y, LARG_ESCOLHA + 6, 31), Color(0, 0, 0, 0.8))
-	draw_rect(Rect2(ex - 3, y, LARG_ESCOLHA + 6, 1), Color("a7f070"))
-	var extra := "" if l.escolhas.size() == 1 else "  (+%d)" % (l.escolhas.size() - 1)
-	draw_string(fonte, Vector2(ex, y + 9), "SUBIU DE NÍVEL! Escolha:" + extra,
-			HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color("a7f070"))
 	for i in 2:
+		var r: Rect2 = rects[i]
 		var m: Dictionary = par[i]
-		var linha := "[%s] %s: %s" % [teclas[i], m["nome"], m["desc"]]
-		draw_string(fonte, Vector2(ex, y + 19 + i * 9), linha, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color.WHITE)
+		draw_rect(r, Color(0.06, 0.06, 0.09, 0.88))
+		draw_rect(r, Color(verde, pulso), false, 1.0)
+		var tx := r.position.x + 8.0
+		if not (Jogo.toque and n == 1):
+			# Tecla correspondente
+			var badge := Rect2(r.position + Vector2(6, r.size.y / 2.0 - 8), Vector2(16, 16))
+			draw_rect(badge, Color("333c57"))
+			draw_rect(badge, Color(1, 1, 1, 0.4), false, 1.0)
+			var lt := fonte.get_string_size(teclas[i], HORIZONTAL_ALIGNMENT_LEFT, -1, 10).x
+			draw_string(fonte, badge.get_center() + Vector2(-lt / 2.0, 4), teclas[i], HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color.WHITE)
+			tx = badge.end.x + 6.0
+		draw_string(fonte, Vector2(tx, r.position.y + 15), m["nome"], HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color.WHITE)
+		draw_string(fonte, Vector2(tx, r.position.y + 28), m["desc"], HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color("94b0c2"))
+
+
+func _gui_input(event: InputEvent) -> void:
+	# Clique ou toque numa carta escolhe a melhoria
+	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		for n in [1, 2]:
+			if not mostra_cartas(n):
+				continue
+			var rects := rects_cartas(n)
+			for i in 2:
+				var r: Rect2 = rects[i]
+				if r.has_point(event.position):
+					partida.jogadores[n].escolher_melhoria(i)
+					accept_event()
+					return
 
 
 func _texto_centro(fonte: Font, pos: Vector2, texto: String, tam: int, cor: Color) -> void:

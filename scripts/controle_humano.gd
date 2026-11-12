@@ -14,11 +14,7 @@ func atualizar(_l, _delta: float) -> void:
 	pulo_apertou = Input.is_action_just_pressed(_a("pular"))
 	pulo_soltou = Input.is_action_just_released(_a("pular"))
 	descer_apertou = Input.is_action_just_pressed(_a("descer"))
-	opcao = -1
-	if Input.is_action_just_pressed(_a("opcao1")):
-		opcao = 0
-	elif Input.is_action_just_pressed(_a("opcao2")):
-		opcao = 1
+	opcao = -1  # melhorias de humanos são escolhidas pela partida (funciona até pausado)
 
 
 func _a(nome_acao: String) -> String:

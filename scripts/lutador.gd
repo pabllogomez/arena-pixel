@@ -350,10 +350,15 @@ func ganhar_xp(qtd: int) -> void:
 
 
 func _ler_escolhas() -> void:
-	if escolhas.is_empty() or controle.opcao < 0:
+	if controle.opcao >= 0:
+		escolher_melhoria(controle.opcao)
+
+
+func escolher_melhoria(op: int) -> void:
+	if escolhas.is_empty():
 		return
 	var par: Array = escolhas.pop_front()
-	var m: Dictionary = par[controle.opcao]
+	var m: Dictionary = par[op]
 	Melhorias.aplicar(self, m)
 	partida.mostrar_texto(global_position + Vector2(0, -20), m["nome"], Color.WHITE)
 
