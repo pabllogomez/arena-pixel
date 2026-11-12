@@ -15,6 +15,12 @@ godot --headless --path . --import
 godot --headless --fixed-fps 60 --path . -s tools/teste.gd
 godot --headless --fixed-fps 60 --path . -s tools/teste.gd -- --equilibrio 30   # vitórias por classe (bot x bot)
 ```
+Equilíbrio entre classes (6 confrontos em paralelo, bot difícil x bot difícil, sem itens):
+```
+GODOT=/caminho/do/godot tools/confrontos.sh 60   # partidas por par
+```
+Referência atual (60 por par): Rei 52%, Orc 50%, Mago 50%, Arqueiro 46%.
+
 Rede (duas instâncias, ENet em localhost):
 ```
 PAPEL=anfitriao godot --headless --path . -s tools/teste_rede.gd &

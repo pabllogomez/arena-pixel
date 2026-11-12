@@ -104,3 +104,5 @@ godot --headless --fixed-fps 60 --path . -s tools/teste.gd -- --equilibrio 30
 ```
 
 O segundo comando simula 30 partidas de bot difícil contra bot difícil e mostra a taxa de vitória de cada classe.
+
+Para a tabela de confrontos classe contra classe (6 pares em paralelo): `GODOT=/caminho/do/godot tools/confrontos.sh 60`.

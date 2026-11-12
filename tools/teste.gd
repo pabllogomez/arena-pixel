@@ -23,7 +23,9 @@ func _initialize() -> void:
 		return
 	i = args.find("--confrontos")
 	if i >= 0:
-		await _confrontos(int(args[i + 1]) if args.size() > i + 1 else 8)
+		var j := args.find("--par")
+		var par: Array = [] if j < 0 else [int(args[j + 1]), int(args[j + 2])]
+		await _confrontos(int(args[i + 1]) if args.size() > i + 1 else 8, par)
 		quit(0)
 		return
 	_testar_mapas()
@@ -224,8 +226,10 @@ func jogo_melhoria(l, id: String) -> void:
 	Melhorias.aplicar(l, Melhorias.por_id(id))
 
 
-func _confrontos(n: int) -> void:
+func _confrontos(n: int, so_par: Array = []) -> void:
 	## Tabela de vitórias entre classes (bot difícil x bot difícil, já com classe).
+	## Com so_par = [a, b], roda só esse confronto (o tools/confrontos.sh roda os
+	## pares em paralelo e soma).
 	var main = load("res://scenes/main.tscn").instantiate()
 	root.add_child(main)
 	await process_frame
@@ -233,8 +237,12 @@ func _confrontos(n: int) -> void:
 	var vitorias := {}
 	for a in 4:
 		for b in range(a + 1, 4):
+			if not so_par.is_empty() and (so_par[0] != a or so_par[1] != b):
+				continue
 			var va := 0
 			var vb := 0
+			var duracao := 0.0
+			var subitas := 0
 			for k in n:
 				# Alterna os lados para não favorecer ninguém
 				var lado_a := 1 if k % 2 == 0 else 2
@@ -242,11 +250,15 @@ func _confrontos(n: int) -> void:
 				# Sem itens: a Bola e o "ataque trocado" mudariam as classes no meio da partida
 				var config := {"semente": 9000 + a * 100 + b * 10 + k, "tempo": 180.0, "bots": {1: 2, 2: 2}, "classes": classes, "itens": false}
 				var r: Dictionary = await _jogar(main, config, 60 * 300)
+				duracao += 180.0 - r.get("tempo", 0.0)
+				if r.get("morte_subita", false):
+					subitas += 1
 				if r.get("vencedor", 0) == lado_a:
 					va += 1
 				elif r.get("vencedor", 0) == 3 - lado_a:
 					vb += 1
 			print("%-8s x %-8s : %d x %d" % [nomes[a], nomes[b], va, vb])
+			print("PAR %s %s %d %d %.0f %d" % [nomes[a], nomes[b], va, vb, duracao / n, subitas])
 			vitorias[nomes[a]] = vitorias.get(nomes[a], 0) + va
 			vitorias[nomes[b]] = vitorias.get(nomes[b], 0) + vb
 	print("\n=== CONFRONTOS (%d partidas por par) ===" % n)
