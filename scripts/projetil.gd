@@ -48,6 +48,10 @@ func _physics_process(delta: float) -> void:
 	var passo := velocity * delta
 	var consulta := PhysicsRayQueryParameters2D.create(global_position, global_position + passo, 1)
 	if not get_world_2d().direct_space_state.intersect_ray(consulta).is_empty():
+		if magia:
+			partida.fx("orbe_estouro", position, _sprite.scale.x * 0.6)
+		else:
+			partida.fx("flecha_quebra", position, velocity.angle())
 		queue_free()
 		return
 	position += passo
@@ -56,8 +60,10 @@ func _physics_process(delta: float) -> void:
 	if magia:
 		_sprite.frame = int(_t * 10.0) % 2
 		_sprite.scale = Vector2.ONE * lerpf(1.25, 0.55, _fracao())
+		partida.particulas.fx("rastro_orbe", position, _sprite.scale.x)
 	else:
 		rotation = velocity.angle()
+		partida.particulas.fx("rastro_flecha", position)
 
 	for a in get_tree().get_nodes_in_group("alvo"):
 		if Jogo.hostis(self, a) and a.esta_vivo() and a.hitbox().grow(2.0).has_point(global_position):
@@ -65,6 +71,8 @@ func _physics_process(delta: float) -> void:
 			return
 
 	if _percorrido >= alcance_max:
+		if magia:
+			partida.fx("orbe_some", position)
 		queue_free()
 
 
@@ -73,6 +81,12 @@ func _acertar(alvo) -> void:
 	if magia:
 		d = dano * lerpf(1.0, dano_min, _fracao())
 	_ferir(alvo, d)
+	if magia:
+		partida.fx("orbe_estouro", position, _sprite.scale.x)
+		partida.impacto(3 if _fracao() < 0.5 else 2)
+		partida.tremer(1.4 if _fracao() < 0.5 else 0.8)
+	else:
+		partida.fx("flecha_quebra", position, velocity.angle())
 	if raio_explosao > 0.0:
 		for a in get_tree().get_nodes_in_group("alvo"):
 			if a != alvo and Jogo.hostis(self, a) and a.esta_vivo() \

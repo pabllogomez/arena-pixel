@@ -84,6 +84,9 @@ var _anim := "parado"
 var _anim_t := 0.0
 var _flash := 0.0
 var _sem_dano := 0.0
+## Estica/achata o sprite por um instante (pulo, pouso, golpe); volta para (1, 1)
+var _esticar := Vector2.ONE
+var _t_poeira := 0.0
 
 
 func configurar(n: int, d: ClasseDados, p: Node, c: Controle) -> void:
@@ -218,10 +221,10 @@ func _encerrar_efeito() -> void:
 func _atualizar_visual_efeito() -> void:
 	if sprite == null:
 		return
-	sprite.scale = Vector2.ONE * escala
+	sprite.scale = _esticar * escala
 	sprite.flip_v = gravidade_invertida
 	# Mantém os pés no chão (ou no teto) quando o tamanho muda
-	sprite.position.y = (8.0 - 8.0 * escala) * (-1.0 if gravidade_invertida else 1.0)
+	sprite.position.y = (8.0 - 8.0 * escala * _esticar.y) * (-1.0 if gravidade_invertida else 1.0)
 
 
 func nome_efeito() -> String:
@@ -244,6 +247,11 @@ func _ready() -> void:
 	add_to_group("viajante")
 	sprite.texture = dados.textura_p1 if numero == 1 else dados.textura_p2
 	sprite.flip_h = numero == 2
+	sprite.material = Jogo.material_clarao()
+
+
+func _pes() -> Vector2:
+	return position + Vector2(0, -8.0 if gravidade_invertida else 8.0)
 
 
 func _physics_process(delta: float) -> void:
@@ -278,6 +286,8 @@ func _physics_process(delta: float) -> void:
 			_buffer = 0.0
 			_coyote = 0.0
 			Jogo.tocar("pulo")
+			_esticar = Vector2(0.75, 1.3)
+			partida.fx("pulo", _pes())
 		if controle.pulo_soltou and velocity.y * sentido < 0.0:
 			velocity.y *= 0.5
 		if controle.descer_apertou and is_on_floor() and not gravidade_invertida:
@@ -298,9 +308,22 @@ func _physics_process(delta: float) -> void:
 	var estava_no_ar := not is_on_floor()
 	var queda := velocity.y * sentido
 	move_and_slide()
-	if estava_no_ar and is_on_floor() and queda > 200.0 and dados.pouso_pesado:
-		partida.tremer(clampf(queda / 150.0, 1.0, 2.5))
-		partida.criar_poeira(position + Vector2(0, 8))
+	if estava_no_ar and is_on_floor() and queda > 90.0:
+		_esticar = Vector2(1.3, 0.72) if queda > 200.0 else Vector2(1.18, 0.85)
+		if queda > 200.0 and dados.pouso_pesado:
+			partida.tremer(clampf(queda / 150.0, 1.0, 2.5))
+			partida.criar_poeira(_pes())
+		else:
+			partida.fx("pouso", _pes(), queda)
+	# Poeira de corrida (só enfeite local; o convidado faz a dele)
+	if is_on_floor() and absf(velocity.x) > 45.0:
+		_t_poeira -= delta
+		if _t_poeira <= 0.0:
+			_t_poeira = 0.14
+			partida.particulas.fx("correr", _pes(), -signf(velocity.x))
+	if _esticar != Vector2.ONE:
+		_esticar = _esticar.move_toward(Vector2.ONE, delta * 3.2)
+		_atualizar_visual_efeito()
 	_animar(delta)
 
 	if ativo:
@@ -314,7 +337,7 @@ func _physics_process(delta: float) -> void:
 
 	if _flash > 0.0:
 		_flash -= delta
-	sprite.modulate = Color(1, 0.35, 0.35) if _flash > 0.0 else Color.WHITE
+	Jogo.pintar_clarao(sprite, _flash > 0.0)
 	queue_redraw()
 
 
@@ -355,12 +378,14 @@ func _tentar_atacar() -> void:
 				partida.criar_projetil(self, global_position, dir_alvo.rotated(ang) * atk_vel_projetil(),
 						d, atk_alcance() * 1.5, false)
 			Jogo.tocar("flecha")
+			partida.fx("disparo", position + dir_alvo * 7.0, dir_alvo.angle())
 		ClasseDados.TipoAtaque.CORPO_A_CORPO:
 			_golpear(dir_alvo.x)
 		ClasseDados.TipoAtaque.MAGIA:
 			partida.criar_projetil(self, global_position + dir_alvo * 4.0, dir_alvo * atk_vel_projetil(),
 					atk_dano(), atk_alcance() * 1.3, true)
 			Jogo.tocar("magia")
+			partida.fx("conjurar", position + dir_alvo * 8.0, dir_alvo.angle())
 
 
 func _escolher_alvo():
@@ -396,17 +421,25 @@ func _linha_livre(destino: Vector2) -> bool:
 
 func _golpear(lado: float) -> void:
 	var s := signf(lado) if lado != 0.0 else (-1.0 if sprite.flip_h else 1.0)
+	var acertou := false
 	for a in get_tree().get_nodes_in_group("alvo"):
 		if a == self or not Jogo.hostis(self, a) or not a.esta_vivo():
 			continue
 		var dif: Vector2 = a.global_position - global_position
 		if absf(dif.y) <= 18.0 * escala and dif.x * s >= -6.0 and absf(dif.x) <= atk_alcance() * escala + 6.0:
 			causar_dano(a, atk_dano())
+			acertou = true
 			# O Orc arremessa lacaios para longe (abre caminho até o Rei)
 			if a is Minion and a.dono != null and dados.resistencia_lacaios > 0.0:
 				a.velocity = Vector2(s * 200.0, -140.0)
 	partida.criar_corte(global_position + Vector2(s * 12.0, 0.0), s < 0.0)
+	partida.fx("golpe", position + Vector2(s * 6.0, 0.0), s)
 	Jogo.tocar("espada")
+	_esticar = Vector2(1.2, 0.88)
+	if acertou and not eh_recruta:
+		# Golpe de classe que conecta: o jogo segura um instante e a tela treme
+		partida.impacto(2)
+		partida.tremer(0.9)
 
 
 func causar_dano(alvo, qtd: float, fonte := "") -> void:
@@ -441,7 +474,15 @@ func receber_dano(qtd: float, origem, fonte := "") -> void:
 	_flash = 0.12
 	Jogo.tocar("acerto")
 	var texto := str(roundi(qtd)) if qtd >= 1.0 else "%.1f" % qtd
-	partida.mostrar_texto(global_position + Vector2(0, -12), texto, Color("ffcd75"))
+	var forte := qtd >= 10.0
+	partida.mostrar_texto(global_position + Vector2(0, -12), texto, Color("f4f4f4") if forte else Color("ffcd75"), forte)
+	if origem_valida:
+		var ang: float = (global_position - origem.global_position).angle()
+		partida.fx("acerto", position, ang, qtd)
+		partida.fx("acerto_time", position, ang, equipe)
+	else:
+		partida.fx("veneno", position)
+	_esticar = Vector2(0.85, 1.15)
 	if origem_valida:
 		var empurrao := 70.0 * (1.0 - dados.resistencia_empurrao)
 		if origem is Lutador:
@@ -462,12 +503,20 @@ func _morrer() -> void:
 	remove_from_group("viajante")
 	Jogo.tocar("morte")
 	sprite.frame = 7
-	var tw := create_tween()
-	tw.tween_property(sprite, "rotation", PI * 0.5 * (-1.0 if sprite.flip_h else 1.0), 0.3)
-	tw.parallel().tween_property(sprite, "position:y", 4.0, 0.3)
-	tw.tween_property(sprite, "modulate:a", 0.3, 0.6)
+	partida.tremer(3.0)
+	desfazer()
 	queue_redraw()
 	morreu.emit(self)
+
+
+func desfazer() -> void:
+	## Morte: o personagem se desfaz em pixels das próprias cores.
+	Jogo.pintar_clarao(sprite, false)
+	sprite.visible = false
+	var quadro := Rect2i(sprite.frame * 16, 0, 16, 16)
+	partida.particulas.estilhacar(sprite.texture, quadro, position + sprite.position, sprite.flip_h,
+			escala, Vector2(velocity.x * 0.5, -40.0))
+	partida.particulas.fx("acerto_time", position, -PI / 2.0, equipe)
 
 
 func esta_vivo() -> bool:
@@ -503,6 +552,7 @@ func ganhar_xp(qtd: int) -> void:
 		nivel += 1
 		curar(vida_max * 0.15)
 		Jogo.tocar("nivel")
+		partida.fx("nivel", position)
 		if eh_recruta:
 			partida.sortear_classe(self)
 		else:
@@ -522,6 +572,7 @@ func escolher_melhoria(op: int) -> void:
 	var m: Dictionary = par[op]
 	Melhorias.aplicar(self, m)
 	partida.mostrar_texto(global_position + Vector2(0, -20), m["nome"], Color.WHITE)
+	partida.fx("melhoria", position)
 
 
 # ------------------------------------------------------------------ Visual

@@ -41,6 +41,7 @@ var _pulo_cd := 0.0
 var _descer := 0.0
 var _t := 0.0
 var _flash := 0.0
+var _ultimo_angulo := -PI / 2.0
 var _seguidor: SeguidorCaminho   # só lacaios do Rei usam caminhos
 var _t_caminho := 0.0
 
@@ -64,6 +65,7 @@ func _ready() -> void:
 	add_to_group("alvo")
 	add_to_group("viajante")
 	sprite.texture = textura
+	sprite.material = Jogo.material_clarao()
 
 
 func _physics_process(delta: float) -> void:
@@ -132,7 +134,7 @@ func _physics_process(delta: float) -> void:
 	sprite.frame = int(_t * 5.0) % 2 if absf(velocity.x) > 1.0 else 0
 	if _flash > 0.0:
 		_flash -= delta
-	sprite.modulate = Color(1, 0.35, 0.35) if _flash > 0.0 else Color.WHITE
+	Jogo.pintar_clarao(sprite, _flash > 0.0)
 	queue_redraw()
 
 
@@ -214,6 +216,9 @@ func receber_dano(qtd: float, origem, _fonte := "") -> void:
 	_flash = 0.12
 	_provocado = true
 	Jogo.tocar("acerto")
+	if origem != null and is_instance_valid(origem):
+		_ultimo_angulo = (global_position - origem.global_position).angle()
+	partida.fx("acerto", position, _ultimo_angulo, qtd)
 	if vida <= 0.0:
 		_morrer(origem)
 
@@ -232,16 +237,18 @@ func _morrer(origem) -> void:
 		origem.ganhar_xp(xp_valor)
 		if origem is Lutador and equipe == 0:
 			origem.curar(origem.vida_max * CURA_POR_ABATE)
+			partida.fx("cura", origem.position)
 		if origem is Lutador:
 			var ganho := xp_valor
 			if origem.nivel == nivel_antes:
 				ganho = origem.xp - xp_antes
 			partida.mostrar_texto(global_position + Vector2(0, -10), "+%d XP" % ganho, Color("a7f070"))
 	$CollisionShape2D.set_deferred("disabled", true)
-	var tw := create_tween()
-	tw.tween_property(sprite, "scale", Vector2(1.4, 0.3), 0.1)
-	tw.tween_property(sprite, "modulate:a", 0.0, 0.25)
-	tw.tween_callback(queue_free)
+	# Estoura em pixels das próprias cores
+	partida.fx("estilhaco", position, textura.resource_path.get_file().get_basename(),
+			[sprite.frame, sprite.flip_h, _ultimo_angulo])
+	sprite.visible = false
+	queue_free()
 
 
 func esta_vivo() -> bool:

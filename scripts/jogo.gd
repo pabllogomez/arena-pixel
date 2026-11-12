@@ -16,6 +16,8 @@ var toque := false
 signal opcoes_mudaram
 var som := true
 var iluminacao := true
+## Tremor de tela, clarões e a pausa curtinha nos golpes fortes
+var impacto := true
 const ARQUIVO_OPCOES := "user://opcoes.cfg"
 
 var _musica: AudioStreamPlayer
@@ -101,11 +103,50 @@ func definir_iluminacao(ligada: bool) -> void:
 	opcoes_mudaram.emit()
 
 
+func definir_impacto(ligado: bool) -> void:
+	impacto = ligado
+	_salvar_opcoes()
+	opcoes_mudaram.emit()
+
+
+# ------------------------------------------------------------------ Clarão ao apanhar
+
+const SHADER_CLARAO := """shader_type canvas_item;
+uniform float clarao = 0.0;
+void fragment() {
+	vec4 c = texture(TEXTURE, UV);
+	c.rgb = mix(c.rgb, vec3(1.0), clarao);
+	COLOR = c * COLOR;
+}
+"""
+var _shader_clarao: Shader
+
+
+func material_clarao() -> ShaderMaterial:
+	## Material que deixa o sprite branco por um instante (parâmetro "clarao").
+	if _shader_clarao == null:
+		_shader_clarao = Shader.new()
+		_shader_clarao.code = SHADER_CLARAO
+	var m := ShaderMaterial.new()
+	m.shader = _shader_clarao
+	return m
+
+
+func pintar_clarao(sprite: Sprite2D, ligado: bool) -> void:
+	## Clarão branco de quem apanhou. Com "impactos" desligado vira só um tom avermelhado.
+	var m := sprite.material as ShaderMaterial
+	if m != null:
+		m.set_shader_parameter("clarao", 1.0 if ligado and impacto else 0.0)
+	var a := sprite.modulate.a
+	sprite.modulate = Color(1, 0.35, 0.35, a) if ligado and not impacto else Color(1, 1, 1, a)
+
+
 func _carregar_opcoes() -> void:
 	var cfg := ConfigFile.new()
 	if cfg.load(ARQUIVO_OPCOES) == OK:
 		som = cfg.get_value("opcoes", "som", true)
 		iluminacao = cfg.get_value("opcoes", "iluminacao", true)
+		impacto = cfg.get_value("opcoes", "impacto", true)
 	AudioServer.set_bus_mute(0, not som)
 
 
@@ -113,6 +154,7 @@ func _salvar_opcoes() -> void:
 	var cfg := ConfigFile.new()
 	cfg.set_value("opcoes", "som", som)
 	cfg.set_value("opcoes", "iluminacao", iluminacao)
+	cfg.set_value("opcoes", "impacto", impacto)
 	cfg.save(ARQUIVO_OPCOES)
 
 

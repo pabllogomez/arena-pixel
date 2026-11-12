@@ -29,6 +29,7 @@ func _itens() -> Array:
 	itens.append(["tela_cheia", "Tela cheia: " + ("LIGADA" if cheia else "DESLIGADA")])
 	itens.append(["som", "Som: " + ("LIGADO" if Jogo.som else "DESLIGADO")])
 	itens.append(["luz", "Iluminação: " + ("LIGADA" if Jogo.iluminacao else "DESLIGADA")])
+	itens.append(["impacto", "Tremor e clarões: " + ("LIGADOS" if Jogo.impacto else "DESLIGADOS")])
 	itens.append(["menu", "VOLTAR AO MENU INICIAL" if na_pausa else "VOLTAR"])
 	return itens
 
@@ -56,6 +57,8 @@ func _acionar(id: String) -> void:
 			Jogo.definir_som(not Jogo.som)
 		"luz":
 			Jogo.definir_iluminacao(not Jogo.iluminacao)
+		"impacto":
+			Jogo.definir_impacto(not Jogo.impacto)
 		"menu":
 			if na_pausa:
 				sair_para_menu.emit()

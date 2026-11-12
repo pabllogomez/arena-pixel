@@ -57,6 +57,12 @@ const MORTE_SUBITA_AUMENTO := 0.3
 @onready var masmorra: Node2D = $Mundo/Masmorra
 @onready var hud: Control = $HUD/Painel
 
+## Partículas da partida (faíscas, poeira, estilhaços...). Só enfeite.
+var particulas: Particulas
+var _quadros_impacto := 0
+var _camera_lenta := false
+var _t_confete := 0.0
+
 var mapa: Dictionary
 var nav: Navegacao
 var portas: Array = []
@@ -120,6 +126,11 @@ func iniciar(config: Dictionary) -> void:
 	nav = mapa["nav"]
 	portas = mapa["portas"]
 	_montar_tiles(mapa["grade"])
+	particulas = Particulas.new()
+	particulas.grade = mapa["grade"]
+	$Mundo.add_child(particulas)
+	masmorra.particulas = particulas
+	nevoa_visual.particulas = particulas
 	desenho_portas.portas = portas
 	nevoa_visual.partida = self
 	nevoa_visual.material = masmorra.material_sem_sombra()
@@ -247,15 +258,12 @@ func _process(delta: float) -> void:
 	_atualizar_escolhas()
 	if not fim and not pausado and Input.is_action_just_pressed("pausar"):
 		pausar()
-	if anuncio_t > 0.0:
-		anuncio_t -= delta
-	# Tremor de tela (pouso pesado do Orc)
-	var mundo: Node2D = $Mundo
-	if _tremor > 0.05:
-		mundo.position = Vector2(0, 8) + Vector2(randf_range(-1, 1), randf_range(-1, 1)).round() * _tremor
-		_tremor = move_toward(_tremor, 0.0, delta * 10.0)
-	else:
-		mundo.position = Vector2(0, 8)
+	# Pausa curtinha dos golpes fortes (contada em quadros, não em segundos)
+	if _quadros_impacto > 0:
+		_quadros_impacto -= 1
+		if _quadros_impacto == 0 and not _camera_lenta:
+			Engine.time_scale = 1.0
+	_atualizar_enfeites(delta)
 
 	if fim:
 		_t_fim += delta
@@ -333,6 +341,8 @@ func sortear_classe(l: Lutador) -> void:
 	l.receber_classe(d)
 	criar_brilho(l.position)
 	criar_brilho(l.position + Vector2(0, -6))
+	fx("classe", l.position, l.numero)
+	tremer(1.5)
 	_anunciar_classe(l.numero, d.nome)
 	_evento(["classe", l.numero, Jogo.CLASSES.find(d.nome.to_lower())])
 
@@ -400,8 +410,12 @@ func _teleportar(v, de: Dictionary, para: Dictionary) -> void:
 		var vy := -80.0 if de["tipo"] == "teto" else minf(vel.y, 0.0)
 		v.velocity = Vector2(normal.x * maxf(absf(vel.x), 60.0), vy)
 	criar_brilho(v.position)
+	if not v is Projetil:
+		fx("porta", v.position)
 	v.position = para["saida"]
 	v.cooldown_porta = 0.2
+	if not v is Projetil:
+		fx("porta", v.position)
 	if v is Lutador:
 		criar_brilho(v.position)
 		Jogo.tocar("porta")
@@ -416,6 +430,11 @@ func _fechar_portas() -> void:
 			g[c.y][c.x] = GeradorArena.SOLIDO
 	_montar_tiles(g)
 	desenho_portas.fechadas = true
+	for porta in portas:
+		var vao: Rect2 = porta["abertura"]
+		for i in 3:
+			particulas.fx("porta_fecha", vao.position + vao.size * Vector2(randf(), randf()))
+	_tremor = maxf(_tremor, 2.5)
 
 
 # ------------------------------------------------------------------ Morte Súbita
@@ -494,6 +513,7 @@ func _criar_monstro() -> void:
 	m.position = pos
 	entidades.add_child(m)
 	criar_brilho(m.position)
+	fx("nasce", m.position)
 
 
 # ------------------------------------------------------------------ Criação de entidades
@@ -523,6 +543,7 @@ func criar_lacaio(rei: Lutador) -> void:
 	m.position = rei.position
 	entidades.add_child(m)
 	criar_brilho(m.position)
+	fx("invocar", m.position, rei.equipe)
 	Jogo.tocar("invocar")
 
 
@@ -578,23 +599,52 @@ func tremer(forca: float) -> void:
 	_tremor = maxf(_tremor, forca)
 
 
+func fx(nome: String, pos: Vector2, a = 0.0, b = 0.0) -> void:
+	## Efeito de partículas (posição em coordenadas do mundo). O anfitrião
+	## repassa para o convidado, que repete o mesmo efeito.
+	_evento(["fx", nome, pos.x, pos.y, a, b])
+	if nome == "estilhaco":
+		# a = nome da textura do monstro/lacaio, b = [quadro, espelhado, ângulo do golpe]
+		var tex: Texture2D = load("res://assets/sprites/%s.png" % a)
+		var larg := tex.get_width() / 2
+		var dados: Array = b
+		particulas.estilhacar(tex, Rect2i(int(dados[0]) * larg, 0, larg, tex.get_height()), pos, dados[1],
+				1.0, Vector2.from_angle(dados[2]) * 60.0)
+		return
+	particulas.fx(nome, pos, a, b)
+
+
+func impacto(quadros: int) -> void:
+	## Golpe forte: o jogo inteiro segura por alguns quadros (dá peso à pancada).
+	if not Jogo.impacto or fim or rede == "convidado":
+		return
+	_quadros_impacto = maxi(_quadros_impacto, quadros)
+	Engine.time_scale = 0.05
+
+
+func _atualizar_enfeites(delta: float) -> void:
+	## Anúncio, tremor de tela e festa do vencedor (igual no anfitrião e no convidado).
+	if anuncio_t > 0.0:
+		anuncio_t -= delta
+	var mundo: Node2D = $Mundo
+	if _tremor > 0.05 and Jogo.impacto:
+		mundo.position = Vector2(0, 8) + Vector2(randf_range(-1, 1), randf_range(-1, 1)).round() * minf(_tremor, 3.0)
+		_tremor = move_toward(_tremor, 0.0, delta * 10.0)
+	else:
+		_tremor = 0.0
+		mundo.position = Vector2(0, 8)
+	if fim and vencedor != 0 and jogadores[vencedor].vivo:
+		_t_confete += delta
+		if _t_confete < 3.0 and int(_t_confete * 20.0) != int((_t_confete - delta) * 20.0):
+			particulas.fx("confete", jogadores[vencedor].position + Vector2(0, -6), vencedor)
+
+
 func criar_poeira(pos: Vector2) -> void:
+	## Pouso pesado (Orc): nuvem de poeira e lascas de pedra.
 	_evento(["poeira", pos.x, pos.y])
 	if rede != "convidado":
 		Jogo.tocar("pouso")  # no convidado o som chega como evento próprio
-	for lado in [-1.0, 1.0]:
-		for i in 3:
-			var s := Sprite2D.new()
-			s.texture = TEX_BRILHO
-			s.hframes = 3
-			s.scale = Vector2.ONE * 0.4
-			s.modulate = Color(0.75, 0.7, 0.6, 0.8)
-			s.position = pos + Vector2(lado * 3.0, -2.0)
-			entidades.add_child(s)
-			var tw := s.create_tween()
-			tw.tween_property(s, "position", s.position + Vector2(lado * (8.0 + i * 5.0), -3.0 - i * 2.0), 0.3)
-			tw.parallel().tween_property(s, "modulate:a", 0.0, 0.3)
-			tw.tween_callback(s.queue_free)
+	particulas.fx("pouso_pesado", pos)
 
 
 func criar_brilho(pos: Vector2) -> void:
@@ -610,25 +660,33 @@ func criar_brilho(pos: Vector2) -> void:
 	tw.tween_callback(s.queue_free)
 
 
-func mostrar_texto(pos: Vector2, texto: String, cor: Color) -> void:
-	_evento(["texto", pos.x, pos.y, texto, cor.to_html()])
+func mostrar_texto(pos: Vector2, texto: String, cor: Color, forte := false) -> void:
+	## Texto que salta do personagem (dano, XP, melhoria). `forte` = golpe grande.
+	_evento(["texto", pos.x, pos.y, texto, cor.to_html(), forte])
 	var l := Label.new()
 	l.text = texto
 	var ls := LabelSettings.new()
-	ls.font_size = 8
+	ls.font_size = 12 if forte else 8
 	ls.font_color = cor
 	ls.outline_size = 3
 	ls.outline_color = Color("1a1c2c")
 	l.label_settings = ls
 	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	l.size = Vector2(80, 12)
-	l.position = pos - Vector2(40, 6)
+	l.size = Vector2(80, 14)
+	l.position = (pos - Vector2(40, 7) + Vector2(randf_range(-5.0, 5.0), 0.0)).round()
 	l.z_index = 10
 	l.material = masmorra.material_sem_sombra()
 	entidades.add_child(l)
+	# Salta para cima, para um instante e some piscando (sem ficar transparente)
 	var tw := l.create_tween()
-	tw.tween_property(l, "position:y", l.position.y - 12.0, 0.6)
-	tw.parallel().tween_property(l, "modulate:a", 0.0, 0.6).set_delay(0.3)
+	tw.tween_property(l, "position:y", l.position.y - (18.0 if forte else 12.0), 0.22) \
+			.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.tween_interval(0.3 if forte else 0.2)
+	for i in 3:
+		tw.tween_callback(l.hide)
+		tw.tween_interval(0.04)
+		tw.tween_callback(l.show)
+		tw.tween_interval(0.04)
 	tw.tween_callback(l.queue_free)
 
 
@@ -655,8 +713,11 @@ func _decidir_vencedor() -> void:
 	fim = true
 	for j in jogadores.values():
 		j.ativo = false
-	Engine.time_scale = 0.35
-	await get_tree().create_timer(0.5, true, false, true).timeout
+	_quadros_impacto = 0
+	_camera_lenta = true
+	Engine.time_scale = 0.3
+	await get_tree().create_timer(0.7, true, false, true).timeout
+	_camera_lenta = false
 	Engine.time_scale = 1.0
 	Jogo.tocar("vitoria")
 
@@ -736,6 +797,7 @@ func _criar_item(tipo: String) -> void:
 func _pegar_item(it: Item, l: Lutador) -> void:
 	it.queue_free()
 	criar_brilho(it.position)
+	fx("item", it.position)
 	if it.tipo == "bola":
 		var outro := oponente(l)
 		var opcoes: Array[ClasseDados] = []
@@ -745,6 +807,7 @@ func _pegar_item(it: Item, l: Lutador) -> void:
 				opcoes.append(c)
 		var d: ClasseDados = opcoes.pick_random()
 		l.trocar_classe(d)
+		fx("classe", l.position, l.numero)
 		_anunciar_classe(l.numero, d.nome)
 		_evento(["classe", l.numero, Jogo.CLASSES.find(d.nome.to_lower())])
 		Jogo.tocar("bola")
@@ -826,14 +889,7 @@ func _ao_perder_conexao() -> void:
 # ------------------------------------------------------------------ Rede: convidado
 
 func _process_convidado(delta: float) -> void:
-	if anuncio_t > 0.0:
-		anuncio_t -= delta
-	var mundo: Node2D = $Mundo
-	if _tremor > 0.05:
-		mundo.position = Vector2(0, 8) + Vector2(randf_range(-1, 1), randf_range(-1, 1)).round() * _tremor
-		_tremor = move_toward(_tremor, 0.0, delta * 10.0)
-	else:
-		mundo.position = Vector2(0, 8)
+	_atualizar_enfeites(delta)
 	var eu: Lutador = jogadores[2]
 	if not eu.escolhas.is_empty() and not pausado:
 		if Input.is_action_just_pressed("p1_opcao1"):
@@ -867,6 +923,18 @@ func _physics_convidado() -> void:
 			no.position = alvo  # teleporte (porta)
 		else:
 			no.position = no.position.lerp(alvo, 0.5)
+	# Enfeites que o convidado gera sozinho (não precisam vir pela rede)
+	for f in _fantasmas.values():
+		match f.get_meta("tipo", ""):
+			"orbe":
+				particulas.fx("rastro_orbe", f.position, f.scale.x)
+			"flecha":
+				particulas.fx("rastro_flecha", f.position)
+	_quadro += 1
+	if _quadro % 8 == 0:
+		for l in jogadores.values():
+			if l.vivo and l.sprite.frame >= 2 and l.sprite.frame <= 5:
+				particulas.fx("correr", l.position + Vector2(0, 8), 1.0 if l.sprite.flip_h else -1.0)
 
 
 func aplicar_estado(s: Dictionary) -> void:
@@ -907,6 +975,7 @@ func aplicar_estado(s: Dictionary) -> void:
 
 func _criar_fantasma(tipo: String) -> Sprite2D:
 	var f := Sprite2D.new()
+	f.set_meta("tipo", tipo)
 	if TEX_PROJETIL.has(tipo):
 		f.texture = TEX_PROJETIL[tipo]
 		f.hframes = 1 if tipo == "flecha" else 2
@@ -931,7 +1000,7 @@ func _aplicar_jogador(l: Lutador, d: Array) -> void:
 	l.vida_max = d[5]
 	l.nivel = d[6]
 	l.xp = d[7]
-	l.sprite.modulate = Color(1, 0.35, 0.35) if d[12] else Color.WHITE
+	Jogo.pintar_clarao(l.sprite, d[12])
 	# Efeito de item (tamanho, gravidade, ataque trocado)
 	if d[13] != l.efeito:
 		if d[13] == "":
@@ -949,8 +1018,7 @@ func _aplicar_jogador(l: Lutador, d: Array) -> void:
 			l.escolhas.append(par)
 	if l.vivo and not d[10]:
 		l.vivo = false
-		l.sprite.rotation = PI * 0.5
-		l.sprite.modulate.a = 0.4
+		l.desfazer()
 	l.queue_redraw()
 
 
@@ -959,7 +1027,9 @@ func aplicar_evento(e: Array) -> void:
 		"som":
 			Jogo.tocar(e[1])
 		"texto":
-			mostrar_texto(Vector2(e[1], e[2]), e[3], Color(e[4]))
+			mostrar_texto(Vector2(e[1], e[2]), e[3], Color(e[4]), e.size() > 5 and e[5])
+		"fx":
+			fx(e[1], Vector2(e[2], e[3]), e[4], e[5])
 		"brilho":
 			criar_brilho(Vector2(e[1], e[2]))
 		"corte":

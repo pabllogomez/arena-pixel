@@ -12,6 +12,8 @@ var _textura_luz: Texture2D
 var _tochas: Array = []        # [Sprite2D, PointLight2D, fase]
 var _fontes_pingo: Array = []  # [posição de origem, y do chão, tempo até o próximo]
 var _t := 0.0
+## Partículas da partida (brasas das tochas e respingos dos pingos)
+var particulas: Particulas
 
 
 static func material_sem_sombra() -> CanvasItemMaterial:
@@ -130,6 +132,8 @@ func _pingar(origem: Vector2, chao: float) -> void:
 	var tw := s.create_tween()
 	tw.tween_property(s, "position:y", chao - 4.0, tempo).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 	tw.tween_callback(func() -> void:
+		if particulas != null:
+			particulas.fx("pingo", Vector2(origem.x, chao - 1.0))
 		if randf() < 0.25:
 			Jogo.tocar("pingo"))
 	tw.tween_property(s, "frame", 3, 0.24).from(1)
@@ -145,6 +149,9 @@ func _process(delta: float) -> void:
 		s.frame = int(_t * 8.0 + fase) % 4
 		# Chama tremendo: a luz pulsa de forma irregular
 		luz.energy = 1.0 + 0.15 * sin(_t * 9.0 + fase) + 0.08 * sin(_t * 23.0 + fase * 2.0)
+		# Brasas subindo da chama
+		if particulas != null and randf() < delta * 2.2:
+			particulas.fx("brasa", s.position + Vector2(0, -5))
 	for f in _fontes_pingo:
 		f[2] -= delta
 		if f[2] <= 0.0:
