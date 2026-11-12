@@ -17,7 +17,7 @@ const XP_PARA_CLASSE := 16
 const REGEN_ESPERA := 5.0
 const REGEN_TAXA := 0.03
 ## Rei com lacaios vivos leva só esta fração do dano de projéteis
-const GUARDA_REAL := 0.7
+const GUARDA_REAL := 0.8
 const QUADROS := {
 	"parado": [0, 1],
 	"correr": [2, 3, 4, 5],
