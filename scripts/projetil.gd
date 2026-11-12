@@ -16,6 +16,8 @@ var magia := false
 var dano_min := 0.25
 var raio_explosao := 0.0
 var cooldown_porta := 0.0
+## Lança de lacaio (conta como dano de lacaio, não de projétil)
+var de_lacaio := false
 
 var _percorrido := 0.0
 var _t := 0.0
@@ -81,7 +83,8 @@ func _acertar(alvo) -> void:
 
 
 func _ferir(alvo, qtd: float) -> void:
+	var fonte := "lacaio" if de_lacaio else "projetil"
 	if dono != null and is_instance_valid(dono):
-		dono.causar_dano(alvo, qtd)
+		dono.causar_dano(alvo, qtd, fonte)
 	else:
-		alvo.receber_dano(qtd, null)
+		alvo.receber_dano(qtd, null, fonte)

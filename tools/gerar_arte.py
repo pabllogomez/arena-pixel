@@ -501,6 +501,71 @@ def pingo(q):
 
 folha([pingo(q) for q in range(4)]).save(os.path.join(SPR, "pingo.png"))
 
+# ---------------------------------------------------------------- Itens
+# Orbe de item (todos iguais; o efeito só é revelado ao pegar): 2 quadros 12x12
+ITEM = [
+    "....kkkk....",
+    "..kkppppkk..",
+    ".kppwwwwppk.",
+    ".kpwkkkwppk.",
+    "kppkppkkwppk",
+    "kpppppkkpppk",
+    "kppppkkppppk",
+    "kppppkkppppk",
+    ".kpppppppppk",
+    ".kppppkkppk.",
+    "..kkppppkk..",
+    "....kkkk....",
+]
+CORES_ITEM_A = {"k": (26, 28, 44, 255), "p": (93, 39, 93, 255), "w": (244, 244, 244, 255)}
+CORES_ITEM_B = {"k": (26, 28, 44, 255), "p": (177, 62, 83, 255), "w": (255, 205, 117, 255)}
+
+
+def item(cores):
+    img = Image.new("RGBA", (12, 12), (0, 0, 0, 0))
+    for y, l in enumerate(ITEM):
+        for x, ch in enumerate(l):
+            if ch in cores:
+                img.putpixel((x, y), cores[ch])
+    # o "?" é desenhado com 'k' dentro do orbe: troca por branco para destacar
+    for y, l in enumerate(ITEM):
+        for x, ch in enumerate(l):
+            if ch == "k" and 2 <= x <= 9 and 3 <= y <= 9:
+                img.putpixel((x, y), cores["w"])
+    return img
+
+
+folha([item(CORES_ITEM_A), item(CORES_ITEM_B)]).save(os.path.join(SPR, "item.png"))
+
+
+# Bola de troca de classe: esfera com seta circular (↻), 2 quadros 16x16
+def bola(q):
+    img = Image.new("RGBA", (16, 16), (0, 0, 0, 0))
+    for y in range(16):
+        for x in range(16):
+            d = math.hypot(x - 7.5, y - 7.5)
+            if d < 7.5:
+                luz = 1.0 - 0.5 * (math.hypot(x - 5, y - 5) / 11)
+                base = (65, 166, 246) if q == 0 else (115, 239, 247)
+                img.putpixel((x, y), tuple(int(c * luz) for c in base) + (255,))
+            if 6.6 <= d < 7.5:
+                img.putpixel((x, y), (26, 28, 44, 255))
+    # seta circular branca
+    for a in range(40, 330, 8):
+        r = math.radians(a + (0 if q == 0 else 45))
+        x, y = 7.5 + 4 * math.cos(r), 7.5 + 4 * math.sin(r)
+        img.putpixel((int(round(x)), int(round(y))), (244, 244, 244, 255))
+    ponta = math.radians(330 + (0 if q == 0 else 45))
+    px, py = 7.5 + 4 * math.cos(ponta), 7.5 + 4 * math.sin(ponta)
+    for dx, dy in ((0, 0), (-1, 0), (0, -1), (1, 1), (-1, -1)):
+        xx, yy = int(round(px)) + dx, int(round(py)) + dy
+        if 0 <= xx < 16 and 0 <= yy < 16:
+            img.putpixel((xx, yy), (244, 244, 244, 255))
+    return img
+
+
+folha([bola(0), bola(1)]).save(os.path.join(SPR, "bola.png"))
+
 # ---------------------------------------------------------------- Ícone
 icone = grade(personagem(CLASSES["rei"], "parado"), 1).resize((128, 128), Image.NEAREST)
 icone.save(os.path.join(RAIZ, "icon.png"))
@@ -534,6 +599,8 @@ som("invocar.wav", [(300, 300, 0.08), (450, 450, 0.08), (600, 600, 0.15)], 0.15)
 som("acerto.wav", [(220, 80, 0.08)], 0.2)
 som("morte.wav", [(0, 0, 0.1), (300, 50, 0.3)])
 som("nivel.wav", [(523, 523, 0.08), (784, 784, 0.08), (1047, 1047, 0.2)], 0.18)
+som("item.wav", [(700, 1400, 0.08), (1400, 2100, 0.12)], 0.14)
+som("bola.wav", [(300, 900, 0.15), (900, 300, 0.15), (300, 1200, 0.25)], 0.16)
 som("pingo.wav", [(1800, 1400, 0.05), (1400, 1100, 0.08)], 0.05)
 som("pouso.wav", [(0, 0, 0.05), (120, 40, 0.18)], 0.3)
 som("porta.wav", [(800, 200, 0.1), (200, 800, 0.1)], 0.12)

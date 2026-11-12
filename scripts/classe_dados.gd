@@ -28,6 +28,9 @@ enum TipoAtaque { FLECHA, CORPO_A_CORPO, MAGIA, INVOCAR }
 @export_range(0.0, 1.0) var resistencia_empurrao := 0.0
 ## Treme a tela e levanta poeira ao cair de uma altura.
 @export var pouso_pesado := false
+## Fração do dano de lacaios ignorada (0 = nenhuma). Classes com valor > 0
+## também arremessam lacaios para longe com o golpe.
+@export_range(0.0, 1.0) var resistencia_lacaios := 0.0
 
 @export_group("Ataque")
 @export var tipo_ataque: TipoAtaque = TipoAtaque.FLECHA

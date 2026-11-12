@@ -22,3 +22,4 @@ atrito = 600.0
 mult_gravidade = 1.15
 resistencia_empurrao = 0.7
 pouso_pesado = true
+resistencia_lacaios = 0.4

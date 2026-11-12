@@ -194,7 +194,7 @@ func _pular() -> void:
 
 func _atacar(alvo) -> void:
 	_cd = intervalo_ataque
-	alvo.receber_dano(dano, _origem())
+	alvo.receber_dano(dano, _origem(), "lacaio" if dono != null else "")
 	var tw := create_tween()
 	tw.tween_property(sprite, "position:x", _dir * 3.0, 0.05)
 	tw.tween_property(sprite, "position:x", 0.0, 0.1)
@@ -207,7 +207,7 @@ func _origem():
 	return self
 
 
-func receber_dano(qtd: float, origem) -> void:
+func receber_dano(qtd: float, origem, _fonte := "") -> void:
 	if not vivo:
 		return
 	vida -= qtd

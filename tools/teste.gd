@@ -21,7 +21,13 @@ func _initialize() -> void:
 		await _equilibrio(int(args[i + 1]) if args.size() > i + 1 else 40)
 		quit(0)
 		return
+	i = args.find("--confrontos")
+	if i >= 0:
+		await _confrontos(int(args[i + 1]) if args.size() > i + 1 else 8)
+		quit(0)
+		return
 	_testar_mapas()
+	await _testar_pulos_e_itens()
 	await _testar_partidas()
 	print("RESULTADO: ", "OK" if _falhas == 0 else "%d FALHA(S)" % _falhas)
 	quit(1 if _falhas else 0)
@@ -141,6 +147,111 @@ func _testar_partidas() -> void:
 			_falha("partida não terminou mesmo com a Morte Súbita")
 	if jogadas != duelos.size():
 		_falha("só %d de %d partidas rodaram" % [jogadas, duelos.size()])
+	main.queue_free()
+
+
+func _testar_pulos_e_itens() -> void:
+	var main = load("res://scenes/main.tscn").instantiate()
+	root.add_child(main)
+	await process_frame
+	main._nova_partida({"semente": 77, "tempo": 180.0, "bots": {1: -1, 2: -1}})
+	await process_frame
+	var p = main._atual
+	p.contagem = 0.0
+	p._congelar(false)
+	var l = p.jogadores[1]
+	var jogo = root.get_node("Jogo")
+	var nomes: Array = ["recruta"] + Array(jogo.CLASSES)
+	var alturas := []
+	for nome in nomes:
+		l.receber_classe(load("res://resources/classes/%s.tres" % nome))
+		l.eh_recruta = nome == "recruta"
+		l.position = p.mapa["inicio"][1]
+		l.velocity = Vector2.ZERO
+		for f in 30:
+			await physics_frame
+		var chao: float = l.position.y
+		l.velocity.y = -l.forca_pulo
+		var menor := chao
+		for f in 90:
+			await physics_frame
+			menor = minf(menor, l.position.y)
+		var blocos := (chao - menor) / 16.0
+		alturas.append("%s %.1f" % [nome, blocos])
+		if blocos < 3.5:
+			_falha("%s pula só %.2f blocos (mínimo 3,5)" % [nome, blocos])
+	print("Pulo (blocos): ", ", ".join(alturas))
+
+	# Efeitos de item: aplicam e voltam ao normal
+	l.receber_classe(load("res://resources/classes/orc.tres"))
+	l.eh_recruta = false
+	var dano0: float = l.atk_dano()
+	for ef in ["pequeno", "grande", "gravidade", "ataque"]:
+		l.aplicar_efeito(ef)
+		var mudou: bool = l.escala != 1.0 or l.gravidade_invertida or l.ataque != l.dados
+		if not mudou:
+			_falha("efeito %s não mudou nada" % ef)
+		l.efeito_t = 0.01
+		for f in 3:
+			await physics_frame
+		if l.efeito != "" or l.escala != 1.0 or l.gravidade_invertida or l.ataque != l.dados or l.atk_dano() != dano0:
+			_falha("efeito %s não voltou ao normal" % ef)
+	# Bola: troca de classe mantendo nível e melhorias, sem repetir a do oponente
+	var o = p.jogadores[2]
+	o.receber_classe(load("res://resources/classes/mago.tres"))
+	o.eh_recruta = false
+	l.nivel = 5
+	jogo_melhoria(l, "forca")
+	jogo_melhoria(l, "sangue")
+	for k in 12:
+		var bola = load("res://scripts/item.gd").new()
+		bola.tipo = "bola"
+		bola.position = l.position
+		p.entidades.add_child(bola)
+		p._pegar_item(bola, l)
+		if l.dados.nome == "Mago":
+			_falha("a Bola deu a mesma classe do oponente")
+		if l.nivel != 5 or not ("forca" in l.historico) or l.historico.size() != 2:
+			_falha("a Bola perdeu nível/melhorias: nível %d, %s" % [l.nivel, l.historico])
+		if not Melhorias.e_especial(l.historico[1]) or Melhorias.ESPECIAIS[l.dados.tipo_ataque]["id"] != l.historico[1]:
+			_falha("a melhoria especial não virou a da classe nova")
+	print("Itens e Bola: ok")
+	main.queue_free()
+	await process_frame
+
+
+func jogo_melhoria(l, id: String) -> void:
+	Melhorias.aplicar(l, Melhorias.por_id(id))
+
+
+func _confrontos(n: int) -> void:
+	## Tabela de vitórias entre classes (bot difícil x bot difícil, já com classe).
+	var main = load("res://scenes/main.tscn").instantiate()
+	root.add_child(main)
+	await process_frame
+	var nomes := ["Arqueiro", "Orc", "Mago", "Rei"]
+	var vitorias := {}
+	for a in 4:
+		for b in range(a + 1, 4):
+			var va := 0
+			var vb := 0
+			for k in n:
+				# Alterna os lados para não favorecer ninguém
+				var lado_a := 1 if k % 2 == 0 else 2
+				var classes := {lado_a: a, 3 - lado_a: b}
+				# Sem itens: a Bola e o "ataque trocado" mudariam as classes no meio da partida
+				var config := {"semente": 9000 + a * 100 + b * 10 + k, "tempo": 180.0, "bots": {1: 2, 2: 2}, "classes": classes, "itens": false}
+				var r: Dictionary = await _jogar(main, config, 60 * 300)
+				if r.get("vencedor", 0) == lado_a:
+					va += 1
+				elif r.get("vencedor", 0) == 3 - lado_a:
+					vb += 1
+			print("%-8s x %-8s : %d x %d" % [nomes[a], nomes[b], va, vb])
+			vitorias[nomes[a]] = vitorias.get(nomes[a], 0) + va
+			vitorias[nomes[b]] = vitorias.get(nomes[b], 0) + vb
+	print("\n=== CONFRONTOS (%d partidas por par) ===" % n)
+	for c in nomes:
+		print("%-8s %d vitórias em %d (%d%%)" % [c, vitorias.get(c, 0), n * 3, roundi(100.0 * vitorias.get(c, 0) / (n * 3))])
 	main.queue_free()
 
 

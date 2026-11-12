@@ -94,6 +94,12 @@ func _painel(fonte: Font, l: Lutador, n: int) -> void:
 	# Experiência
 	draw_rect(Rect2(x, 19, LARG_PAINEL, 2), Color("333c57"))
 	draw_rect(Rect2(x, 19, LARG_PAINEL * float(l.xp) / l.xp_para_proximo(), 2), Color("a7f070"))
+	# Efeito de item ativo, com o tempo que falta
+	if l.efeito != "" and l.vivo:
+		var txt := "%s  %ds" % [l.nome_efeito(), ceili(l.efeito_t)]
+		var alinhar := HORIZONTAL_ALIGNMENT_LEFT if n == 1 else HORIZONTAL_ALIGNMENT_RIGHT
+		draw_string_outline(fonte, Vector2(x, 31), txt, alinhar, LARG_PAINEL, 8, 3, Color("1a1c2c"))
+		draw_string(fonte, Vector2(x, 31), txt, alinhar, LARG_PAINEL, 8, Color("f4a2f4"))
 
 	# As cartas de melhoria são desenhadas em _cartas() (ficam por cima de tudo)
 

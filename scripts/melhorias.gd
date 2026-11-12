@@ -45,7 +45,16 @@ static func sortear(l) -> Array:
 	return [opcoes[0], opcoes[1]]
 
 
-static func aplicar(l, m: Dictionary) -> void:
+static func e_especial(id: String) -> bool:
+	for m in ESPECIAIS.values():
+		if m["id"] == id:
+			return true
+	return false
+
+
+static func aplicar(l, m: Dictionary, registrar := true) -> void:
+	if registrar:
+		l.historico.append(m["id"])
 	match m["id"]:
 		"forca":
 			l.dano *= 1.2

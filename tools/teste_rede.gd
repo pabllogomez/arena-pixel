@@ -60,6 +60,10 @@ func _initialize() -> void:
 		p.jogadores[2].ganhar_xp(16)
 		p.jogadores[2].ganhar_xp(12)
 		_checar(await _esperar(func(): return p.jogadores[2].escolhas.is_empty(), 8.0), "escolha de melhoria do convidado não chegou")
+		# Itens: efeito de tamanho no convidado e a Bola voando
+		p.jogadores[2].aplicar_efeito("grande")
+		p._criar_item("bola")
+		await create_timer(3.0).timeout
 		p.jogadores[1].receber_dano(9999, null)
 		await create_timer(3.0).timeout
 	else:
@@ -69,9 +73,9 @@ func _initialize() -> void:
 		_checar(await _esperar(func(): return main._atual != null and main._atual.get("rede") == "convidado", 15.0), "partida não chegou ao convidado")
 		var p = main._atual
 		await create_timer(3.5).timeout
-		Input.action_press("p1_direita")
+		Input.action_press("p1_esquerda")  # nasce no canto direito: à esquerda sempre há espaço
 		await create_timer(1.0).timeout
-		Input.action_release("p1_direita")
+		Input.action_release("p1_esquerda")
 		Input.action_press("p1_pular")
 		await create_timer(0.25).timeout
 		Input.action_release("p1_pular")
@@ -81,6 +85,8 @@ func _initialize() -> void:
 		_checar(await _esperar(func(): return p.hud.mostra_cartas(2), 10.0), "cartas de melhoria não apareceram no convidado")
 		_checar(not p.jogadores[2].eh_recruta, "classe do convidado não sincronizou")
 		p.escolher(2, 0)
+		_checar(await _esperar(func(): return p.jogadores[2].escala > 1.4, 10.0), "efeito de item não chegou ao convidado")
+		_checar(p._fantasmas.values().any(func(f): return f.texture.resource_path.ends_with("bola.png")), "a Bola não aparece no convidado")
 		_checar(await _esperar(func(): return p.fim, 10.0), "fim de partida não chegou ao convidado")
 		_checar(p.vencedor == 2, "vencedor errado no convidado")
 	print("REDE OK" if falhas.is_empty() else "REDE FALHA: " + ", ".join(falhas))

@@ -16,6 +16,8 @@ const XP_PARA_CLASSE := 16
 ## recupera REGEN_TAXA da vida máxima por segundo.
 const REGEN_ESPERA := 5.0
 const REGEN_TAXA := 0.03
+## Rei com lacaios vivos leva só esta fração do dano de projéteis
+const GUARDA_REAL := 0.7
 const QUADROS := {
 	"parado": [0, 1],
 	"correr": [2, 3, 4, 5],
@@ -46,6 +48,23 @@ var mult_lacaio := 1.0
 var flechas_extra := 0
 var roubo_vida := 0.0
 var raio_explosao := 0.0
+## Ids das melhorias escolhidas (para reaplicar quando a Bola troca a classe)
+var historico: Array[String] = []
+
+## Classe cujo ataque está sendo usado (normalmente a própria; o item
+## "ataque trocado" empresta o de outra por alguns segundos)
+var ataque: ClasseDados
+
+# Efeitos de item (duram EFEITO_DURACAO segundos; só um por vez)
+const EFEITO_DURACAO := 10.0
+const NOMES_EFEITO := {"pequeno": "ENCOLHEU", "grande": "GIGANTE", "gravidade": "GRAVIDADE INVERTIDA", "ataque": "ATAQUE TROCADO"}
+var efeito := ""
+var efeito_t := 0.0
+var escala := 1.0
+var gravidade_invertida := false
+var mult_dano_efeito := 1.0
+var mult_vel_efeito := 1.0
+var mult_empurrao := 1.0
 
 var nivel := 1
 var xp := 0
@@ -78,6 +97,7 @@ func configurar(n: int, d: ClasseDados, p: Node, c: Controle) -> void:
 func _aplicar_classe(d: ClasseDados) -> void:
 	var proporcao := vida / vida_max if dados != null else 1.0
 	dados = d
+	ataque = d
 	vida_max = d.vida_max
 	vida = vida_max * proporcao
 	velocidade = d.velocidade
@@ -97,6 +117,117 @@ func receber_classe(d: ClasseDados) -> void:
 	_aplicar_classe(d)
 	curar(vida_max * 0.25)
 	_cd_ataque = 0.4
+
+
+func trocar_classe(d: ClasseDados) -> void:
+	## Bola de troca: nova classe mantendo nível, vida proporcional e melhorias
+	## (a melhoria especial da classe antiga vira a especial da nova).
+	var proporcao := vida / vida_max
+	_encerrar_efeito()
+	flechas_extra = 0
+	roubo_vida = 0.0
+	raio_explosao = 0.0
+	mult_lacaio = 1.0
+	_aplicar_classe(d)
+	var especial_novo: String = Melhorias.ESPECIAIS[d.tipo_ataque]["id"]
+	var novos: Array[String] = []
+	for id in historico:
+		var novo_id: String = especial_novo if Melhorias.e_especial(id) else id
+		Melhorias.aplicar(self, Melhorias.por_id(novo_id), false)
+		novos.append(novo_id)
+	historico = novos
+	vida = vida_max * proporcao
+
+
+# ------------------------------------------------------------------ Ataque atual
+
+func atk_tipo() -> ClasseDados.TipoAtaque:
+	return ataque.tipo_ataque
+
+
+func _emprestado() -> bool:
+	return ataque != dados
+
+
+func atk_dano() -> float:
+	return (ataque.dano if _emprestado() else dano) * mult_dano_efeito
+
+
+func atk_alcance() -> float:
+	return ataque.alcance if _emprestado() else alcance
+
+
+func atk_intervalo() -> float:
+	return ataque.intervalo_ataque if _emprestado() else intervalo
+
+
+func atk_vel_projetil() -> float:
+	return ataque.velocidade_projetil if _emprestado() else velocidade_projetil
+
+
+func atk_max_lacaios() -> int:
+	return 2 if _emprestado() else max_lacaios
+
+
+# ------------------------------------------------------------------ Efeitos de item
+
+func aplicar_efeito(nome: String) -> void:
+	_encerrar_efeito()
+	efeito = nome
+	efeito_t = EFEITO_DURACAO
+	match nome:
+		"pequeno":
+			escala = 0.6
+			mult_vel_efeito = 1.2
+			mult_dano_efeito = 0.75
+		"grande":
+			escala = 1.5
+			mult_vel_efeito = 0.85
+			mult_dano_efeito = 1.3
+			mult_empurrao = 1.6
+		"gravidade":
+			gravidade_invertida = true
+			velocity.y = -80.0
+		"ataque":
+			# Ataque sorteado, diferente do próprio
+			var opcoes: Array[ClasseDados] = []
+			for i in Jogo.CLASSES.size():
+				var c := Jogo.dados_classe(i)
+				if c.tipo_ataque != dados.tipo_ataque:
+					opcoes.append(c)
+			ataque = opcoes.pick_random()
+			_cd_ataque = 0.2
+	_atualizar_visual_efeito()
+
+
+func _encerrar_efeito() -> void:
+	if gravidade_invertida:
+		velocity.y = 0.0
+	efeito = ""
+	efeito_t = 0.0
+	escala = 1.0
+	gravidade_invertida = false
+	mult_dano_efeito = 1.0
+	mult_vel_efeito = 1.0
+	mult_empurrao = 1.0
+	if dados != null:
+		ataque = dados
+	_atualizar_visual_efeito()
+
+
+func _atualizar_visual_efeito() -> void:
+	if sprite == null:
+		return
+	sprite.scale = Vector2.ONE * escala
+	sprite.flip_v = gravidade_invertida
+	# Mantém os pés no chão (ou no teto) quando o tamanho muda
+	sprite.position.y = (8.0 - 8.0 * escala) * (-1.0 if gravidade_invertida else 1.0)
+
+
+func nome_efeito() -> String:
+	if efeito == "ataque":
+		return "ATAQUE DE " + ataque.nome.to_upper()
+	return NOMES_EFEITO.get(efeito, "")
 
 
 func nome_jogador() -> String:
@@ -119,8 +250,18 @@ func _physics_process(delta: float) -> void:
 	if not vivo:
 		return
 
+	if efeito != "":
+		efeito_t -= delta
+		if efeito_t <= 0.0:
+			_encerrar_efeito()
+	# Gravidade (pode estar invertida pelo item). A gravidade extra da classe
+	# (ex.: Orc) vale só na descida: sobe como os outros, cai mais pesado.
+	var sentido := -1.0 if gravidade_invertida else 1.0
+	up_direction = Vector2.DOWN if gravidade_invertida else Vector2.UP
 	if not is_on_floor():
-		velocity.y = minf(velocity.y + GRAVIDADE * dados.mult_gravidade * delta, QUEDA_MAX)
+		var caindo := velocity.y * sentido > 0.0
+		var g := GRAVIDADE * (dados.mult_gravidade if caindo else 1.0)
+		velocity.y = clampf(velocity.y + g * sentido * delta, -QUEDA_MAX, QUEDA_MAX)
 		_coyote -= delta
 	else:
 		_coyote = TEMPO_COYOTE
@@ -133,13 +274,13 @@ func _physics_process(delta: float) -> void:
 		if controle.pulo_apertou:
 			_buffer = TEMPO_BUFFER
 		if _buffer > 0.0 and _coyote > 0.0:
-			velocity.y = -forca_pulo
+			velocity.y = -forca_pulo * sentido
 			_buffer = 0.0
 			_coyote = 0.0
 			Jogo.tocar("pulo")
-		if controle.pulo_soltou and velocity.y < 0.0:
+		if controle.pulo_soltou and velocity.y * sentido < 0.0:
 			velocity.y *= 0.5
-		if controle.descer_apertou and is_on_floor():
+		if controle.descer_apertou and is_on_floor() and not gravidade_invertida:
 			_atravessar_plataforma()
 		_ler_escolhas()
 
@@ -149,13 +290,13 @@ func _physics_process(delta: float) -> void:
 			set_collision_mask_value(5, true)
 
 	if dir != 0.0:
-		velocity.x = move_toward(velocity.x, dir * velocidade, dados.aceleracao * delta)
+		velocity.x = move_toward(velocity.x, dir * velocidade * mult_vel_efeito, dados.aceleracao * delta)
 		sprite.flip_h = dir < 0.0
 	else:
 		velocity.x = move_toward(velocity.x, 0.0, dados.atrito * delta)
 
 	var estava_no_ar := not is_on_floor()
-	var queda := velocity.y
+	var queda := velocity.y * sentido
 	move_and_slide()
 	if estava_no_ar and is_on_floor() and queda > 200.0 and dados.pouso_pesado:
 		partida.tremer(clampf(queda / 150.0, 1.0, 2.5))
@@ -186,10 +327,10 @@ func _atravessar_plataforma() -> void:
 # ------------------------------------------------------------------ Combate
 
 func _tentar_atacar() -> void:
-	if dados.tipo_ataque == ClasseDados.TipoAtaque.INVOCAR:
-		if partida.contar_lacaios(self) < max_lacaios:
+	if atk_tipo() == ClasseDados.TipoAtaque.INVOCAR:
+		if partida.contar_lacaios(self) < atk_max_lacaios():
 			partida.criar_lacaio(self)
-			_cd_ataque = intervalo
+			_cd_ataque = atk_intervalo()
 		else:
 			_cd_ataque = 0.3
 		return
@@ -198,25 +339,27 @@ func _tentar_atacar() -> void:
 	if alvo == null:
 		_cd_ataque = 0.05
 		return
-	_cd_ataque = intervalo
+	_cd_ataque = atk_intervalo()
 	var dir_alvo: Vector2 = (alvo.global_position - global_position).normalized()
 	if absf(velocity.x) < 5.0:
 		sprite.flip_h = dir_alvo.x < 0.0
 	_investida(dir_alvo.x)
 
-	match dados.tipo_ataque:
+	match atk_tipo():
 		ClasseDados.TipoAtaque.FLECHA:
-			var n := 1 + flechas_extra
+			var n := 1 + (0 if _emprestado() else flechas_extra)
 			for i in n:
 				var ang := (i - (n - 1) / 2.0) * 0.12
-				partida.criar_projetil(self, global_position, dir_alvo.rotated(ang) * velocidade_projetil,
-						dano, alcance * 1.5, false)
+				# Flechas extras (melhoria "Chuva") causam 60% do dano
+				var d := atk_dano() * (1.0 if i == 0 else 0.6)
+				partida.criar_projetil(self, global_position, dir_alvo.rotated(ang) * atk_vel_projetil(),
+						d, atk_alcance() * 1.5, false)
 			Jogo.tocar("flecha")
 		ClasseDados.TipoAtaque.CORPO_A_CORPO:
 			_golpear(dir_alvo.x)
 		ClasseDados.TipoAtaque.MAGIA:
-			partida.criar_projetil(self, global_position + dir_alvo * 4.0, dir_alvo * velocidade_projetil,
-					dano, alcance * 1.3, true)
+			partida.criar_projetil(self, global_position + dir_alvo * 4.0, dir_alvo * atk_vel_projetil(),
+					atk_dano(), atk_alcance() * 1.3, true)
 			Jogo.tocar("magia")
 
 
@@ -225,13 +368,14 @@ func _escolher_alvo():
 	## tem prioridade; o Recruta prefere monstros.
 	var melhor = null
 	var melhor_d := INF
-	var corpo_a_corpo := dados.tipo_ataque == ClasseDados.TipoAtaque.CORPO_A_CORPO
+	var corpo_a_corpo := atk_tipo() == ClasseDados.TipoAtaque.CORPO_A_CORPO
+	var alc := atk_alcance()
 	for a in get_tree().get_nodes_in_group("alvo"):
 		if a == self or not Jogo.hostis(self, a) or not a.esta_vivo():
 			continue
 		var dif: Vector2 = a.global_position - global_position
 		var d := dif.length()
-		if d > alcance + (6.0 if corpo_a_corpo else 0.0):
+		if d > alc + (6.0 if corpo_a_corpo else 0.0):
 			continue
 		if corpo_a_corpo and absf(dif.y) > 18.0:
 			continue
@@ -256,14 +400,17 @@ func _golpear(lado: float) -> void:
 		if a == self or not Jogo.hostis(self, a) or not a.esta_vivo():
 			continue
 		var dif: Vector2 = a.global_position - global_position
-		if absf(dif.y) <= 18.0 and dif.x * s >= -6.0 and absf(dif.x) <= alcance + 6.0:
-			causar_dano(a, dano)
+		if absf(dif.y) <= 18.0 * escala and dif.x * s >= -6.0 and absf(dif.x) <= atk_alcance() * escala + 6.0:
+			causar_dano(a, atk_dano())
+			# O Orc arremessa lacaios para longe (abre caminho até o Rei)
+			if a is Minion and a.dono != null and dados.resistencia_lacaios > 0.0:
+				a.velocity = Vector2(s * 200.0, -140.0)
 	partida.criar_corte(global_position + Vector2(s * 12.0, 0.0), s < 0.0)
 	Jogo.tocar("espada")
 
 
-func causar_dano(alvo, qtd: float) -> void:
-	alvo.receber_dano(qtd, self)
+func causar_dano(alvo, qtd: float, fonte := "") -> void:
+	alvo.receber_dano(qtd, self, fonte)
 	if roubo_vida > 0.0:
 		curar(qtd * roubo_vida)
 
@@ -274,10 +421,16 @@ func _investida(lado: float) -> void:
 	tw.tween_property(sprite, "position:x", 0.0, 0.1)
 
 
-func receber_dano(qtd: float, origem) -> void:
+func receber_dano(qtd: float, origem, fonte := "") -> void:
+	## fonte: "" (golpe), "projetil" ou "lacaio"
 	if not vivo:
 		return
 	var origem_valida: bool = origem != null and is_instance_valid(origem)
+	if fonte == "lacaio":
+		qtd *= 1.0 - dados.resistencia_lacaios  # Orc: pele grossa contra lacaios
+	# Guarda real: com lacaios vivos, o Rei leva menos dano de projéteis
+	if fonte == "projetil" and dados.tipo_ataque == ClasseDados.TipoAtaque.INVOCAR and partida.contar_lacaios(self) > 0:
+		qtd *= GUARDA_REAL
 	# Dano entre jogadores passa pelas regras da partida (Recruta, PvP, morte súbita)
 	if origem_valida and origem is Lutador and origem != self:
 		qtd *= partida.mult_pvp(origem, self)
@@ -291,6 +444,8 @@ func receber_dano(qtd: float, origem) -> void:
 	partida.mostrar_texto(global_position + Vector2(0, -12), texto, Color("ffcd75"))
 	if origem_valida:
 		var empurrao := 70.0 * (1.0 - dados.resistencia_empurrao)
+		if origem is Lutador:
+			empurrao *= origem.mult_empurrao
 		velocity.x += signf(global_position.x - origem.global_position.x) * empurrao
 	if vida <= 0.0:
 		vida = 0.0
@@ -320,7 +475,11 @@ func esta_vivo() -> bool:
 
 
 func hitbox() -> Rect2:
-	return Rect2(global_position + Vector2(-5, -6), Vector2(10, 14))
+	# Acompanha o tamanho do item (o corpo que colide com as paredes não muda)
+	var tam := Vector2(10, 14) * escala
+	if gravidade_invertida:
+		return Rect2(global_position + Vector2(-tam.x / 2.0, -8.0), tam)
+	return Rect2(global_position + Vector2(-tam.x / 2.0, 8.0 - tam.y), tam)
 
 
 # ------------------------------------------------------------------ Experiência
@@ -390,6 +549,8 @@ func _draw() -> void:
 	var fonte := ThemeDB.fallback_font
 	var rotulo := nome_jogador()
 	var larg := fonte.get_string_size(rotulo, HORIZONTAL_ALIGNMENT_LEFT, -1, 7).x
+	var acima := maxf(0.0, (escala - 1.0) * 16.0)  # sobe o rótulo quando está gigante
+	draw_set_transform(Vector2(0, -acima))
 	var pos := Vector2(-larg / 2.0, -21)
 	draw_string_outline(fonte, pos, rotulo, HORIZONTAL_ALIGNMENT_LEFT, -1, 7, 3, Color("1a1c2c"))
 	draw_string(fonte, pos, rotulo, HORIZONTAL_ALIGNMENT_LEFT, -1, 7, cor)

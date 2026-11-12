@@ -83,13 +83,21 @@ func _decidir(l) -> void:
 	elif p["foge"] and vida < 0.3 and inimigo.vivo and not inimigo.eh_recruta \
 			and l.position.distance_to(inimigo.position) < 130.0 and not partida.morte_subita:
 		_modo = "fugir"
-	elif l.dados.tipo_ataque == ClasseDados.TipoAtaque.INVOCAR and inimigo.vivo \
+	elif l.atk_tipo() == ClasseDados.TipoAtaque.INVOCAR and inimigo.vivo \
 			and l.position.distance_to(inimigo.position) < 90.0:
 		_modo = "fugir"  # o Rei deixa os lacaios lutarem
 	elif not l.eh_recruta and inimigo.vivo and _vale_atacar(l, inimigo):
 		_modo = "atacar"
 		_alvo = inimigo
 
+	# Normal/Difícil: aproveitam itens que aparecem perto
+	if _modo == "cacar_monstro" and dificuldade != Dificuldade.FACIL:
+		var item = _item_perto(l)
+		if item != null:
+			_modo = "item"
+			_seguidor.ir_para(meu_no, nav.no_mais_proximo(item.position))
+			_alvo = null
+			return
 	if _modo == "cacar_monstro":
 		_alvo = _monstro_mais_perto(l, meu_no)
 		if _alvo == null and inimigo.vivo:
@@ -113,7 +121,7 @@ func _decidir(l) -> void:
 		destino = _no_longe_de(monstro_perto.position, nav)
 	elif _alvo != null:
 		destino = nav.no_mais_proximo(_alvo.position)
-		if l.dados.tipo_ataque == ClasseDados.TipoAtaque.INVOCAR:
+		if l.atk_tipo() == ClasseDados.TipoAtaque.INVOCAR:
 			destino = _no_perto_de(_alvo.position, 60.0, nav)
 	if destino != Navegacao.INVALIDO:
 		_seguidor.ir_para(meu_no, destino)
@@ -129,6 +137,17 @@ func _monstro_perigoso(l):
 			if d < melhor_d:
 				melhor_d = d
 				melhor = a
+	return melhor
+
+
+func _item_perto(l):
+	var melhor = null
+	var melhor_d := 120.0
+	for it in l.get_tree().get_nodes_in_group("item"):
+		var d: float = l.position.distance_to(it.position)
+		if d < melhor_d:
+			melhor_d = d
+			melhor = it
 	return melhor
 
 
@@ -203,17 +222,17 @@ func _mover(l, delta: float) -> void:
 	if _alvo != null and is_instance_valid(_alvo) and _alvo.esta_vivo() and _modo != "fugir":
 		var dif: Vector2 = _alvo.position - l.position
 		var d := dif.length()
-		match l.dados.tipo_ataque:
+		match l.atk_tipo():
 			ClasseDados.TipoAtaque.FLECHA, ClasseDados.TipoAtaque.MAGIA:
-				if _alvo is Lutador and d < l.alcance * 0.4 and absf(dif.y) < 24.0:
+				if _alvo is Lutador and d < l.atk_alcance() * 0.4 and absf(dif.y) < 24.0:
 					eixo = -signf(dif.x)  # recua para não apanhar de perto
 					if l.is_on_wall() and l.is_on_floor():
 						pulo_apertou = true
 					return
-				if d < l.alcance * 0.8 and absf(dif.y) < 40.0 and l._linha_livre(_alvo.global_position):
+				if d < l.atk_alcance() * 0.8 and absf(dif.y) < 40.0 and l._linha_livre(_alvo.global_position):
 					return  # parado: o ataque automático cuida do resto
 			ClasseDados.TipoAtaque.CORPO_A_CORPO:
-				if absf(dif.x) < l.alcance * 0.6 and absf(dif.y) < 14.0:
+				if absf(dif.x) < l.atk_alcance() * 0.6 and absf(dif.y) < 14.0:
 					return
 
 	var r := _seguidor.passo(l, delta)

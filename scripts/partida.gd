@@ -74,6 +74,14 @@ var anuncio_cor := Color.WHITE
 var anuncio_t := 0.0
 
 var _t_monstro := 0.0
+# Itens
+const INTERVALO_ITEM := 20.0
+const MAX_ITENS := 2
+const DURACAO_BOLA := 15.0
+var _t_item := 0.0
+var itens_ligados := true  ## (só os testes de equilíbrio desligam)
+## Momentos (tempo restante, em segundos) em que a Bola aparece; sorteados por partida
+var momentos_bola: Array[float] = []
 ## Jogo pausado pelo botão de pausa / Esc
 var pausado := false
 var _painel_pausa: Control
@@ -93,6 +101,8 @@ var _descidas_enviadas := 0
 const TEX_PROJETIL := {
 	"flecha": preload("res://assets/sprites/flecha.png"),
 	"orbe": preload("res://assets/sprites/orbe.png"),
+	"item": preload("res://assets/sprites/item.png"),
+	"bola": preload("res://assets/sprites/bola.png"),
 }
 
 
@@ -138,6 +148,13 @@ func iniciar(config: Dictionary) -> void:
 
 	if rede == "convidado":
 		return  # quem simula monstros, tempo e regras é o anfitrião
+	_sortear_momentos_bola(rng)
+	itens_ligados = config.get("itens", true)
+	# Só para testes: começa com classes definidas
+	var classes: Dictionary = config.get("classes", {})
+	for n in classes:
+		jogadores[n].nivel = 2
+		jogadores[n].receber_classe(Jogo.dados_classe(classes[n]))
 	for i in 2:
 		_criar_monstro()
 	_congelar(true)  # tudo parado durante a contagem inicial
@@ -283,6 +300,8 @@ func _physics_process(delta: float) -> void:
 			_t_monstro = 0.0
 			if _contar_equipe(0) < maximo:
 				_criar_monstro()
+		if itens_ligados:
+			_atualizar_itens(delta)
 	else:
 		_atualizar_morte_subita(delta)
 
@@ -489,7 +508,7 @@ func criar_projetil(dono: Lutador, pos: Vector2, vel: Vector2, dano: float, alca
 	p.dano = dano
 	p.alcance_max = alcance
 	p.magia = magia
-	p.dano_min = dono.dados.dano_minimo_magia
+	p.dano_min = dono.ataque.dano_minimo_magia
 	p.raio_explosao = dono.raio_explosao
 	entidades.add_child(p)
 
@@ -497,8 +516,8 @@ func criar_projetil(dono: Lutador, pos: Vector2, vel: Vector2, dano: float, alca
 func criar_lacaio(rei: Lutador) -> void:
 	var m: Minion = CENA_MINION.instantiate()
 	m.configurar(self, rei.equipe, rei, TEX_LACAIO[rei.equipe],
-			rei.dados.vida_lacaio * rei.mult_lacaio, rei.dano * rei.mult_lacaio,
-			rei.dados.velocidade_lacaio, 2000.0, 2)
+			rei.ataque.vida_lacaio * rei.mult_lacaio, rei.atk_dano() * rei.mult_lacaio,
+			rei.ataque.velocidade_lacaio, 2000.0, 2)
 	m.intervalo_ataque = 1.2
 	m.alcance_arremesso = 90.0
 	m.position = rei.position
@@ -517,6 +536,7 @@ func criar_lanca(lacaio: Minion, alvo) -> void:
 	p.velocity = (alvo.global_position - lacaio.global_position).normalized() * 130.0
 	p.dano = lacaio.dano * 0.6
 	p.alcance_max = 110.0
+	p.de_lacaio = true
 	entidades.add_child(p)
 	Jogo.tocar("flecha")
 
@@ -645,6 +665,95 @@ func _exit_tree() -> void:
 	Engine.time_scale = 1.0
 
 
+# ------------------------------------------------------------------ Itens
+
+func _sortear_momentos_bola(rng: RandomNumberGenerator) -> void:
+	## 2 ou 3 aparições da Bola em momentos aleatórios, separados por 30+ s.
+	momentos_bola.clear()
+	var qtd := rng.randi_range(2, 3)
+	for tentativa in 40:
+		if momentos_bola.size() >= qtd:
+			break
+		var t := rng.randf_range(20.0, 140.0)
+		var longe := true
+		for m in momentos_bola:
+			if absf(m - t) < 30.0:
+				longe = false
+		if longe:
+			momentos_bola.append(t)
+	momentos_bola.sort()
+	momentos_bola.reverse()  # do mais cedo (mais tempo restante) para o mais tarde
+
+
+func _atualizar_itens(delta: float) -> void:
+	# Itens de efeito: um a cada INTERVALO_ITEM s, no máximo MAX_ITENS no mapa
+	_t_item += delta
+	var itens := get_tree().get_nodes_in_group("item")
+	var efeitos := itens.filter(func(i): return i.tipo == "efeito").size()
+	if _t_item >= INTERVALO_ITEM:
+		_t_item = 0.0
+		if efeitos < MAX_ITENS:
+			_criar_item("efeito")
+	# Bola: no momento sorteado, se os dois já tiverem classe (senão espera)
+	var tem_bola := itens.any(func(i): return i.tipo == "bola")
+	if not momentos_bola.is_empty() and tempo_restante <= momentos_bola[0] and not tem_bola and not _tem_recruta():
+		momentos_bola.pop_front()
+		_criar_item("bola")
+		mostrar_anuncio("A BOLA DA TROCA APARECEU!", Color("73eff7"), 2.0)
+		Jogo.tocar("bola")
+	# Quem encostar pega
+	for it in itens:
+		if not is_instance_valid(it) or it.is_queued_for_deletion():
+			continue
+		for l in jogadores.values():
+			if it.tocando(l):
+				_pegar_item(it, l)
+				break
+
+
+func _criar_item(tipo: String) -> void:
+	var it := Item.new()
+	it.tipo = tipo
+	if tipo == "bola":
+		it.duracao = DURACAO_BOLA
+	# Nasce longe dos jogadores
+	var pontos: Array = mapa["pontos_monstro"]
+	var pos: Vector2 = pontos.pick_random()
+	var melhor_d := -1.0
+	for tentativa in 10:
+		var p: Vector2 = pontos.pick_random()
+		var d := INF
+		for l in jogadores.values():
+			d = minf(d, l.position.distance_to(p))
+		if d > melhor_d:
+			melhor_d = d
+			pos = p
+	it.position = pos + Vector2(0, -2)
+	entidades.add_child(it)
+	criar_brilho(it.position)
+
+
+func _pegar_item(it: Item, l: Lutador) -> void:
+	it.queue_free()
+	criar_brilho(it.position)
+	if it.tipo == "bola":
+		var outro := oponente(l)
+		var opcoes: Array[ClasseDados] = []
+		for i in Jogo.CLASSES.size():
+			var c := Jogo.dados_classe(i)
+			if c.nome != l.dados.nome and (outro.eh_recruta or c.nome != outro.dados.nome):
+				opcoes.append(c)
+		var d: ClasseDados = opcoes.pick_random()
+		l.trocar_classe(d)
+		_anunciar_classe(l.numero, d.nome)
+		_evento(["classe", l.numero, Jogo.CLASSES.find(d.nome.to_lower())])
+		Jogo.tocar("bola")
+	else:
+		l.aplicar_efeito(Item.EFEITOS.pick_random())
+		mostrar_texto(l.position + Vector2(0, -24), l.nome_efeito(), Color("f4a2f4"))
+		Jogo.tocar("item")
+
+
 # ------------------------------------------------------------------ Rede: anfitrião
 
 func _evento(e: Array) -> void:
@@ -689,12 +798,16 @@ func _montar_estado() -> Dictionary:
 		if not l.escolhas.is_empty():
 			esc = [l.escolhas[0][0]["id"], l.escolhas[0][1]["id"], l.escolhas.size()]
 		js.append([l.position.x, l.position.y, l.sprite.frame, l.sprite.flip_h, l.vida, l.vida_max,
-				l.nivel, l.xp, l.xp_para_proximo(), _indice_classe(l), l.vivo, esc, l._flash > 0.0])
+				l.nivel, l.xp, l.xp_para_proximo(), _indice_classe(l), l.vivo, esc, l._flash > 0.0,
+				l.efeito, l.efeito_t, Jogo.CLASSES.find(l.ataque.nome.to_lower())])
 	var es: Array = []
 	for e in entidades.get_children():
 		if e is Minion and e.vivo:
 			es.append([e.get_instance_id(), e.textura.resource_path.get_file().get_basename(),
 					e.position.x, e.position.y, e.sprite.frame, e.sprite.flip_h, 0.0, 1.0])
+		elif e is Item:
+			es.append([e.get_instance_id(), e.chave_visual(), e.position.x, e.position.y,
+					e._sprite.frame if e._sprite != null else 0, false, e._sprite.rotation if e._sprite != null else 0.0, 1.0])
 		elif e is Projetil and e._sprite != null:
 			es.append([e.get_instance_id(), "orbe" if e.magia else "flecha",
 					e.position.x, e.position.y, e._sprite.frame, false, e.rotation, e._sprite.scale.x])
@@ -796,7 +909,7 @@ func _criar_fantasma(tipo: String) -> Sprite2D:
 	var f := Sprite2D.new()
 	if TEX_PROJETIL.has(tipo):
 		f.texture = TEX_PROJETIL[tipo]
-		f.hframes = 2 if tipo == "orbe" else 1
+		f.hframes = 1 if tipo == "flecha" else 2
 		f.material = masmorra.material_sem_sombra()
 	else:
 		f.texture = load("res://assets/sprites/%s.png" % tipo)
@@ -819,6 +932,15 @@ func _aplicar_jogador(l: Lutador, d: Array) -> void:
 	l.nivel = d[6]
 	l.xp = d[7]
 	l.sprite.modulate = Color(1, 0.35, 0.35) if d[12] else Color.WHITE
+	# Efeito de item (tamanho, gravidade, ataque trocado)
+	if d[13] != l.efeito:
+		if d[13] == "":
+			l._encerrar_efeito()
+		else:
+			l.aplicar_efeito(d[13])
+	l.efeito_t = d[14]
+	if l.efeito == "ataque" and int(d[15]) >= 0:
+		l.ataque = Jogo.dados_classe(d[15])
 	var esc: Array = d[11]
 	l.escolhas.clear()
 	if not esc.is_empty():
