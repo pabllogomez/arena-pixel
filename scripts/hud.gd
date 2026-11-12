@@ -38,9 +38,6 @@ func _draw() -> void:
 		var cor: Color = partida.anuncio_cor
 		_texto_centro(fonte, centro + Vector2(0, -30), partida.anuncio, 16, Color(cor, a))
 
-	# Solo: jogo parado enquanto escolhe a melhoria
-	if partida.escolhendo:
-		draw_rect(Rect2(Vector2.ZERO, size), Color(0, 0, 0, 0.35))
 	for n in [1, 2]:
 		if mostra_cartas(n):
 			_cartas(fonte, n)
@@ -128,7 +125,7 @@ func _cartas(fonte: Font, n: int) -> void:
 	for i in 2:
 		var r: Rect2 = rects[i]
 		var m: Dictionary = par[i]
-		draw_rect(r, Color(0.06, 0.06, 0.09, 0.88))
+		draw_rect(r, Color(0.06, 0.06, 0.09, 1.0))
 		draw_rect(r, Color(verde, pulso), false, 1.0)
 		var tx := r.position.x + 8.0
 		if not (Jogo.toque and n == 1):

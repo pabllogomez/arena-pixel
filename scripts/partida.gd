@@ -76,8 +76,6 @@ var anuncio_t := 0.0
 var _t_monstro := 0.0
 ## Jogo pausado pelo botão de pausa / Esc
 var pausado := false
-## Modo solo: jogo parado enquanto o jogador escolhe a melhoria
-var escolhendo := false
 var _painel_pausa: Control
 var _tremor := 0.0
 var _t_nevoa := 0.0
@@ -126,7 +124,7 @@ func _congelar(sim: bool) -> void:
 
 
 func congelado() -> bool:
-	return pausado or escolhendo or contagem > 0.0
+	return pausado or contagem > 0.0
 
 
 func _retomar_com_contagem() -> void:
@@ -152,18 +150,11 @@ func _despausar() -> void:
 		_painel_pausa.queue_free()
 		_painel_pausa = null
 	pausado = false
-	if not escolhendo:
-		_retomar_com_contagem()
-
-
-func _humano_solo() -> Lutador:
-	## No modo solo, o jogador humano (null se não for solo).
-	var humanos: Array = jogadores.values().filter(func(j): return j.controle is ControleHumano)
-	return humanos[0] if humanos.size() == 1 else null
+	_retomar_com_contagem()
 
 
 func _atualizar_escolhas() -> void:
-	# Teclas de melhoria dos humanos (funcionam mesmo com o jogo parado)
+	# Teclas de melhoria dos humanos (o jogo continua rodando enquanto escolhe)
 	for n in jogadores:
 		var l: Lutador = jogadores[n]
 		if l.controle is ControleHumano and l.vivo and not l.escolhas.is_empty() and not pausado:
@@ -171,17 +162,6 @@ func _atualizar_escolhas() -> void:
 				l.escolher_melhoria(0)
 			elif Input.is_action_just_pressed(Jogo.acao(n, "opcao2")):
 				l.escolher_melhoria(1)
-	# Solo: o jogo para enquanto o jogador escolhe e volta com contagem de 3 s
-	var h := _humano_solo()
-	if h == null or fim:
-		return
-	if not escolhendo and h.vivo and not h.escolhas.is_empty() and contagem <= 0.0 and not pausado:
-		escolhendo = true
-		_congelar(true)
-	elif escolhendo and (h.escolhas.is_empty() or not h.vivo):
-		escolhendo = false
-		if not pausado:
-			_retomar_com_contagem()
 
 
 func _montar_tiles(g: Array) -> void:
@@ -203,7 +183,7 @@ func oponente(l: Lutador) -> Lutador:
 # ------------------------------------------------------------------ Laço principal
 
 func _process(delta: float) -> void:
-	if contagem > -1.0 and not pausado and not escolhendo:
+	if contagem > -1.0 and not pausado:
 		var antes := contagem
 		contagem -= delta
 		if antes > 0.0 and contagem <= 0.0:

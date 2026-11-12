@@ -18,7 +18,7 @@ Controles (gamepad) também funcionam.
 
 ### Regras
 - **Todos começam como Recruta:** fraco, ataca corpo a corpo e causa pouco dano em jogadores. Os monstros de nível 1 só revidam, e matar um monstro cura 8% da vida. A classe chega em ~1 minuto.
-- **No nível 2**, o Recruta vira uma **classe sorteada**, sem repetir a do oponente. Dos níveis 3 em diante, cada nível oferece 2 melhorias (cartas grandes na lateral; toque, clique ou `Q`/`E`). No modo solo o jogo pausa enquanto você escolhe e volta com contagem de 3 s.
+- **No nível 2**, o Recruta vira uma **classe sorteada**, sem repetir a do oponente. Dos níveis 3 em diante, cada nível oferece 2 melhorias (cartas grandes na lateral; toque, clique ou `Q`/`E`).
 - **O ataque é automático:** sai sozinho quando um inimigo entra no alcance.
 - **Monstros** dão XP e ficam mais fortes, rápidos e agressivos conforme o maior nível entre os jogadores. A cor indica a força: roxo, depois verde, laranja e vermelho.
 - **Dano entre jogadores** é reduzido:

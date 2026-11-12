@@ -44,7 +44,7 @@ func _process(_delta: float) -> void:
 	if partida != null and is_instance_valid(partida):
 		if partida.fim:
 			novo = "fim"
-		elif partida.pausado or partida.escolhendo:
+		elif partida.pausado:
 			novo = "pausa"
 		else:
 			novo = "jogo"
