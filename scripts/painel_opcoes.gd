@@ -12,7 +12,7 @@ var na_pausa := true
 var _sel := 0
 var _quadros := 0  # ignora o teclado no 1º quadro (a tecla que abriu o painel)
 const LARG := 190.0
-const ALT_ITEM := 22.0
+const ALT_ITEM := 18.0
 const ESPACO := 4.0
 
 
@@ -95,24 +95,18 @@ func _process(_delta: float) -> void:
 
 
 func _draw() -> void:
-	var fonte := ThemeDB.fallback_font
-	draw_rect(Rect2(Vector2.ZERO, size), Color(0, 0, 0, 0.6 if na_pausa else 0.9))
+	draw_rect(Rect2(Vector2.ZERO, size), Color(UI.TINTA, 0.7 if na_pausa else 0.88))
 	var itens := _itens()
-	var topo := _rect_item(0).position.y - 26.0
+	var primeiro := _rect_item(0)
+	var ultimo := _rect_item(itens.size() - 1)
+	# Quadro em volta de tudo, com o título numa plaquinha em cima
+	var quadro := Rect2(primeiro.position.x - 14.0, primeiro.position.y - 26.0, LARG + 28.0, ultimo.end.y - primeiro.position.y + 36.0)
+	UI.moldura(self, quadro, Color("23263a"))
 	var titulo := "PAUSADO" if na_pausa else "OPÇÕES"
-	_texto(fonte, Vector2(size.x / 2.0, topo + 8.0), titulo, 16, Color("ffcd75"))
+	var placa := Rect2(size.x / 2.0 - 44.0, quadro.position.y - 9.0, 88, 22)
+	UI.moldura(self, placa, UI.TINTA, UI.OURO, UI.BRANCO)
+	UI.texto(self, placa.get_center(), titulo, UI.M, UI.OURO)
 	for i in itens.size():
-		var r := _rect_item(i)
-		var sel := i == _sel
-		var destaque: bool = itens[i][0] in ["continuar"]
-		var fundo := Color("333c57") if sel else Color(0.12, 0.12, 0.17, 0.95)
-		if destaque:
-			fundo = Color("38b764") if sel else Color("257179")
-		draw_rect(r, fundo)
-		draw_rect(r, Color(1, 1, 1, 0.5 if sel else 0.15), false, 1.0)
-		_texto(fonte, r.get_center(), itens[i][1], 10, Color.WHITE)
+		UI.botao(self, _rect_item(i), itens[i][1], i == _sel, itens[i][0] == "continuar", UI.P, _quadros / 60.0)
 
 
-func _texto(fonte: Font, pos: Vector2, texto: String, tam: int, cor: Color) -> void:
-	var larg := fonte.get_string_size(texto, HORIZONTAL_ALIGNMENT_LEFT, -1, tam).x
-	draw_string(fonte, pos + Vector2(-larg / 2.0, tam / 3.0), texto, HORIZONTAL_ALIGNMENT_LEFT, -1, tam, cor)

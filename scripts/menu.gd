@@ -1,27 +1,39 @@
 extends Control
-## Menu inicial: modo de jogo (1 ou 2 jogadores) e dificuldade do bot.
+## Menu inicial: modo de jogo (1 ou 2 jogadores, rede, opções) e dificuldade
+## do bot. Fica dentro da masmorra: título que cai letra por letra, as classes
+## correndo numa plataforma e botões em pixel art.
 
 signal jogar
 signal jogar_rede
 
 const MODOS := ["1 JOGADOR", "2 JOGADORES", "JOGAR EM REDE", "OPÇÕES"]
-const Y_OPCOES := 100.0
-const ESPACO_OPCOES := 16.0
+const Y_OPCOES := 147.0
+const ESPACO_OPCOES := 20.0
+const LARG_OPCAO := 140.0
+const ALT_OPCAO := 17.0
 const DIFICULDADES := ["FÁCIL", "NORMAL", "DIFÍCIL"]
+const TITULO := "ARENA PIXEL"
+const TAM_TITULO := 40
+const Y_TITULO := 44.0
 
 var _tela := "modo"  # "modo" ou "dificuldade"
 var _sel := 0
 var _t := 0.0
+var _t_tela := 0.0   # tempo desde que a lista de opções atual apareceu
 var _texturas: Array[Texture2D] = []
+var _fundo: Control
+var _pousou: Array[bool] = []
+var _painel: Control = null
 
 
 func _ready() -> void:
 	_sel = 0 if Jogo.solo else 1
 	for c in Jogo.CLASSES:
 		_texturas.append(load("res://assets/sprites/%s_1.png" % c))
-
-
-var _painel: Control = null
+	_fundo = preload("res://scripts/fundo_menu.gd").new()
+	add_child(_fundo)
+	_pousou.resize(TITULO.length())
+	_pousou.fill(false)
 
 
 func _abrir_opcoes() -> void:
@@ -33,21 +45,34 @@ func _abrir_opcoes() -> void:
 	add_child(_painel)
 
 
+func _rect_opcao(i: int) -> Rect2:
+	return Rect2(roundf(size.x / 2.0 - LARG_OPCAO / 2.0), Y_OPCOES + i * ESPACO_OPCOES, LARG_OPCAO, ALT_OPCAO)
+
+
+func _rect_voltar() -> Rect2:
+	return Rect2(6, 6, 56, 16)
+
+
 func _gui_input(event: InputEvent) -> void:
 	if _painel != null:
 		return
 	# Toque ou clique: escolhe a opção tocada (o toque vira clique automaticamente)
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 		var pos: Vector2 = event.position - _deslocamento()
-		if _tela == "dificuldade" and Rect2(4, 4, 60, 18).has_point(pos):
-			_tela = "modo"
-			_sel = 0
+		if _tela == "dificuldade" and _rect_voltar().grow(3).has_point(pos):
+			_mudar_tela("modo", 0)
 			return
 		var opcoes := MODOS if _tela == "modo" else DIFICULDADES
 		for i in opcoes.size():
-			if Rect2(size.x / 2.0 - 80, Y_OPCOES + i * ESPACO_OPCOES - 8, 160, ESPACO_OPCOES).has_point(pos):
+			if _rect_opcao(i).grow(1).has_point(pos):
 				_sel = i
 				_confirmar()
+
+
+func _mudar_tela(tela: String, sel: int) -> void:
+	_tela = tela
+	_sel = sel
+	_t_tela = 0.0
 
 
 func _confirmar() -> void:
@@ -61,8 +86,7 @@ func _confirmar() -> void:
 	if _tela == "modo":
 		Jogo.solo = _sel == 0
 		if Jogo.solo:
-			_tela = "dificuldade"
-			_sel = Jogo.dificuldade
+			_mudar_tela("dificuldade", Jogo.dificuldade)
 		else:
 			jogar.emit()
 	else:
@@ -72,6 +96,7 @@ func _confirmar() -> void:
 
 func _process(delta: float) -> void:
 	_t += delta
+	_t_tela += delta
 	queue_redraw()
 	if _painel != null:
 		return  # o painel de opções cuida do teclado enquanto está aberto
@@ -85,59 +110,89 @@ func _process(delta: float) -> void:
 	elif Input.is_action_just_pressed("menu_ok"):
 		_confirmar()
 	elif Input.is_action_just_pressed("menu_voltar") and _tela == "dificuldade":
-		_tela = "modo"
-		_sel = 0
-	queue_redraw()
+		_mudar_tela("modo", 0)
 
 
 func _deslocamento() -> Vector2:
-	## O layout foi desenhado para 216 px de altura; centraliza na tela atual.
-	return Vector2(0, (size.y - 216.0) / 2.0)
+	## O layout foi desenhado para 270 px de altura; centraliza na tela atual.
+	return Vector2(0, roundf((size.y - 270.0) / 2.0))
 
 
 func _draw() -> void:
-	var fonte := ThemeDB.fallback_font
-	var cx := size.x / 2.0
-	draw_rect(Rect2(Vector2.ZERO, size), Color(0.07, 0.065, 0.085))
+	var cx := roundf(size.x / 2.0)
 	draw_set_transform(_deslocamento())
-	_centro(fonte, Vector2(cx, 22), "ARENA PIXEL", 24, Color("ffcd75"))
-	_centro(fonte, Vector2(cx, 38), "Comece como Recruta. Cace monstros. Ganhe uma classe. Vença!", 8, Color("94b0c2"))
-
-	# Classes que podem ser sorteadas
-	var n := _texturas.size()
-	for i in n:
-		var x := cx + (i - (n - 1) / 2.0) * 40.0
-		var quadro := 2 + int(_t * 8.0 + i) % 4
-		draw_texture_rect_region(_texturas[i], Rect2(x - 12, 48, 24, 24), Rect2(quadro * 16, 0, 16, 16))
+	_desenhar_titulo(cx)
+	if _t > 0.9:
+		UI.texto(self, Vector2(cx, 74), "Comece como Recruta. Cace monstros. Ganhe uma classe. Vença!", UI.P, UI.LUZ)
+	_desenhar_classes(cx)
 
 	var titulo := "MODO DE JOGO" if _tela == "modo" else "DIFICULDADE DA MÁQUINA"
-	_centro(fonte, Vector2(cx, 88), titulo, 8, Color("566c86"))
+	var larg := UI.largura(titulo)
+	UI.texto(self, Vector2(cx, 138), titulo, UI.P, UI.OURO)
+	draw_rect(Rect2(cx - larg / 2.0 - 26, 138, 20, 1), UI.BORDA)
+	draw_rect(Rect2(cx + larg / 2.0 + 6, 138, 20, 1), UI.BORDA)
 	var opcoes := MODOS if _tela == "modo" else DIFICULDADES
 	for i in opcoes.size():
-		var y := Y_OPCOES + i * ESPACO_OPCOES
-		var sel := i == _sel
-		if sel:
-			draw_rect(Rect2(cx - 70, y - 8, 140, 16), Color("333c57"))
-			_centro(fonte, Vector2(cx - 60, y), ">", 12, Color("ffcd75"))
-		_centro(fonte, Vector2(cx, y), opcoes[i], 12, Color.WHITE if sel else Color("94b0c2"))
+		# Os botões sobem para o lugar um depois do outro
+		var e := clampf((_t_tela - i * 0.05) / 0.14, 0.0, 1.0)
+		if e <= 0.0:
+			continue
+		var r := _rect_opcao(i)
+		r.position.y += roundf(pow(1.0 - e, 2.0) * 14.0)
+		UI.botao(self, r, opcoes[i], i == _sel, false, UI.P, _t)
 
 	if _tela == "dificuldade":
-		_centro(fonte, Vector2(30, 12), "< voltar", 8, Color("94b0c2"))
+		UI.botao(self, _rect_voltar(), "VOLTAR", false)
 	if Jogo.toque:
-		_centro(fonte, Vector2(cx, 166), "Toque em uma opção", 8, Color("566c86"))
-		_centro(fonte, Vector2(cx, 184), "Joystick: dedo na esquerda · pulo na direita · toque nas melhorias", 8, Color("41a6f6"))
-		_centro(fonte, Vector2(cx, 208), "O ataque é automático. Partidas de 3 minutos + Morte Súbita.", 8, Color("566c86"))
+		UI.texto(self, Vector2(cx, 238), "Toque em uma opção", UI.P, UI.BORDA)
+		UI.texto(self, Vector2(cx, 249), "Joystick: dedo na esquerda   Pulo: na direita   Melhorias: toque na carta", UI.P, Color("41a6f6"))
+		UI.texto(self, Vector2(cx, 260), "O ataque é automático. Partidas de 3 minutos + Morte Súbita.", UI.P, UI.BORDA)
 		return
-	var ajuda := "W/S ou ↑/↓ escolher  ·  Espaço/Enter confirmar"
+	var ajuda := "W/S ou ↑/↓: escolher     ESPAÇO: confirmar"
 	if _tela == "dificuldade":
-		ajuda += "  ·  Esc voltar"
-	_centro(fonte, Vector2(cx, 166), ajuda, 8, Color("566c86"))
-	_centro(fonte, Vector2(cx, 184), "P1: A/D andar · W/Espaço pular · S descer · Q/E melhorias", 8, Color("41a6f6"))
+		ajuda += "     ESC: voltar"
+	UI.texto(self, Vector2(cx, 238), ajuda, UI.P, UI.BORDA)
 	if _tela == "modo" and _sel == 1:
-		_centro(fonte, Vector2(cx, 196), "P2: ←/→ andar · ↑/0 pular · ↓ descer · 1/2 melhorias", 8, Color("ef7d57"))
-	_centro(fonte, Vector2(cx, 208), "O ataque é automático. Partidas de 3 minutos + Morte Súbita.", 8, Color("566c86"))
+		UI.texto(self, Vector2(cx, 249), "P1: A/D andar, W pular, S descer, Q/E melhorias    P2: setas, 1/2 melhorias", UI.P, Color("ef7d57"))
+	else:
+		UI.texto(self, Vector2(cx, 249), "A/D: andar    W ou ESPAÇO: pular    S: descer    Q/E: melhorias", UI.P, Color("41a6f6"))
+	UI.texto(self, Vector2(cx, 260), "O ataque é automático. Partidas de 3 minutos + Morte Súbita.", UI.P, UI.BORDA)
 
 
-func _centro(fonte: Font, pos: Vector2, texto: String, tam: int, cor: Color) -> void:
-	var larg := fonte.get_string_size(texto, HORIZONTAL_ALIGNMENT_LEFT, -1, tam).x
-	draw_string(fonte, pos + Vector2(-larg / 2.0, tam / 3.0), texto, HORIZONTAL_ALIGNMENT_LEFT, -1, tam, cor)
+func _desenhar_titulo(cx: float) -> void:
+	## Cada letra cai do alto, levanta poeira ao pousar e depois ondula de leve.
+	var x := cx - roundf(UI.largura(TITULO, TAM_TITULO) / 2.0)
+	for i in TITULO.length():
+		var letra := TITULO[i]
+		var larg := UI.largura(letra, TAM_TITULO)
+		var e := clampf((_t - 0.1 - i * 0.05) / 0.2, 0.0, 1.0)
+		if letra != " " and e > 0.0:
+			var y := Y_TITULO - roundf(pow(1.0 - e, 2.0) * 70.0)
+			if e >= 1.0:
+				if not _pousou[i]:
+					_pousou[i] = true
+					_fundo.poeira(_deslocamento() + Vector2(x + larg / 2.0, Y_TITULO + 18.0))
+				y += roundf(sin(_t * 2.2 + i * 0.6) * 1.5)
+			var cor := UI.OURO if i < 5 else Color("73eff7")
+			var sombra := Color("b13e53") if i < 5 else Color("3b5dc9")
+			UI.texto(self, Vector2(x, y + 5.0), letra, TAM_TITULO, sombra, UI.ESQ)
+			UI.texto(self, Vector2(x, y), letra, TAM_TITULO, cor, UI.ESQ, false)
+		x += larg
+
+
+func _desenhar_classes(cx: float) -> void:
+	## As classes que podem ser sorteadas, correndo em cima de uma plataforma.
+	var n := _texturas.size()
+	var plataforma := Rect2(cx - 122, 117, 244, 5)
+	draw_rect(plataforma.grow(1), UI.TINTA)
+	draw_rect(plataforma, Color("333c57"))
+	draw_rect(Rect2(plataforma.position, Vector2(plataforma.size.x, 1)), UI.BORDA)
+	for i in n:
+		var x := cx + (i - (n - 1) / 2.0) * 60.0
+		var e := clampf((_t - 0.7 - i * 0.08) / 0.15, 0.0, 1.0)
+		if e <= 0.0:
+			continue
+		var quadro := 2 + int(_t * 8.0 + i) % 4
+		var sobe := roundf(pow(1.0 - e, 2.0) * 10.0)
+		draw_texture_rect_region(_texturas[i], Rect2(x - 16, 85 - sobe, 32, 32), Rect2(quadro * 16, 0, 16, 16))
+		UI.texto(self, Vector2(x, 128), Jogo.CLASSES[i].to_upper(), UI.P, UI.BORDA)

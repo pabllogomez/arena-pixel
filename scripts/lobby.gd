@@ -9,8 +9,8 @@ signal voltar
 signal iniciar_como_anfitriao
 
 const LARG := 220.0
-const ALT_ITEM := 20.0
-const ESPACO := 5.0
+const ALT_ITEM := 18.0
+const ESPACO := 6.0
 
 var _estado := "inicio"
 var _codigo := ""
@@ -22,6 +22,7 @@ var _t_conectando := 0.0
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+	add_child(preload("res://scripts/fundo_menu.gd").new())
 	Rede.codigo_pronto.connect(_ao_codigo_pronto)
 	Rede.conectado.connect(_ao_conectar)
 	Rede.falhou.connect(func(motivo: String) -> void:
@@ -172,35 +173,26 @@ func _process(delta: float) -> void:
 
 
 func _draw() -> void:
-	var fonte := ThemeDB.fallback_font
-	var cx := size.x / 2.0
-	draw_rect(Rect2(Vector2.ZERO, size), Color(0.07, 0.065, 0.085))
-	_centrado(fonte, Vector2(cx, 34), "JOGAR EM REDE", 20, Color("ffcd75"))
-	_centrado(fonte, Vector2(cx, 52), "1 contra 1 · no mesmo Wi-Fi ou pela internet", 8, Color("566c86"))
+	var cx := roundf(size.x / 2.0)
+	UI.texto(self, Vector2(cx, 30), "JOGAR EM REDE", UI.G, UI.OURO)
+	UI.texto(self, Vector2(cx, 50), "1 contra 1, no mesmo Wi-Fi ou pela internet", UI.P, UI.BORDA)
+	# Quadro com as instruções do passo atual
+	var quadro := Rect2(cx - 190, 62, 380, 68)
+	UI.moldura(self, quadro, Color(UI.TINTA, 0.9))
 	var linhas := _texto().split("\n")
+	var y0 := 86.0 - (linhas.size() - 1) * 6.0
 	for i in linhas.size():
-		_centrado(fonte, Vector2(cx, 78 + i * 13), linhas[i], 9, Color("94b0c2") if _estado != "erro" else Color("ef7d57"))
+		UI.texto(self, Vector2(cx, y0 + i * 12), linhas[i], UI.P, UI.LUZ if _estado != "erro" else Color("ef7d57"))
 	if _codigo != "" and _estado in ["convite", "resposta"]:
-		var previa := _codigo.substr(0, 34) + "…  (%d caracteres)" % _codigo.length()
-		_centrado(fonte, Vector2(cx, 120), previa, 7, Color("566c86"))
+		var previa := _codigo.substr(0, 40) + "...  (%d caracteres)" % _codigo.length()
+		UI.texto(self, Vector2(cx, 118), previa, UI.P, UI.BORDA)
 	if _estado in ["gerando", "conectando"]:
-		var pontos := ".".repeat(1 + int(Time.get_ticks_msec() / 400) % 3)
-		_centrado(fonte, Vector2(cx, 120), pontos, 16, Color("ffcd75"))
+		# Três blocos que acendem em sequência
+		var aceso := int(Time.get_ticks_msec() / 250) % 3
+		for i in 3:
+			draw_rect(Rect2(cx - 13 + i * 10, 112, 6, 6), UI.OURO if i == aceso else UI.APAGADO)
 	var botoes := _botoes()
 	for i in botoes.size():
-		var r := _rect_botao(i)
-		var sel := i == _sel
-		var destaque: bool = botoes[i][2]
-		var fundo := Color("333c57") if sel else Color(0.12, 0.12, 0.17)
-		if destaque:
-			fundo = Color("38b764") if sel else Color("257179")
-		draw_rect(r, fundo)
-		draw_rect(r, Color(1, 1, 1, 0.5 if sel else 0.15), false, 1.0)
-		_centrado(fonte, r.get_center(), botoes[i][1], 9 if botoes[i][1].begins_with("não") else 10, Color.WHITE)
+		UI.botao(self, _rect_botao(i), botoes[i][1], i == _sel, botoes[i][2], UI.P, Time.get_ticks_msec() / 1000.0)
 	if _aviso_t > 0.0:
-		_centrado(fonte, Vector2(cx, size.y - 14), _aviso, 10, Color("a7f070"))
-
-
-func _centrado(fonte: Font, pos: Vector2, texto: String, tam: int, cor: Color) -> void:
-	var larg := fonte.get_string_size(texto, HORIZONTAL_ALIGNMENT_LEFT, -1, tam).x
-	draw_string(fonte, pos + Vector2(-larg / 2.0, tam / 3.0), texto, HORIZONTAL_ALIGNMENT_LEFT, -1, tam, cor)
+		UI.texto(self, Vector2(cx, size.y - 12), _aviso, UI.P, UI.VERDE)

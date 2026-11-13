@@ -6,6 +6,7 @@ const CENA_PARTIDA := preload("res://scenes/partida.tscn")
 
 var _atual: Node
 var _toque: Control
+var _cortina: Control
 
 
 func _ready() -> void:
@@ -15,6 +16,12 @@ func _ready() -> void:
 	add_child(camada)
 	_toque = preload("res://scripts/controles_toque.gd").new()
 	camada.add_child(_toque)
+	# Cortina de blocos que abre a cada troca de tela (por cima de tudo)
+	var camada_cortina := CanvasLayer.new()
+	camada_cortina.layer = 20
+	add_child(camada_cortina)
+	_cortina = preload("res://scripts/cortina.gd").new()
+	camada_cortina.add_child(_cortina)
 	# Convidado em rede: a partida começa quando o anfitrião manda
 	Rede.partida_recebida.connect(_nova_partida, CONNECT_DEFERRED)
 	_abrir_menu()
@@ -25,6 +32,7 @@ func _trocar(nova: Node) -> void:
 		_atual.queue_free()
 	_atual = nova
 	add_child(nova)
+	_cortina.abrir()
 
 
 func _abrir_menu() -> void:

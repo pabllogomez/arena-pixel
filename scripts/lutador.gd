@@ -597,14 +597,11 @@ func _draw() -> void:
 		return
 	var cor: Color = Jogo.COR_TIME[equipe]
 	# Rótulo ("VOCÊ", "CPU", "P1"...), seta e barra de vida acima da cabeça
-	var fonte := ThemeDB.fallback_font
-	var rotulo := nome_jogador()
-	var larg := fonte.get_string_size(rotulo, HORIZONTAL_ALIGNMENT_LEFT, -1, 7).x
 	var acima := maxf(0.0, (escala - 1.0) * 16.0)  # sobe o rótulo quando está gigante
 	draw_set_transform(Vector2(0, -acima))
-	var pos := Vector2(-larg / 2.0, -21)
-	draw_string_outline(fonte, pos, rotulo, HORIZONTAL_ALIGNMENT_LEFT, -1, 7, 3, Color("1a1c2c"))
-	draw_string(fonte, pos, rotulo, HORIZONTAL_ALIGNMENT_LEFT, -1, 7, cor)
-	draw_colored_polygon(PackedVector2Array([Vector2(-3, -19), Vector2(3, -19), Vector2(0, -16)]), cor)
+	UI.texto(self, Vector2(0, -25), nome_jogador(), UI.P, cor)
+	# Setinha em degraus apontando para o personagem
+	for i in 3:
+		draw_rect(Rect2(-2 + i, -19 + i, 5 - 2 * i, 1), cor)
 	draw_rect(Rect2(-8, -14, 16, 3), Color("1a1c2c"))
-	draw_rect(Rect2(-7, -13, 14.0 * vida / vida_max, 1), cor)
+	draw_rect(Rect2(-7, -13, roundf(14.0 * vida / vida_max), 1), cor)

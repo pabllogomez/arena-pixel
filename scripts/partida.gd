@@ -663,17 +663,11 @@ func criar_brilho(pos: Vector2) -> void:
 func mostrar_texto(pos: Vector2, texto: String, cor: Color, forte := false) -> void:
 	## Texto que salta do personagem (dano, XP, melhoria). `forte` = golpe grande.
 	_evento(["texto", pos.x, pos.y, texto, cor.to_html(), forte])
-	var l := Label.new()
-	l.text = texto
-	var ls := LabelSettings.new()
-	ls.font_size = 12 if forte else 8
-	ls.font_color = cor
-	ls.outline_size = 3
-	ls.outline_color = Color("1a1c2c")
-	l.label_settings = ls
-	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	l.size = Vector2(80, 14)
-	l.position = (pos - Vector2(40, 7) + Vector2(randf_range(-5.0, 5.0), 0.0)).round()
+	var l: Node2D = preload("res://scripts/texto_flutuante.gd").new()
+	l.texto = texto
+	l.tam = UI.M if forte else UI.P
+	l.cor = cor
+	l.position = (pos + Vector2(randf_range(-5.0, 5.0), 0.0)).round()
 	l.z_index = 10
 	l.material = masmorra.material_sem_sombra()
 	entidades.add_child(l)

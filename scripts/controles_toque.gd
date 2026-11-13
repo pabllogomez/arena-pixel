@@ -64,8 +64,9 @@ func _botoes() -> Dictionary:
 		b["pular"] = {"centro": Vector2(tela.x - 40, tela.y - 46), "raio": 28.0, "acao": "p1_pular", "seta": Vector2.UP}
 	elif modo == "fim":
 		var c := get_viewport().get_visible_rect().size / 2.0
-		b["revanche"] = {"rect": Rect2(c.x - 92, c.y + 32, 88, 18), "acao": "menu_ok", "simbolo": "REVANCHE"}
-		b["menu"] = {"rect": Rect2(c.x + 4, c.y + 32, 88, 18), "acao": "menu_voltar", "simbolo": "MENU"}
+		c = c.round()
+		b["revanche"] = {"rect": Rect2(c.x - 92, c.y + 34, 88, 18), "acao": "menu_ok", "simbolo": "REVANCHE"}
+		b["menu"] = {"rect": Rect2(c.x + 4, c.y + 34, 88, 18), "acao": "menu_voltar", "simbolo": "MENU"}
 	return b
 
 
@@ -87,7 +88,7 @@ func _botao_em(pos: Vector2) -> String:
 func _rect_pausa() -> Rect2:
 	## Botão de pausa ao lado do cronômetro (só durante a partida).
 	var tela := get_viewport().get_visible_rect().size
-	return Rect2(tela.x / 2.0 + 28, 1, 17, 15)
+	return Rect2(roundf(tela.x / 2.0) + 25, 0, 17, 17)
 
 
 func _na_pausa(pos: Vector2) -> bool:
@@ -244,7 +245,7 @@ func _draw() -> void:
 		_desenhar_botao_pausa()
 	if not Jogo.toque:
 		return
-	var fonte := ThemeDB.fallback_font
+	var fonte: Font = UI.FONTE
 	var tela := get_viewport().get_visible_rect().size
 	var janela := DisplayServer.window_get_size()
 	if janela.y > janela.x:
@@ -263,9 +264,7 @@ func _draw() -> void:
 			if not b.has("simbolo"):
 				continue  # áreas invisíveis (opções do HUD)
 			var r: Rect2 = b["rect"]
-			draw_rect(r, Color(0, 0, 0, 0.5))
-			draw_rect(r, cor * 2.0, false, 1.0)
-			_texto(fonte, r.get_center(), b["simbolo"], 8, COR_SIMBOLO)
+			UI.botao(self, r, b["simbolo"], nome in apertados, nome == "revanche")
 		else:
 			var c: Vector2 = b["centro"]
 			var raio: float = b["raio"]
@@ -295,13 +294,11 @@ func _desenhar_joystick() -> void:
 
 func _desenhar_botao_pausa() -> void:
 	var r := _rect_pausa()
-	draw_rect(r, Color(0, 0, 0, 0.6))
-	draw_rect(r, Color(1, 1, 1, 0.3), false, 1.0)
-	var c := r.get_center()
-	draw_rect(Rect2(c + Vector2(-4, -4), Vector2(3, 8)), Color(1, 1, 1, 0.85))
-	draw_rect(Rect2(c + Vector2(1, -4), Vector2(3, 8)), Color(1, 1, 1, 0.85))
+	UI.moldura(self, r, Color(UI.TINTA, 0.92))
+	var c := r.position + Vector2(8, 8)
+	draw_rect(Rect2(c + Vector2(-3, -3), Vector2(2, 7)), UI.BRANCO)
+	draw_rect(Rect2(c + Vector2(2, -3), Vector2(2, 7)), UI.BRANCO)
 
 
-func _texto(fonte: Font, pos: Vector2, texto: String, tam: int, cor: Color) -> void:
-	var larg := fonte.get_string_size(texto, HORIZONTAL_ALIGNMENT_LEFT, -1, tam).x
-	draw_string(fonte, pos + Vector2(-larg / 2.0, tam / 3.0), texto, HORIZONTAL_ALIGNMENT_LEFT, -1, tam, cor)
+func _texto(_fonte: Font, pos: Vector2, texto: String, tam: int, cor: Color) -> void:
+	UI.texto(self, pos, texto, tam, cor)

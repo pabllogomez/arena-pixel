@@ -37,4 +37,8 @@ Os testes rodam no CI antes de cada publicação; se falharem, nada é publicado
 - `resources/classes/*.tres`: atributos das classes (balanceamento).
 - `scripts/rede.gd` (autoload Rede) + `scripts/lobby.gd`: jogo em rede 1x1 por WebRTC com códigos de copiar e colar; o anfitrião simula, o convidado só desenha (`partida.rede`).
 - `scripts/masmorra.gd`: tochas, iluminação (opcional) e pingos.
+- `scripts/particulas.gd`: partículas em pixel art (um nó desenha todas). Efeitos nomeados em `fx()`; a partida chama `partida.fx(nome, pos, a, b)`, que também repassa ao convidado em rede.
+- `scripts/ui.gd`: peças de interface (fonte pixel Tiny5 em `assets/fontes/`, texto com contorno, molduras, botões, barras, ícones). A fonte só fica nítida em múltiplos de 8 px (`UI.P`, `UI.M`, `UI.G`).
+- `scripts/hud.gd`, `scripts/menu.gd`, `scripts/fundo_menu.gd`, `scripts/cortina.gd`: HUD, menu na masmorra e transição entre telas.
+- Efeitos visuais não podem mudar regras: confirmar com os testes e com `tools/confrontos.sh`.
 - Arte/sons provisórios gerados por `tools/gerar_arte.py`; músicas por `tools/gerar_musica.py` (numpy + ffmpeg).

@@ -21,7 +21,7 @@ Por baixo é WebRTC ponto a ponto, sem servidor: quem criou a partida "roda" o j
 | Descer da plataforma | `S` | `↓` |
 | Escolher melhoria | `Q` / `E` | `1` / `2` do teclado numérico (ou `K` / `L`) |
 
-**Pausa:** botão ⏸ ao lado do cronômetro (ou `Esc`/`P`): continuar, tela cheia, som, iluminação e voltar ao menu. As mesmas opções ficam em **OPÇÕES** no menu inicial (atalhos: `F` tela cheia, `M` som, `I` iluminação). As escolhas ficam salvas. No celular: encoste o dedo em qualquer ponto da metade esquerda e aparece um joystick (para os lados anda, puxando para baixo desce da plataforma); o botão de pular fica na direita, e as melhorias são escolhidas tocando na opção.
+**Pausa:** botão ⏸ ao lado do cronômetro (ou `Esc`/`P`): continuar, tela cheia, som, iluminação, tremor e clarões, e voltar ao menu. As mesmas opções ficam em **OPÇÕES** no menu inicial (atalhos: `F` tela cheia, `M` som, `I` iluminação). As escolhas ficam salvas. No celular: encoste o dedo em qualquer ponto da metade esquerda e aparece um joystick (para os lados anda, puxando para baixo desce da plataforma); o botão de pular fica na direita, e as melhorias são escolhidas tocando na opção.
 Controles (gamepad) também funcionam.
 
 ### Regras
@@ -68,8 +68,13 @@ scripts/
   lobby.gd             tela "JOGAR EM REDE"
   controles_toque.gd   joystick e botões na tela para celular, ícones de opções
   masmorra.gd          tochas, iluminação e pingos
+  particulas.gd        partículas em pixel art (faíscas, poeira, estilhaços...)
+  ui.gd                peças de interface: fonte pixel, molduras, botões, barras
+  fundo_menu.gd        fundo animado das telas de menu
+  cortina.gd           transição em blocos entre as telas
   projetil.gd, melhorias.gd, classe_dados.gd, hud.gd, menu.gd, nevoa.gd, main.gd, jogo.gd
 resources/classes/     atributos das classes
+assets/fontes/         fonte pixel Tiny5 (licença SIL OFL, texto em Tiny5-OFL.txt)
 assets/                arte e sons PROVISÓRIOS (gerados por tools/gerar_arte.py; músicas em tools/gerar_musica.py)
 tools/teste.gd         teste automático (mapas + partidas bot x bot + equilíbrio)
 tools/teste_rede.gd    teste do jogo em rede (duas instâncias conectadas)
