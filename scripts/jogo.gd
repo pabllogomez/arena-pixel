@@ -18,6 +18,10 @@ var som := true
 var iluminacao := true
 ## Tremor de tela, clarões e a pausa curtinha nos golpes fortes
 var impacto := true
+## Celular: mostra o joystick e o botão de pulo desenhados na tela (padrão: tela limpa)
+var botoes_tela := false
+## O tutorial dos controles de toque já foi mostrado neste aparelho
+var tutorial_visto := false
 const ARQUIVO_OPCOES := "user://opcoes.cfg"
 
 var _musica: AudioStreamPlayer
@@ -103,6 +107,32 @@ func definir_iluminacao(ligada: bool) -> void:
 	opcoes_mudaram.emit()
 
 
+func definir_botoes_tela(ligado: bool) -> void:
+	botoes_tela = ligado
+	_salvar_opcoes()
+	opcoes_mudaram.emit()
+
+
+func marcar_tutorial_visto() -> void:
+	if not tutorial_visto:
+		tutorial_visto = true
+		_salvar_opcoes()
+
+
+func tela_cheia() -> bool:
+	return DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_FULLSCREEN
+
+
+func alternar_tela_cheia() -> void:
+	if tela_cheia():
+		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+	else:
+		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
+		# No Android, também tenta travar a tela na horizontal
+		if OS.has_feature("web"):
+			JavaScriptBridge.eval("try { screen.orientation.lock('landscape').catch(function(){}); } catch (e) {}")
+
+
 func definir_impacto(ligado: bool) -> void:
 	impacto = ligado
 	_salvar_opcoes()
@@ -147,6 +177,8 @@ func _carregar_opcoes() -> void:
 		som = cfg.get_value("opcoes", "som", true)
 		iluminacao = cfg.get_value("opcoes", "iluminacao", true)
 		impacto = cfg.get_value("opcoes", "impacto", true)
+		botoes_tela = cfg.get_value("opcoes", "botoes_tela", false)
+		tutorial_visto = cfg.get_value("opcoes", "tutorial_visto", false)
 	AudioServer.set_bus_mute(0, not som)
 
 
@@ -155,6 +187,8 @@ func _salvar_opcoes() -> void:
 	cfg.set_value("opcoes", "som", som)
 	cfg.set_value("opcoes", "iluminacao", iluminacao)
 	cfg.set_value("opcoes", "impacto", impacto)
+	cfg.set_value("opcoes", "botoes_tela", botoes_tela)
+	cfg.set_value("opcoes", "tutorial_visto", tutorial_visto)
 	cfg.save(ARQUIVO_OPCOES)
 
 

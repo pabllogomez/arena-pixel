@@ -49,6 +49,10 @@ func _rect_opcao(i: int) -> Rect2:
 	return Rect2(roundf(size.x / 2.0 - LARG_OPCAO / 2.0), Y_OPCOES + i * ESPACO_OPCOES, LARG_OPCAO, ALT_OPCAO)
 
 
+func _rect_tela_cheia() -> Rect2:
+	return Rect2(size.x - 26.0, 6, 20, 20)
+
+
 func _rect_voltar() -> Rect2:
 	return Rect2(6, 6, 56, 16)
 
@@ -59,6 +63,10 @@ func _gui_input(event: InputEvent) -> void:
 	# Toque ou clique: escolhe a opção tocada (o toque vira clique automaticamente)
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 		var pos: Vector2 = event.position - _deslocamento()
+		if _rect_tela_cheia().grow(4).has_point(pos):
+			Jogo.tocar("pulo")
+			Jogo.alternar_tela_cheia()
+			return
 		if _tela == "dificuldade" and _rect_voltar().grow(3).has_point(pos):
 			_mudar_tela("modo", 0)
 			return
@@ -143,9 +151,10 @@ func _draw() -> void:
 
 	if _tela == "dificuldade":
 		UI.botao(self, _rect_voltar(), "VOLTAR", false)
+	_desenhar_tela_cheia()
 	if Jogo.toque:
 		UI.texto(self, Vector2(cx, 238), "Toque em uma opção", UI.P, UI.BORDA)
-		UI.texto(self, Vector2(cx, 249), "Joystick: dedo na esquerda   Pulo: na direita   Melhorias: toque na carta", UI.P, Color("41a6f6"))
+		UI.texto(self, Vector2(cx, 249), "Arraste na esquerda: andar    Toque na direita: pular    Melhorias: toque na carta", UI.P, Color("41a6f6"))
 		UI.texto(self, Vector2(cx, 260), "O ataque é automático. Partidas de 3 minutos + Morte Súbita.", UI.P, UI.BORDA)
 		return
 	var ajuda := "W/S ou ↑/↓: escolher     ESPAÇO: confirmar"
@@ -202,3 +211,27 @@ func _desenhar_classes(cx: float) -> void:
 		var sobe := roundf(pow(1.0 - e, 2.0) * 10.0)
 		draw_texture_rect_region(_texturas[i], Rect2(x - 16, 85 - sobe, 32, 32), Rect2(quadro * 16, 0, 16, 16))
 		UI.texto(self, Vector2(x, 128), Jogo.CLASSES[i].to_upper(), UI.P, UI.BORDA)
+
+
+func _desenhar_tela_cheia() -> void:
+	## Botão de tela cheia no canto: quatro cantoneiras (para fora = ampliar,
+	## para dentro = sair da tela cheia).
+	var r := _rect_tela_cheia()
+	var cheia := Jogo.tela_cheia()
+	UI.moldura(self, r, Color(UI.TINTA, 0.92), UI.OURO if cheia else UI.BORDA, UI.BRANCO if cheia else UI.LUZ)
+	var c := r.position + Vector2(10, 10)
+	for sx in [-1, 1]:
+		for sy in [-1, 1]:
+			# Ampliar: quina no canto de fora, braços para dentro. Reduzir: o contrário.
+			var k := 2 if cheia else 5
+			var passo := 1 if cheia else -1
+			for i in 3:
+				draw_rect(Rect2(_px(c.x, sx, k + passo * i), _px(c.y, sy, k), 1, 1), UI.BRANCO)
+				draw_rect(Rect2(_px(c.x, sx, k), _px(c.y, sy, k + passo * i), 1, 1), UI.BRANCO)
+	if not Jogo.toque:
+		UI.tecla(self, Vector2(r.position.x - 9.0, r.position.y + 10.0), "F")
+
+
+func _px(centro: float, sinal: int, k: int) -> float:
+	## Coluna/linha do k-ésimo pixel a partir do centro, para o lado `sinal`.
+	return centro + k if sinal > 0 else centro - k - 1

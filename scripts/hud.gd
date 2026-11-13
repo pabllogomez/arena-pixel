@@ -182,6 +182,8 @@ func _cronometro() -> void:
 func _contagem() -> void:
 	var centro := (size / 2.0).round()
 	var c: float = partida.contagem
+	if partida.tutorial_aberto:
+		return
 	if c > 0.0:
 		var batida := 1.0 - (c - floorf(c))  # 0 no começo de cada número
 		if c >= 3.0:

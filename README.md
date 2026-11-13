@@ -21,11 +21,11 @@ Por baixo é WebRTC ponto a ponto, sem servidor: quem criou a partida "roda" o j
 | Descer da plataforma | `S` | `↓` |
 | Escolher melhoria | `Q` / `E` | `1` / `2` do teclado numérico (ou `K` / `L`) |
 
-**Pausa:** botão ⏸ ao lado do cronômetro (ou `Esc`/`P`): continuar, tela cheia, som, iluminação, tremor e clarões, e voltar ao menu. As mesmas opções ficam em **OPÇÕES** no menu inicial (atalhos: `F` tela cheia, `M` som, `I` iluminação). As escolhas ficam salvas. No celular: encoste o dedo em qualquer ponto da metade esquerda e aparece um joystick (para os lados anda, puxando para baixo desce da plataforma); o botão de pular fica na direita, e as melhorias são escolhidas tocando na opção.
+**Pausa:** botão ⏸ ao lado do cronômetro (ou `Esc`/`P`): continuar, tela cheia, som, iluminação, tremor e clarões, e voltar ao menu. As mesmas opções ficam em **OPÇÕES** no menu inicial (atalhos: `F` tela cheia, `M` som, `I` iluminação). As escolhas ficam salvas. No celular a tela fica limpa: arraste o dedo em qualquer ponto da metade esquerda para andar (puxando para baixo desce da plataforma) e toque em qualquer ponto da metade direita para pular; as melhorias são escolhidas tocando na carta. Um tutorial explica isso antes da primeira partida (dá para rever em **OPÇÕES → COMO JOGAR**), e **Botões na tela** em OPÇÕES traz de volta o joystick e o botão de pulo desenhados. O botão de tela cheia fica no canto do menu inicial.
 Controles (gamepad) também funcionam.
 
 ### Regras
-- **Todos começam como Recruta:** fraco, ataca corpo a corpo e causa pouco dano em jogadores. Os monstros de nível 1 só revidam, e matar um monstro cura 8% da vida. A classe chega em ~1 minuto.
+- **Todos começam como Recruta:** fraco, ataca corpo a corpo e causa pouco dano em jogadores. Os monstros de nível 1 só revidam, e matar um monstro cura 8% da vida. A classe chega depois de 6 monstros (uns 40 segundos).
 - **No nível 2**, o Recruta vira uma **classe sorteada**, sem repetir a do oponente. Dos níveis 3 em diante, cada nível oferece 2 melhorias (cartas grandes na lateral; toque, clique ou `Q`/`E`).
 - **O ataque é automático:** sai sozinho quando um inimigo entra no alcance.
 - **Monstros** dão XP e ficam mais fortes, rápidos e agressivos conforme o maior nível entre os jogadores. A cor indica a força: roxo, depois verde, laranja e vermelho.

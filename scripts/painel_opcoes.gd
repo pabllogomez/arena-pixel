@@ -10,10 +10,11 @@ signal sair_para_menu
 var na_pausa := true
 
 var _sel := 0
+var _tutorial: Control = null
 var _quadros := 0  # ignora o teclado no 1º quadro (a tecla que abriu o painel)
 const LARG := 190.0
 const ALT_ITEM := 18.0
-const ESPACO := 4.0
+const ESPACO := 3.0
 
 
 func _ready() -> void:
@@ -30,6 +31,9 @@ func _itens() -> Array:
 	itens.append(["som", "Som: " + ("LIGADO" if Jogo.som else "DESLIGADO")])
 	itens.append(["luz", "Iluminação: " + ("LIGADA" if Jogo.iluminacao else "DESLIGADA")])
 	itens.append(["impacto", "Tremor e clarões: " + ("LIGADOS" if Jogo.impacto else "DESLIGADOS")])
+	if Jogo.toque:
+		itens.append(["botoes", "Botões na tela: " + ("LIGADOS" if Jogo.botoes_tela else "DESLIGADOS")])
+		itens.append(["como_jogar", "COMO JOGAR"])
 	itens.append(["menu", "VOLTAR AO MENU INICIAL" if na_pausa else "VOLTAR"])
 	return itens
 
@@ -59,6 +63,11 @@ func _acionar(id: String) -> void:
 			Jogo.definir_iluminacao(not Jogo.iluminacao)
 		"impacto":
 			Jogo.definir_impacto(not Jogo.impacto)
+		"botoes":
+			Jogo.definir_botoes_tela(not Jogo.botoes_tela)
+		"como_jogar":
+			_tutorial = preload("res://scripts/tutorial.gd").new()
+			add_child(_tutorial)
 		"menu":
 			if na_pausa:
 				sair_para_menu.emit()
@@ -80,7 +89,7 @@ func _gui_input(event: InputEvent) -> void:
 func _process(_delta: float) -> void:
 	_quadros += 1
 	queue_redraw()
-	if _quadros < 2:
+	if _quadros < 2 or (_tutorial != null and is_instance_valid(_tutorial)):
 		return
 	var itens := _itens()
 	if Input.is_action_just_pressed("menu_cima"):

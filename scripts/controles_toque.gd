@@ -61,7 +61,11 @@ func _botoes() -> Dictionary:
 	var b := {}
 	if modo == "jogo":
 		var tela := get_viewport().get_visible_rect().size
-		b["pular"] = {"centro": Vector2(tela.x - 40, tela.y - 46), "raio": 28.0, "acao": "p1_pular", "seta": Vector2.UP}
+		if Jogo.botoes_tela:
+			b["pular"] = {"centro": Vector2(tela.x - 40, tela.y - 46), "raio": 28.0, "acao": "p1_pular", "seta": Vector2.UP}
+		else:
+			# Tela limpa: a metade direita inteira é o botão de pular (invisível)
+			b["pular"] = {"rect": Rect2(tela.x / 2.0 + 4.0, 0, tela.x / 2.0, tela.y), "acao": "p1_pular"}
 	elif modo == "fim":
 		var c := get_viewport().get_visible_rect().size / 2.0
 		c = c.round()
@@ -92,7 +96,7 @@ func _rect_pausa() -> Rect2:
 
 
 func _na_pausa(pos: Vector2) -> bool:
-	return modo == "jogo" and _rect_pausa().grow(3).has_point(pos)
+	return modo == "jogo" and not partida.tutorial_aberto and _rect_pausa().grow(3).has_point(pos)
 
 
 func _sobre_cartas(pos: Vector2) -> bool:
@@ -134,7 +138,7 @@ func _input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
 		match event.physical_keycode:
 			KEY_F:
-				alternar_tela_cheia()
+				Jogo.alternar_tela_cheia()
 			KEY_M:
 				Jogo.definir_som(not Jogo.som)
 			KEY_I:
@@ -143,6 +147,8 @@ func _input(event: InputEvent) -> void:
 		return  # deixa o clique chegar ao botão/carta
 	if modo == "menu" or modo == "pausa":
 		return
+	if modo == "jogo" and partida.tutorial_aberto:
+		return  # o toque fecha o tutorial; ainda não é comando do jogo
 	if event is InputEventScreenTouch:
 		var t := event as InputEventScreenTouch
 		if t.pressed:
@@ -241,7 +247,7 @@ func soltar_tudo() -> void:
 # ------------------------------------------------------------------ Desenho
 
 func _draw() -> void:
-	if modo == "jogo":
+	if modo == "jogo" and not partida.tutorial_aberto:
 		_desenhar_botao_pausa()
 	if not Jogo.toque:
 		return
@@ -278,18 +284,21 @@ func _draw() -> void:
 
 func _desenhar_joystick() -> void:
 	if _joy_dedo < 0:
+		if not Jogo.botoes_tela:
+			return  # tela limpa: nada desenhado enquanto ninguém toca
 		# Dica fraca de onde fica o controle
 		var c := Vector2(60, get_viewport().get_visible_rect().size.y - 48)
 		draw_arc(c, JOY_RAIO, 0.0, TAU, 32, Color(1, 1, 1, 0.12), 1.0)
 		draw_circle(c, 9.0, Color(1, 1, 1, 0.08))
 		return
-	draw_circle(_joy_centro, JOY_RAIO, Color(1, 1, 1, 0.12))
-	draw_arc(_joy_centro, JOY_RAIO, 0.0, TAU, 32, Color(1, 1, 1, 0.35), 1.0)
+	var forte := 1.0 if Jogo.botoes_tela else 0.5  # na tela limpa o joystick aparece mais fraco
+	draw_circle(_joy_centro, JOY_RAIO, Color(1, 1, 1, 0.12 * forte))
+	draw_arc(_joy_centro, JOY_RAIO, 0.0, TAU, 32, Color(1, 1, 1, 0.35 * forte), 1.0)
 	# Marca de "descer" embaixo da base
 	var baixo := _joy_centro + Vector2(0, JOY_RAIO - 5)
 	var cor_baixo := Color(1, 1, 1, 0.7 if _joy_descendo else 0.25)
 	draw_colored_polygon(PackedVector2Array([baixo + Vector2(-3, -2), baixo + Vector2(3, -2), baixo + Vector2(0, 2)]), cor_baixo)
-	draw_circle(_joy_pos, 10.0, Color(1, 1, 1, 0.45))
+	draw_circle(_joy_pos, 10.0, Color(1, 1, 1, 0.45 * forte))
 
 
 func _desenhar_botao_pausa() -> void:

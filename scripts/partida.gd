@@ -62,6 +62,8 @@ var particulas: Particulas
 var _quadros_impacto := 0
 var _camera_lenta := false
 var _t_confete := 0.0
+## Tutorial de toque aberto (segura a contagem inicial nas partidas locais)
+var tutorial_aberto := false
 
 var mapa: Dictionary
 var nav: Navegacao
@@ -157,6 +159,8 @@ func iniciar(config: Dictionary) -> void:
 			l.process_mode = Node.PROCESS_MODE_DISABLED
 		jogadores[n] = l
 
+	if Jogo.toque and not Jogo.tutorial_visto:
+		_abrir_tutorial()
 	if rede == "convidado":
 		return  # quem simula monstros, tempo e regras é o anfitrião
 	_sortear_momentos_bola(rng)
@@ -173,6 +177,17 @@ func iniciar(config: Dictionary) -> void:
 		var remoto := config.duplicate()
 		remoto["rede"] = "convidado"
 		Rede.iniciar_partida_remota(remoto)
+
+
+func _abrir_tutorial() -> void:
+	## Primeira partida no celular: explica os gestos antes da contagem.
+	var t: Control = preload("res://scripts/tutorial.gd").new()
+	t.partida = self
+	tutorial_aberto = true
+	t.fechado.connect(func() -> void:
+		tutorial_aberto = false
+		Jogo.marcar_tutorial_visto())
+	$HUD.add_child(t)
 
 
 func _congelar(sim: bool) -> void:
@@ -247,7 +262,7 @@ func _process(delta: float) -> void:
 	if rede == "convidado":
 		_process_convidado(delta)
 		return
-	if contagem > -1.0 and (not pausado or rede != ""):
+	if contagem > -1.0 and (not pausado or rede != "") and not (tutorial_aberto and rede == ""):
 		var antes := contagem
 		contagem -= delta
 		if antes > 0.0 and contagem <= 0.0:
