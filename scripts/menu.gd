@@ -161,23 +161,29 @@ func _draw() -> void:
 
 func _desenhar_titulo(cx: float) -> void:
 	## Cada letra cai do alto, levanta poeira ao pousar e depois ondula de leve.
-	var x := cx - roundf(UI.largura(TITULO, TAM_TITULO) / 2.0)
-	for i in TITULO.length():
-		var letra := TITULO[i]
-		var larg := UI.largura(letra, TAM_TITULO)
-		var e := clampf((_t - 0.1 - i * 0.05) / 0.2, 0.0, 1.0)
-		if letra != " " and e > 0.0:
-			var y := Y_TITULO - roundf(pow(1.0 - e, 2.0) * 70.0)
-			if e >= 1.0:
-				if not _pousou[i]:
-					_pousou[i] = true
-					_fundo.poeira(_deslocamento() + Vector2(x + larg / 2.0, Y_TITULO + 18.0))
-				y += roundf(sin(_t * 2.2 + i * 0.6) * 1.5)
-			var cor := UI.OURO if i < 5 else Color("73eff7")
-			var sombra := Color("b13e53") if i < 5 else Color("3b5dc9")
-			UI.texto(self, Vector2(x, y + 5.0), letra, TAM_TITULO, sombra, UI.ESQ)
-			UI.texto(self, Vector2(x, y), letra, TAM_TITULO, cor, UI.ESQ, false)
-		x += larg
+	## Duas passadas: primeiro o contorno e a sombra de todas as letras, depois
+	## as cores (senão o contorno de uma letra cobre a vizinha).
+	var x0 := cx - roundf(UI.largura(TITULO, TAM_TITULO) / 2.0)
+	for passada in 2:
+		var x := x0
+		for i in TITULO.length():
+			var letra := TITULO[i]
+			var larg := UI.largura(letra, TAM_TITULO)
+			var e := clampf((_t - 0.1 - i * 0.05) / 0.2, 0.0, 1.0)
+			if letra != " " and e > 0.0:
+				var y := Y_TITULO - roundf(pow(1.0 - e, 2.0) * 70.0)
+				if e >= 1.0:
+					if not _pousou[i]:
+						_pousou[i] = true
+						_fundo.poeira(_deslocamento() + Vector2(x + larg / 2.0, Y_TITULO + 18.0))
+					y += roundf(sin(_t * 2.2 + i * 0.6) * 1.5)
+				if passada == 0:
+					var sombra := Color("5d275d") if i < 5 else Color("29366f")
+					UI.texto(self, Vector2(x, y + 5.0), letra, TAM_TITULO, sombra, UI.ESQ)
+					UI.texto(self, Vector2(x, y), letra, TAM_TITULO, UI.TINTA, UI.ESQ)
+				else:
+					UI.texto(self, Vector2(x, y), letra, TAM_TITULO, UI.OURO if i < 5 else Color("73eff7"), UI.ESQ, false)
+			x += larg
 
 
 func _desenhar_classes(cx: float) -> void:
