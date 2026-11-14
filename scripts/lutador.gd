@@ -23,6 +23,9 @@ const GUARDA_REAL := 0.9
 ## Dash: arrancada horizontal curta (sem gravidade), igual para todas as classes.
 const DASH_DURACAO := 0.15
 const DASH_MULT := 3.0       ## velocidade durante o dash = DASH_MULT x velocidade da classe
+## Críticos (ver _mult_critico)
+const CRITICO_COSTAS := 3.0
+const CRITICO_DASH_RECRUTA := 2.0
 const DASH_RECARGA := 1.2    ## segundos entre um dash e o próximo (contados do início)
 const TEMPO_BUFFER_DASH := 0.1
 const DASH_FANTASMA_VIDA := 0.18
@@ -566,7 +569,7 @@ func _onda_pouso() -> void:
 		var dif: Vector2 = a.global_position - global_position
 		if dif.length() > dados.raio_pouso:
 			continue
-		causar_dano(a, dano * dados.dano_pouso * mult_dano_efeito * _mult_furia_dano())
+		causar_dano(a, dano * dados.dano_pouso * mult_dano_efeito * _mult_furia_dano(), "", false)
 		var s := signf(dif.x) if dif.x != 0.0 else 1.0
 		if a is Lutador:
 			a.velocity.x += s * dados.empurrao_pouso * (1.0 - a.dados.resistencia_empurrao) * mult_empurrao
@@ -682,10 +685,44 @@ func _golpear(lado: float) -> void:
 		partida.tremer(0.9)
 
 
-func causar_dano(alvo, qtd: float, fonte := "") -> void:
+func causar_dano(alvo, qtd: float, fonte := "", critico_permitido := true) -> void:
+	if critico_permitido and fonte != "lanca":
+		var mult := _mult_critico(alvo)
+		if mult > 1.0:
+			qtd *= mult
+			partida.mostrar_texto(alvo.global_position + Vector2(0, -22), "CRÍTICO!", Color("ef7d57"), true)
 	alvo.receber_dano(qtd, self, fonte)
 	if roubo_vida > 0.0:
 		curar(qtd * roubo_vida)
+
+
+func _mult_critico(alvo) -> float:
+	## Crítico: x3 acertando o alvo pelas costas (qualquer personagem); x2 para
+	## o Recruta que golpeia durante ou logo depois do dash. Não acumulam.
+	var mult := 1.0
+	if _recem_dash() and eh_recruta:
+		mult = CRITICO_DASH_RECRUTA
+	if _de_costas(alvo):
+		mult = maxf(mult, CRITICO_COSTAS)
+	return mult
+
+
+func _de_costas(alvo) -> bool:
+	## O alvo olha para um lado e o atacante está do outro.
+	var olhar := 0.0
+	if alvo is Lutador:
+		olhar = -1.0 if alvo.sprite.flip_h else 1.0
+	elif alvo.get("_dir") != null:
+		olhar = signf(float(alvo.get("_dir")))
+	if olhar == 0.0:
+		return false
+	var lado := signf(global_position.x - alvo.global_position.x)
+	return lado != 0.0 and lado != olhar
+
+
+func _recem_dash() -> bool:
+	## Em dash ou até 0,35 s depois de começar um.
+	return _dash_t > 0.0 or _dash_cd > DASH_RECARGA - 0.35
 
 
 func _investida(lado: float) -> void:
