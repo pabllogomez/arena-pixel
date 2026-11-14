@@ -20,3 +20,4 @@ intervalo_ataque = 0.42
 velocidade_projetil = 250.0
 aceleracao = 1875.0
 atrito = 2000.0
+traco_alcance = 0.22

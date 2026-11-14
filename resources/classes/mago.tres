@@ -21,3 +21,4 @@ velocidade_projetil = 156.0
 dano_minimo_magia = 0.25
 aceleracao = 875.0
 atrito = 1125.0
+traco_dano = 0.1

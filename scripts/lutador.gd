@@ -59,6 +59,11 @@ var intervalo := 1.0
 var velocidade_projetil := 200.0
 var max_lacaios := 0
 var mult_lacaio := 1.0
+## Traço do Recruta no andar 1 da torre (ver ClasseDados.traco_*): classe do traço
+## de lacaio (null = sem) e tempo até a próxima invocação
+var traco_lacaio: ClasseDados = null
+var _lacaio_traco: Minion = null
+var _t_lacaio_traco := 2.0
 var flechas_extra := 0
 var roubo_vida := 0.0
 var raio_explosao := 0.0
@@ -148,6 +153,7 @@ func _aplicar_classe(d: ClasseDados) -> void:
 	intervalo = d.intervalo_ataque
 	velocidade_projetil = d.velocidade_projetil
 	max_lacaios = d.max_lacaios
+	traco_lacaio = null
 	if sprite != null:
 		sprite.texture = d.textura_p1 if numero == 1 else d.textura_p2
 
@@ -209,7 +215,32 @@ func importar_estado(e: Dictionary) -> void:
 	for i in int(e.get("auto_melhorias", 0)):
 		var par := Melhorias.sortear(self)
 		Melhorias.aplicar(self, par[ControleBot.indice_melhoria(dados.tipo_ataque, par, ControleBot.PARAMS[e.get("dif", 1)]["melhor_melhoria"])])
+	if c < 0 and e.has("traco"):
+		_aplicar_traco(Jogo.dados_classe(e["traco"]))
 	vida = vida_max * clampf(e.get("vida", 1.0), 0.0, 1.0)
+
+
+func _aplicar_traco(d: ClasseDados) -> void:
+	## Traço sutil do Recruta (torre, andar 1): bônus orientados a dados da classe
+	## escolhida. Some sozinho quando o Recruta ganha a classe (_aplicar_classe).
+	vida_max *= 1.0 + d.traco_vida
+	dano *= 1.0 + d.traco_dano
+	alcance *= 1.0 + d.traco_alcance
+	traco_lacaio = d if d.traco_lacaio > 0.0 else null
+
+
+func _atualizar_traco_lacaio(delta: float) -> void:
+	## Lacaio pequeno do traço: no máximo 1 vivo; reinvoca após a espera.
+	if traco_lacaio == null or not ativo:
+		return
+	if is_instance_valid(_lacaio_traco) and _lacaio_traco.vivo:
+		return
+	if _lacaio_traco != null:
+		_lacaio_traco = null
+		_t_lacaio_traco = traco_lacaio.traco_lacaio_espera
+	_t_lacaio_traco -= delta
+	if _t_lacaio_traco <= 0.0:
+		_lacaio_traco = partida.criar_lacaio(self, traco_lacaio, traco_lacaio.traco_lacaio)
 
 
 # ------------------------------------------------------------------ Ataque atual
@@ -457,6 +488,7 @@ func _physics_process(delta: float) -> void:
 		_atualizar_visual_efeito()
 	_animar(delta)
 
+	_atualizar_traco_lacaio(delta)
 	if ativo:
 		_cd_ataque -= delta
 		if _cd_ataque <= 0.0:

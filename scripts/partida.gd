@@ -660,11 +660,17 @@ func criar_projetil(dono: Lutador, pos: Vector2, vel: Vector2, dano: float, alca
 	entidades.add_child(p)
 
 
-func criar_lacaio(rei: Lutador) -> void:
+func criar_lacaio(rei: Lutador, base: ClasseDados = null, fracao := 1.0) -> Minion:
+	## `base`/`fracao`: lacaio reduzido do traço do Recruta (vida e dano de um lacaio
+	## comum de `base` x fracao). Sem eles, o lacaio normal do Rei.
 	var m: Minion = CENA_MINION.instantiate()
-	m.configurar(self, rei.equipe, rei, TEX_LACAIO[rei.equipe],
-			rei.ataque.vida_lacaio * rei.mult_lacaio, rei.atk_dano() * rei.mult_lacaio,
-			rei.ataque.velocidade_lacaio, 2000.0, 2)
+	if base == null:
+		m.configurar(self, rei.equipe, rei, TEX_LACAIO[rei.equipe],
+				rei.ataque.vida_lacaio * rei.mult_lacaio, rei.atk_dano() * rei.mult_lacaio,
+				rei.ataque.velocidade_lacaio, 2000.0, 2)
+	else:
+		m.configurar(self, rei.equipe, rei, TEX_LACAIO[rei.equipe],
+				base.vida_lacaio * fracao, base.dano * fracao, base.velocidade_lacaio, 2000.0, 2)
 	m.intervalo_ataque = 1.2
 	m.alcance_arremesso = 90.0
 	m.position = rei.position
@@ -672,6 +678,7 @@ func criar_lacaio(rei: Lutador) -> void:
 	criar_brilho(m.position)
 	fx("invocar", m.position, rei.equipe)
 	Jogo.tocar("invocar")
+	return m
 
 
 func criar_lanca(lacaio: Minion, alvo) -> void:

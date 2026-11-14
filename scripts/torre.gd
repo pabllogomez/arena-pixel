@@ -103,17 +103,25 @@ func config_andar() -> Dictionary:
 	if andar >= 2:
 		cpu["nivel"] = int(jogador["nivel"]) + 1
 		cpu["auto_melhorias"] = maxi(0, int(cpu["nivel"]) - 2)
+	var meu_estado: Dictionary = jogador.duplicate(true)
+	var info_torre := {}
+	if andar == 1:
+		# Traço sutil do personagem escolhido no Recruta do jogador (a CPU segue Recruta puro)
+		var texto := Jogo.dados_classe(personagem).texto_traco()
+		if texto != "":
+			meu_estado["traco"] = personagem
+			info_torre["traco"] = "RECRUTA %s: %s" % [nome_personagem().to_upper(), texto]
 	var adversario := "Recruta" if ordem[andar - 1] < 0 else Jogo.dados_classe(ordem[andar - 1]).nome
 	return {
 		"semente": _rng.randi(),
 		"tempo": TEMPO_LUTA,
 		"bots": {1: -1, 2: DIFICULDADES_BOT[dificuldade]},
 		"itens": false, "monstros": false, "mobs_cura": true, "morte_subita": false, "regen": false, "xp": false,
-		"lutadores": {1: jogador.duplicate(true), 2: cpu},
+		"lutadores": {1: meu_estado, 2: cpu},
 		"torre": {
 			"andar": andar, "final": e_final(), "tempo": TEMPO_LUTA,
 			"adversario": adversario, "nivel_adversario": cpu["nivel"],
-		},
+		}.merged(info_torre),
 	}
 
 

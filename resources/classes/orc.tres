@@ -31,3 +31,4 @@ furia_mult_dano = 1.05
 raio_pouso = 28.0
 dano_pouso = 0.15
 empurrao_pouso = 130.0
+traco_vida = 0.14

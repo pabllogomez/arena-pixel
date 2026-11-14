@@ -26,6 +26,13 @@ func _initialize() -> void:
 		await _equilibrio(int(args[i + 1]) if args.size() > i + 1 else 40)
 		quit(0)
 		return
+	i = args.find("--torre_andar1")
+	if i >= 0:
+		var j := args.find("--personagem")
+		var so_personagem := -1 if j < 0 else int(args[j + 1])
+		await _torre_andar1(int(args[i + 1]) if args.size() > i + 1 else 40, so_personagem, args.has("--sem_traco"))
+		quit(0)
+		return
 	i = args.find("--confrontos")
 	if i >= 0:
 		var j := args.find("--par")
@@ -51,6 +58,7 @@ func _initialize() -> void:
 	await _testar_rotulo_critico()
 	await _testar_torre()
 	await _testar_torre_fim_do_tempo()
+	await _testar_traco_recruta()
 	await _testar_partidas()
 	print("RESULTADO: ", "OK" if _falhas == 0 else "%d FALHA(S)" % _falhas)
 	quit(1 if _falhas else 0)
@@ -1688,6 +1696,132 @@ func _testar_torre_fim_do_tempo() -> void:
 	main.queue_free()
 	await process_frame
 	print("Torre (fim do tempo por % de vida, empate = CPU, sem regen/monstros/itens): ok")
+
+
+func _testar_traco_recruta() -> void:
+	## Traço sutil do Recruta do jogador no andar 1 da torre: só no jogador, só no andar 1,
+	## some ao ganhar a classe e não existe fora da torre. Rei: 1 lacaio pequeno por vez.
+	var jogo = root.get_node("Jogo")
+	var recruta: ClasseDados = jogo.dados_recruta()
+	var main = load("res://scenes/main.tscn").instantiate()
+	root.add_child(main)
+	await process_frame
+	var nomes := ["Arqueiro", "Orc", "Mago", "Rei"]
+	for pers in 4:
+		var d: ClasseDados = jogo.dados_classe(pers)
+		var rotulo := "traço do Recruta (%s)" % nomes[pers]
+		var t = _torre_script.new()
+		t.comecar(pers, 1, 11)
+		var config: Dictionary = t.config_andar()
+		if d.texto_traco() == "" or not str(config["torre"].get("traco", "")).contains(d.texto_traco()):
+			_falha("%s: o cartão do andar 1 não mostra o traço (%s)" % [rotulo, config["torre"].get("traco", "")])
+		main._nova_partida(config)
+		await process_frame
+		var p = main._atual
+		var eu = p.jogadores[1]
+		var cpu = p.jogadores[2]
+		if not eu.eh_recruta or not cpu.eh_recruta:
+			_falha("%s: os dois deveriam ser Recrutas no andar 1" % rotulo)
+		# O jogador ganha o bônus; a CPU continua Recruta puro
+		if not _perto(eu.vida_max, recruta.vida_max * (1.0 + d.traco_vida), 0.001) \
+				or not _perto(eu.dano, recruta.dano * (1.0 + d.traco_dano), 0.001) \
+				or not _perto(eu.alcance, recruta.alcance * (1.0 + d.traco_alcance), 0.001):
+			_falha("%s: atributos do jogador errados (vida %.1f, dano %.2f, alcance %.1f)" % [rotulo, eu.vida_max, eu.dano, eu.alcance])
+		if cpu.vida_max != recruta.vida_max or cpu.dano != recruta.dano or cpu.alcance != recruta.alcance or cpu.traco_lacaio != null:
+			_falha("%s: a CPU recebeu o traço" % rotulo)
+		var mudou := int(eu.vida_max != recruta.vida_max) + int(eu.dano != recruta.dano) + int(eu.alcance != recruta.alcance) + int(eu.traco_lacaio != null)
+		if mudou != 1:
+			_falha("%s: o traço deveria mexer em uma só coisa (mexeu em %d)" % [rotulo, mudou])
+		if (pers == 3) != (eu.traco_lacaio != null):
+			_falha("%s: lacaio do traço só para o Rei" % rotulo)
+		# Rei: no máximo 1 lacaio pequeno, com a fração do traço
+		if pers == 3:
+			p.contagem = -5.0
+			p._congelar(false)
+			eu.ativo = true
+			cpu.ativo = false
+			var max_vivos := 0
+			var visto = null
+			for i in 240:
+				await physics_frame
+				var n: int = p.contar_lacaios(eu)
+				max_vivos = maxi(max_vivos, n)
+				if n > 0 and visto == null:
+					for a in get_nodes_in_group("alvo"):
+						if a.get("dono") == eu:
+							visto = a
+			if visto == null:
+				_falha("%s: o lacaio não foi invocado" % rotulo)
+			else:
+				if not _perto(visto.vida_max, d.vida_lacaio * d.traco_lacaio, 0.001) or not _perto(visto.dano, d.dano * d.traco_lacaio, 0.001):
+					_falha("%s: lacaio com vida %.1f e dano %.2f" % [rotulo, visto.vida_max, visto.dano])
+				visto.receber_dano(9999.0, null)
+				var t0 := 0
+				while p.contar_lacaios(eu) == 0 and t0 < 60 * 20:
+					await physics_frame
+					t0 += 1
+					max_vivos = maxi(max_vivos, p.contar_lacaios(eu))
+				if t0 < 60 * 10 or t0 > 60 * 14:
+					_falha("%s: reinvocou após %.1f s (esperava ~%.0f)" % [rotulo, t0 / 60.0, d.traco_lacaio_espera])
+			if max_vivos > 1:
+				_falha("%s: %d lacaios vivos ao mesmo tempo" % [rotulo, max_vivos])
+		# Ao ganhar a classe o traço some
+		eu.receber_classe(d)
+		if eu.vida_max != d.vida_max or eu.dano != d.dano or eu.alcance != d.alcance or eu.traco_lacaio != null:
+			_falha("%s: o traço não sumiu ao ganhar a classe" % rotulo)
+		# Andar 2 em diante: sem traço (o jogador já tem a classe)
+		t.andar = 2
+		t.jogador = {"classe": pers, "nivel": 2, "historico": [], "vida": 1.0}
+		var c2: Dictionary = t.config_andar()
+		if c2["lutadores"][1].has("traco") or c2["torre"].has("traco"):
+			_falha("%s: o traço apareceu no andar 2" % rotulo)
+		t.free()
+
+	# Fora da torre (partida normal): sem traço
+	var normal = await _nova_partida_livre(77)
+	for n in [1, 2]:
+		var l = normal.jogadores[n]
+		if l.vida_max != recruta.vida_max or l.dano != recruta.dano or l.alcance != recruta.alcance or l.traco_lacaio != null:
+			_falha("traço do Recruta: apareceu numa partida normal")
+	normal.get_parent().queue_free()
+	main.queue_free()
+	await process_frame
+	print("Traço do Recruta (andar 1 da torre, só no jogador, some com a classe, Rei com 1 lacaio): ok")
+
+
+func _torre_andar1(n: int, so_personagem := -1, sem_traco := false) -> void:
+	## Andar 1 da torre com BOT no lugar do jogador (mesma dificuldade da CPU), usando a
+	## config que a torre gera (mob de cura, 90 s, sem Morte Súbita, decisão por % de vida).
+	## Imprime, por personagem e dificuldade (NORMAL, DIFÍCIL), a vitória do jogador e a duração.
+	## --sem_traco mede a linha de base. O tools/teste.gd roda um personagem por processo
+	## (--personagem K) para rodar os 4 em paralelo.
+	var main = load("res://scenes/main.tscn").instantiate()
+	root.add_child(main)
+	await process_frame
+	var nomes := ["Arqueiro", "Orc", "Mago", "Rei"]
+	for pers in 4:
+		if so_personagem >= 0 and pers != so_personagem:
+			continue
+		for dif in 2:
+			var vit := 0
+			var duracao := 0.0
+			for k in n:
+				var t = _torre_script.new()
+				t.comecar(pers, dif, 7000 + k)
+				var config: Dictionary = t.config_andar()
+				t.free()
+				config["bots"][1] = _torre_script.DIFICULDADES_BOT[dif]
+				if sem_traco:
+					config["lutadores"][1].erase("traco")
+					config["torre"].erase("traco")
+				var r: Dictionary = await _jogar(main, config, 60 * 110)
+				duracao += 90.0 - r.get("tempo", 0.0)
+				if r.get("vencedor", 0) == 1:
+					vit += 1
+			print("ANDAR1 %-8s %-8s vitória do jogador %3d%% (%d de %d), duração média %.0f s%s" % [
+					nomes[pers], ["NORMAL", "DIFÍCIL"][dif],
+					roundi(100.0 * vit / n), vit, n, duracao / n, " [sem traço]" if sem_traco else ""])
+	main.queue_free()
 
 
 func jogo_melhoria(l, id: String) -> void:

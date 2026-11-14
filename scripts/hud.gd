@@ -230,7 +230,9 @@ func _apresentacao_torre() -> void:
 		return
 	var info: Dictionary = partida.torre
 	var centro := (size / 2.0).round()
-	var painel := Rect2(centro.x - 112.0, centro.y - 62.0, 224.0, 118.0)
+	var traco: String = info.get("traco", "")
+	var extra := 14.0 if traco != "" else 0.0  # linha a mais com o traço do Recruta (andar 1)
+	var painel := Rect2(centro.x - 112.0, centro.y - 62.0 - extra / 2.0, 224.0, 118.0 + extra)
 	UI.moldura(self, painel, Color("23263a"), UI.OURO if info["final"] else UI.BORDA, UI.BRANCO if info["final"] else UI.LUZ)
 	var y := painel.position.y
 	UI.texto(self, Vector2(centro.x, y + 17.0), "ETAPA FINAL" if info["final"] else "ANDAR %d" % info["andar"], UI.G, UI.OURO)
@@ -253,6 +255,8 @@ func _apresentacao_torre() -> void:
 	UI.texto(self, Vector2(painel.position.x + 14.0, y + 92.0), "SUA VIDA", UI.P, UI.LUZ, UI.ESQ)
 	UI.texto(self, Vector2(painel.end.x - 14.0, y + 92.0), "%d%%" % roundi(f * 100.0), UI.P, UI.BRANCO, UI.DIR)
 	UI.barra(self, Rect2(painel.position.x + 14.0, y + 100.0, painel.size.x - 28.0, 6), f, Jogo.COR_TIME[1])
+	if traco != "":
+		UI.texto(self, Vector2(centro.x, y + 120.0), traco, UI.P, UI.OURO)
 
 
 func _anuncio() -> void:
