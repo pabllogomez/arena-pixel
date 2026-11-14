@@ -261,7 +261,7 @@ func _draw() -> void:
 func _regras() -> String:
 	## Linha de regras no rodapé: a da torre aparece nas telas dela.
 	if _tela == "personagem" or _tela == "torre_dif" or (_tela == "single" and _sel == 0):
-		return "Torre da Tormenta: 9 andares, 1:30 por luta, sem monstros nem itens."
+		return "Torre da Tormenta: 4 andares e a etapa final, sem monstros nem itens."
 	return "O ataque é automático. Partidas de 3 minutos + Morte Súbita."
 
 

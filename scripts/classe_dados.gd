@@ -79,29 +79,3 @@ enum TipoAtaque { FLECHA, CORPO_A_CORPO, MAGIA, INVOCAR }
 ## Dash com cetro: encostar num hostil golpeia na hora (ignora a recarga, 1 por
 ## alvo por dash) e o empurrão vira este múltiplo a mais.
 @export var mult_empurrao_cetro_dash := 1.0
-
-@export_group("Traço no Recruta (Torre, andar 1)")
-## Bônus sutil que o Recruta do JOGADOR ganha no andar 1 da Torre da Tormenta
-## quando o personagem escolhido é esta classe (a CPU segue Recruta puro).
-## Frações extras: 0.12 = +12%. 0 = sem o traço.
-@export var traco_vida := 0.0
-@export var traco_dano := 0.0
-@export var traco_alcance := 0.0
-## Rei: o Recruta invoca 1 lacaio (no máximo 1 vivo) com esta fração da vida e do
-## dano de um lacaio comum desta classe. 0 = sem lacaio.
-@export var traco_lacaio := 0.0
-## Segundos até reinvocar o lacaio do traço depois que ele morre.
-@export var traco_lacaio_espera := 12.0
-
-
-func texto_traco() -> String:
-	## Descrição curta do traço, ex.: "+12% DE VIDA" (vazio se a classe não tem).
-	if traco_vida > 0.0:
-		return "+%d%% DE VIDA" % roundi(traco_vida * 100.0)
-	if traco_dano > 0.0:
-		return "+%d%% DE DANO" % roundi(traco_dano * 100.0)
-	if traco_alcance > 0.0:
-		return "+%d%% DE ALCANCE" % roundi(traco_alcance * 100.0)
-	if traco_lacaio > 0.0:
-		return "1 LACAIO PEQUENO"
-	return ""

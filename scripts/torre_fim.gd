@@ -96,8 +96,12 @@ func _draw() -> void:
 	var cor := UI.OURO if campeao else UI.VERMELHO.lightened(0.25)
 	var titulo := "CAMPEÃO DA TORRE!" if campeao else "GAME OVER"
 	UI.texto(self, Vector2(cx, 22), titulo, UI.GG if not campeao else UI.G, cor)
-	var sub := "VOCÊ VENCEU OS 9 ANDARES" if campeao else \
-			("CAIU NA ETAPA FINAL (ANDAR %d DE 9)" if torre.andar_alcancado > Torre.ANDARES_SUBIDA else "CAIU NO ANDAR %d DE 9") % torre.andar_alcancado
+	var sub := "VOCÊ VENCEU OS %d ANDARES" % Torre.ANDARES
+	if not campeao:
+		if torre.andar_alcancado > Torre.ANDARES_SUBIDA:
+			sub = "CAIU NA ETAPA FINAL (DERROTOU %d DE %d)" % [torre.derrotados_final, Torre.ADVERSARIOS_FINAL]
+		else:
+			sub = "CAIU NO ANDAR %d DE %d" % [torre.andar_alcancado, Torre.ANDARES]
 	UI.texto(self, Vector2(cx, 44), sub, UI.P, UI.LUZ)
 	if campeao and torre.desbloqueou_agora:
 		var aceso := int(_t * 3.0) % 2 == 0

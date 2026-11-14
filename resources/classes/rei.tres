@@ -27,4 +27,3 @@ empurrao_cetro = 2.0
 mult_empurrao_cetro_dash = 1.25
 aceleracao = 1000.0
 atrito = 1250.0
-traco_lacaio = 0.3

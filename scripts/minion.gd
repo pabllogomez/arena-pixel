@@ -29,12 +29,6 @@ var _provocado := false
 const VISAO_DEFENSIVA := 22.0
 ## Quem mata um monstro recupera esta fração da vida máxima
 const CURA_POR_ABATE := 0.08
-## Mob de cura: não ataca e foge dos personagens. `cura` = fração da vida máxima
-## que recupera quem der o golpe final (0 = monstro comum, que usa CURA_POR_ABATE).
-var cura := 0.0
-var fujao := false
-var _t_encurralado := 0.0
-var _vira_pulo := false
 ## Lacaios do Rei também arremessam lanças (0 = não arremessa)
 var alcance_arremesso := 0.0
 var _cd_arremesso := 1.0
@@ -85,21 +79,6 @@ func _physics_process(delta: float) -> void:
 	if not is_on_floor():
 		velocity.y = minf(velocity.y + GRAVIDADE * delta, 360.0)
 
-	var mover := _fugir(delta) if fujao else _agir(delta)
-	velocity.x = mover * velocidade
-	move_and_slide()
-
-	sensor_chao.position.x = 6.0 * _dir
-	sprite.flip_h = _dir < 0.0
-	sprite.frame = int(_t * 5.0) % 2 if absf(velocity.x) > 1.0 else 0
-	if _flash > 0.0:
-		_flash -= delta
-	Jogo.pintar_clarao(sprite, _flash > 0.0)
-	queue_redraw()
-
-
-func _agir(delta: float) -> float:
-	## Comportamento padrão (monstros e lacaios): devolve o sentido do movimento.
 	var alvo = _procurar_alvo()
 	if alvo != null and alcance_arremesso > 0.0 and _cd_arremesso <= 0.0:
 		_tentar_arremessar(alvo)
@@ -147,58 +126,16 @@ func _agir(delta: float) -> float:
 			set_collision_mask_value(5, false)
 		if mover != 0.0:
 			_dir = mover
-	return mover
+	velocity.x = mover * velocidade
+	move_and_slide()
 
-
-func _ameaca_proxima():
-	## Personagem hostil mais próximo dentro do campo de visão (só personagens).
-	var melhor = null
-	var melhor_d := visao
-	for a in get_tree().get_nodes_in_group("alvo"):
-		if not (a is Lutador) or not Jogo.hostis(self, a) or not a.esta_vivo():
-			continue
-		var d: float = global_position.distance_to(a.global_position)
-		if d < melhor_d:
-			melhor_d = d
-			melhor = a
-	return melhor
-
-
-func _fugir(delta: float) -> float:
-	## Mob de cura: corre para longe do personagem mais próximo, pulando
-	## obstáculos e vãos. Encurralado, desce da plataforma ou pula por cima
-	## de quem o persegue (nunca ataca). Sem ninguém por perto, só passeia.
-	var ameaca = _ameaca_proxima()
-	if _descer > 0.0:
-		_descer -= delta
-		if _descer <= 0.0:
-			set_collision_mask_value(5, true)
-	if not is_on_floor():
-		return _dir
-	if ameaca == null:
-		_t_encurralado = 0.0
-		if is_on_wall() or not sensor_chao.is_colliding():
-			_dir *= -1.0
-		return _dir * 0.5
-	var dif: Vector2 = global_position - ameaca.global_position
-	if absf(dif.x) > 3.0:
-		_dir = signf(dif.x)
-	var sem_saida := is_on_wall() or not sensor_chao.is_colliding()
-	if is_on_wall() and _pulo_cd <= 0.0:
-		_pular()          # obstáculo baixo: pula
-	elif not sensor_chao.is_colliding() and _pulo_cd <= 0.0 and _t_encurralado > 0.15:
-		_pular()          # beirada com a ameaça atrás: tenta atravessar o vão
-	_t_encurralado = _t_encurralado + delta if sem_saida else 0.0
-	if _t_encurralado > 0.6 and global_position.distance_to(ameaca.global_position) < 48.0:
-		_t_encurralado = 0.0
-		_vira_pulo = not _vira_pulo
-		if _vira_pulo and _descer <= 0.0:
-			_descer = 0.3   # atravessa a plataforma para baixo
-			set_collision_mask_value(5, false)
-		else:
-			_dir *= -1.0    # foge por cima de quem o encurralou
-			_pular()
-	return _dir
+	sensor_chao.position.x = 6.0 * _dir
+	sprite.flip_h = _dir < 0.0
+	sprite.frame = int(_t * 5.0) % 2 if absf(velocity.x) > 1.0 else 0
+	if _flash > 0.0:
+		_flash -= delta
+	Jogo.pintar_clarao(sprite, _flash > 0.0)
+	queue_redraw()
 
 
 var _passo_caminho := {}
@@ -300,16 +237,8 @@ func _morrer(origem) -> void:
 		var nivel_antes: int = origem.nivel if origem is Lutador else 0
 		origem.ganhar_xp(xp_valor)
 		if origem is Lutador and equipe == 0:
-			var fracao := cura if cura > 0.0 else CURA_POR_ABATE
-			var antes_vida: float = origem.vida
-			origem.curar(origem.vida_max * fracao)
-			if cura > 0.0:
-				var recuperou := roundi(origem.vida - antes_vida)
-				partida.fx("cura_mob", origem.position)
-				partida.mostrar_texto(origem.global_position + Vector2(0, -18),
-						"+%d" % maxi(recuperou, 1), Color("a7f070"), true)
-			else:
-				partida.fx("cura", origem.position)
+			origem.curar(origem.vida_max * CURA_POR_ABATE)
+			partida.fx("cura", origem.position)
 		if origem is Lutador:
 			var ganho := xp_valor
 			if origem.nivel == nivel_antes:

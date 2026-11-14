@@ -197,8 +197,14 @@ func _cronometro() -> void:
 	UI.moldura(self, caixa, Color(UI.TINTA, 0.92), borda, borda.lightened(0.3))
 	UI.texto(self, Vector2(x, 8 + sobe), texto, UI.M, cor)
 	if not partida.torre.is_empty():
-		var rotulo := "ETAPA FINAL %d/9" % partida.torre["andar"] if partida.torre["final"] else "ANDAR %d/9" % partida.torre["andar"]
-		UI.texto(self, Vector2(x, 25), rotulo, UI.P, UI.OURO if partida.torre["final"] else UI.LUZ)
+		UI.texto(self, Vector2(x, 25), rotulo_torre(), UI.P, UI.OURO if partida.torre["final"] else UI.LUZ)
+
+
+func rotulo_torre() -> String:
+	## Sob o cronômetro na Torre: "ANDAR n/5" ou, na etapa final, o adversário atual "ETAPA FINAL n/4".
+	if partida.torre["final"]:
+		return "ETAPA FINAL %d/%d" % [partida.adversario_atual, partida.adversario_total]
+	return "ANDAR %d/%d" % [partida.torre["andar"], Torre.ANDARES]
 
 
 func _contagem() -> void:
@@ -230,16 +236,13 @@ func _apresentacao_torre() -> void:
 		return
 	var info: Dictionary = partida.torre
 	var centro := (size / 2.0).round()
-	var traco: String = info.get("traco", "")
-	var extra := 14.0 if traco != "" else 0.0  # linha a mais com o traço do Recruta (andar 1)
-	var painel := Rect2(centro.x - 112.0, centro.y - 62.0 - extra / 2.0, 224.0, 118.0 + extra)
+	var painel := Rect2(centro.x - 112.0, centro.y - 62.0, 224.0, 118.0)
 	UI.moldura(self, painel, Color("23263a"), UI.OURO if info["final"] else UI.BORDA, UI.BRANCO if info["final"] else UI.LUZ)
 	var y := painel.position.y
 	UI.texto(self, Vector2(centro.x, y + 17.0), "ETAPA FINAL" if info["final"] else "ANDAR %d" % info["andar"], UI.G, UI.OURO)
-	if info["final"]:
-		UI.texto(self, Vector2(centro.x, y + 36.0), "ANDAR %d DE 9" % info["andar"], UI.P, UI.LUZ)
-	else:
-		UI.texto(self, Vector2(centro.x, y + 36.0), "ANDAR %d DE 9" % info["andar"] if info["andar"] > 1 else "SUBIDA: 5 ANDARES", UI.P, UI.LUZ)
+	var sub := "%d ADVERSÁRIOS EM SEQUÊNCIA" % info["adversarios"] if info["final"] \
+			else ("ANDAR %d DE %d" % [info["andar"], Torre.ANDARES] if info["andar"] > 1 else "SUBIDA: %d ANDARES" % Torre.ANDARES_SUBIDA)
+	UI.texto(self, Vector2(centro.x, y + 36.0), sub, UI.P, UI.LUZ)
 	draw_rect(Rect2(painel.position.x + 10.0, y + 45.0, painel.size.x - 20.0, 1), UI.BORDA)
 	# Adversário: retrato, classe e nível
 	var cpu: Lutador = partida.jogadores[2]
@@ -247,7 +250,7 @@ func _apresentacao_torre() -> void:
 	var retrato := Rect2(painel.position.x + 14.0, y + 52.0, 28, 28)
 	UI.moldura(self, retrato, Color("5d275d"), Jogo.COR_TIME[2], Jogo.COR_TIME[2].lightened(0.4))
 	draw_texture_rect_region(cpu.sprite.texture, Rect2(retrato.position + Vector2(2, 2), Vector2(24, 24)), Rect2(quadro * 16, 0, 16, 16))
-	UI.texto(self, Vector2(retrato.end.x + 8.0, y + 58.0), "ADVERSÁRIO", UI.P, UI.LUZ, UI.ESQ)
+	UI.texto(self, Vector2(retrato.end.x + 8.0, y + 58.0), "PRIMEIRO ADVERSÁRIO" if info["final"] else "ADVERSÁRIO", UI.P, UI.LUZ, UI.ESQ)
 	UI.texto(self, Vector2(retrato.end.x + 8.0, y + 70.0), "%s  Nv %d" % [cpu.dados.nome.to_upper(), cpu.nivel], UI.P, Jogo.COR_TIME[2], UI.ESQ)
 	# Vida do jogador
 	var eu: Lutador = partida.jogadores[1]
@@ -255,8 +258,6 @@ func _apresentacao_torre() -> void:
 	UI.texto(self, Vector2(painel.position.x + 14.0, y + 92.0), "SUA VIDA", UI.P, UI.LUZ, UI.ESQ)
 	UI.texto(self, Vector2(painel.end.x - 14.0, y + 92.0), "%d%%" % roundi(f * 100.0), UI.P, UI.BRANCO, UI.DIR)
 	UI.barra(self, Rect2(painel.position.x + 14.0, y + 100.0, painel.size.x - 28.0, 6), f, Jogo.COR_TIME[1])
-	if traco != "":
-		UI.texto(self, Vector2(centro.x, y + 120.0), traco, UI.P, UI.OURO)
 
 
 func _anuncio() -> void:

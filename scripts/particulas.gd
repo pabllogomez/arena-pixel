@@ -307,10 +307,6 @@ func fx(nome: String, pos: Vector2, a = 0.0, b = 0.0) -> void:
 		"cura":
 			for i in 6:
 				emitir(pos + Vector2(randf_range(-6.0, 6.0), randf_range(-4.0, 6.0)), Vector2(0.0, randf_range(-40.0, -18.0)), randf_range(0.35, 0.6), VERDE, 1, 0.0, 1.0)
-		"cura_mob":
-			_anel(pos, 12, 50.0, 0.45, VERDE, 1, 4.0)
-			for i in 12:
-				emitir(pos + Vector2(randf_range(-7.0, 7.0), randf_range(-6.0, 8.0)), Vector2(randf_range(-6.0, 6.0), randf_range(-56.0, -22.0)), randf_range(0.5, 0.9), VERDE, 1 + randi() % 2, 0.0, 1.0)
 		"brasa":
 			emitir(pos + Vector2(randf_range(-2.0, 2.0), 0.0), Vector2(randf_range(-7.0, 7.0), randf_range(-26.0, -12.0)), randf_range(0.6, 1.3), BRASA, 1, -6.0, 0.6)
 		"pingo":

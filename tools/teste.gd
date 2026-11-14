@@ -26,13 +26,6 @@ func _initialize() -> void:
 		await _equilibrio(int(args[i + 1]) if args.size() > i + 1 else 40)
 		quit(0)
 		return
-	i = args.find("--torre_andar1")
-	if i >= 0:
-		var j := args.find("--personagem")
-		var so_personagem := -1 if j < 0 else int(args[j + 1])
-		await _torre_andar1(int(args[i + 1]) if args.size() > i + 1 else 40, so_personagem, args.has("--sem_traco"))
-		quit(0)
-		return
 	i = args.find("--confrontos")
 	if i >= 0:
 		var j := args.find("--par")
@@ -54,11 +47,11 @@ func _initialize() -> void:
 	await _testar_cartas_layout()
 	_testar_bot_muito_dificil()
 	await _testar_menu_navegacao()
-	await _testar_mob_cura()
+	await _testar_sem_mob_cura()
 	await _testar_rotulo_critico()
 	await _testar_torre()
 	await _testar_torre_fim_do_tempo()
-	await _testar_traco_recruta()
+	await _testar_etapa_final()
 	await _testar_partidas()
 	print("RESULTADO: ", "OK" if _falhas == 0 else "%d FALHA(S)" % _falhas)
 	quit(1 if _falhas else 0)
@@ -1274,127 +1267,37 @@ func _nova_partida_livre(semente: int, extra := {}) -> Node:
 	return p
 
 
-func _testar_mob_cura() -> void:
-	## Mob de cura: 1 em 4 na fase de Recruta, nunca depois; não ataca, foge, cura 10%
-	## de quem dá o golpe final; nasce longe; na Torre é o único monstro (1 por vez).
+func _testar_sem_mob_cura() -> void:
+	## O mob de cura não existe mais: a fase de Recruta só cria monstros comuns
+	## (gosma que ataca) e a Torre não tem monstro nenhum.
+	if FileAccess.file_exists("res://assets/sprites/gosma_cura.png"):
+		_falha("sem mob de cura: o sprite gosma_cura.png ainda existe")
 	var p = await _nova_partida_livre(41)
 	var main = p.get_parent()
 	if not p._tem_recruta():
-		_falha("mob de cura: a partida deveria começar com Recruta")
-	var total := 600
-	var curas := 0
-	for i in total:
-		var m = p._criar_monstro()
-		if m.cura > 0.0:
-			curas += 1
-		m.queue_free()
-	var frac := float(curas) / total
-	if frac < 0.17 or frac > 0.33:
-		_falha("mob de cura: %.0f%% dos monstros da fase de Recruta (esperava ~25%%)" % (frac * 100.0))
-	for l in p.jogadores.values():
-		l.eh_recruta = false
-	curas = 0
-	for i in 200:
-		var m = p._criar_monstro()
-		if m.cura > 0.0:
-			curas += 1
-		m.queue_free()
-	if curas != 0:
-		_falha("mob de cura: %d nasceram fora da fase de Recruta" % curas)
-
-	# Nasce longe: o ponto é o mais distante do jogador mais próximo
-	var a = p.jogadores[1]
-	var b = p.jogadores[2]
-	var pontos: Array = p.mapa["pontos_monstro"]
-	a.position = pontos[0]
-	b.position = pontos[pontos.size() / 2]
-	var melhor := -1.0
-	for q in pontos:
-		melhor = maxf(melhor, minf(a.position.distance_to(q), b.position.distance_to(q)))
-	var m = p._criar_monstro(true)
-	var d := minf(a.position.distance_to(m.position), b.position.distance_to(m.position))
-	if absf(d - melhor) > 0.01:
-		_falha("mob de cura: nasceu a %.1f do jogador mais próximo (o ponto mais longe está a %.1f)" % [d, melhor])
-	if m.dano != 0.0 or not m.fujao or not is_equal_approx(m.vida_max, p.VIDA_MONSTRO * pow(1.35, p.nivel_monstros() - 1)):
-		_falha("mob de cura: dados errados (dano %.1f, vida %.1f)" % [m.dano, m.vida_max])
-	m.queue_free()
-
-	# Foge e não ataca: perto de um personagem, em alguns pontos, ele se afasta
-	var afastou := 0
-	var testados := 0
-	for k in 6:
-		var ponto: Vector2 = pontos[(k * 7 + 3) % pontos.size()]
-		var mob = p._criar_monstro(true)
-		mob.position = ponto
-		a.position = ponto + Vector2(-24, 0)
-		b.position = Vector2(-500, -500)
-		a.velocity = Vector2.ZERO
-		a.vida = a.vida_max
-		await physics_frame
-		var antes: float = mob.position.distance_to(a.position)
-		for f in 45:
-			a.position = Vector2(ponto.x - 24, ponto.y)  # o personagem segue colado na esquerda
-			a.velocity = Vector2.ZERO
-			await physics_frame
-		testados += 1
-		if absf(mob.position.x - ponto.x) > 8.0 or mob.position.distance_to(a.position) > antes + 8.0:
-			afastou += 1
-		if a.vida < a.vida_max:
-			_falha("mob de cura: atacou o personagem")
-		mob.queue_free()
-	if afastou < 4:
-		_falha("mob de cura: só se afastou em %d de %d tentativas" % [afastou, testados])
-
-	# Ao morrer: quem deu o golpe final recupera 10% da vida máxima
-	b.position = pontos[0]
-	a.position = pontos[pontos.size() / 2]
-	a.vida = a.vida_max * 0.5
-	var mob = p._criar_monstro(true)
-	mob.receber_dano(9999.0, a)
-	if not _perto(a.vida, a.vida_max * 0.6, 0.01):
-		_falha("mob de cura: vida %.2f depois do abate (esperava %.2f)" % [a.vida, a.vida_max * 0.6])
-	b.vida = b.vida_max * 0.5
-	mob = p._criar_monstro(true)
-	mob.receber_dano(9999.0, b)   # um lacaio passa o dono como origem
-	if not _perto(b.vida, b.vida_max * 0.6, 0.01) or not _perto(a.vida, a.vida_max * 0.6, 0.01):
-		_falha("mob de cura: só quem deu o golpe final deveria curar")
+		_falha("sem mob de cura: a partida deveria começar com Recruta")
+	if p.get("mobs_cura_ligado") != null:
+		_falha("sem mob de cura: a partida ainda tem a flag mobs_cura")
+	for i in 120:
+		p._criar_monstro()
+	var texturas := {}
+	var total := 0
+	for m in p.get_tree().get_nodes_in_group("alvo"):
+		if m.get("textura") == null:  # lutadores não têm textura (Minion depende do autoload Jogo)
+			continue
+		total += 1
+		texturas[m.textura.resource_path.get_file()] = true
+		if m.get("cura") != null or m.get("fujao") != null or m.dano <= 0.0:
+			_falha("sem mob de cura: monstro com campos de cura ou sem ataque")
+			break
+	if total != 120:
+		_falha("sem mob de cura: %d monstros criados (esperava 120)" % total)
+	for t in texturas:
+		if not str(t).begins_with("gosma_") or str(t) == "gosma_cura.png":
+			_falha("sem mob de cura: textura inesperada %s" % t)
 	main.queue_free()
 	await process_frame
-
-	# Torre: só mobs de cura, 1 por vez; 1º após 10 s, seguinte 20 s depois da morte
-	p = await _nova_partida_livre(42, {"mobs_cura": true})
-	main = p.get_parent()
-	var comuns := func() -> int:
-		return p.get_tree().get_nodes_in_group("alvo").filter(func(x): return x.get("cura") != null and x.cura <= 0.0).size()
-	var curas_vivas := func() -> int:
-		return p.get_tree().get_nodes_in_group("alvo").filter(func(x): return x.get("cura") != null and x.cura > 0.0).size()
-	var maximo := 0
-	for f in 540:  # 9 s
-		await physics_frame
-	if curas_vivas.call() != 0:
-		_falha("torre: o mob de cura nasceu antes dos 10 s")
-	for f in 90:   # 10,5 s
-		await physics_frame
-	if curas_vivas.call() != 1:
-		_falha("torre: deveria haver 1 mob de cura aos 10 s (%d)" % curas_vivas.call())
-	for f in 300:
-		await physics_frame
-		maximo = maxi(maximo, curas_vivas.call())
-	var vivo = p.get_tree().get_nodes_in_group("alvo").filter(func(x): return x.get("cura") != null)[0]
-	vivo.receber_dano(9999.0, p.jogadores[1])
-	for f in 1080:  # 18 s depois: ainda não
-		await physics_frame
-	if curas_vivas.call() != 0:
-		_falha("torre: o próximo mob de cura nasceu antes de 20 s")
-	for f in 180:
-		await physics_frame
-	if curas_vivas.call() != 1:
-		_falha("torre: o próximo mob de cura deveria nascer 20 s depois da morte")
-	if maximo > 1 or comuns.call() != 0:
-		_falha("torre: no máximo 1 mob de cura e nenhum monstro comum (máx %d, comuns %d)" % [maximo, comuns.call()])
-	main.queue_free()
-	await process_frame
-	print("Mob de cura (25% na fase de Recruta, foge, cura 10%, nasce longe, torre): ok")
+	print("Sem mob de cura (fase de Recruta só com monstros comuns): ok")
 
 
 func _testar_rotulo_critico() -> void:
@@ -1424,33 +1327,53 @@ func _testar_rotulo_critico() -> void:
 
 
 
+func _matar_adversario(p) -> bool:
+	## Etapa final: derruba o adversário atual e espera o próximo entrar (ou a luta acabar).
+	var atual = p.jogadores[2]
+	atual.receber_dano(99999.0, p.jogadores[1])
+	for i in 300:
+		await physics_frame
+		if p.fim or p.jogadores[2] != atual:
+			return true
+	_falha("etapa final: o próximo adversário não entrou (nem a luta acabou)")
+	return false
+
+
 func _testar_torre() -> void:
 	## Campanha completa pelo main com vitórias forçadas (oponente com vida 0).
 	var jogo = root.get_node("Jogo")
 	var desbloqueadas_antes: Array[String] = jogo.torre_desbloqueada.duplicate()
 	jogo.arquivo_opcoes = "user://opcoes_teste_torre.cfg"
 	jogo.torre_desbloqueada.clear()
-	# (a) ordem dos adversários
+	# (a) ordem dos adversários: andares 1-3 = as outras 3 classes, andar 4 = a do jogador,
+	# etapa final = permutação das 4
 	for semente in 50:
 		var t = _torre_script.new()
 		t.comecar(semente % 4, 0, semente)
-		if t.ordem[4] != semente % 4:
-			_falha("torre: a luta espelhada deveria ser o andar 5 (ordem %s, personagem %d)" % [t.ordem, semente % 4])
-		var sub: Array = t.ordem.slice(1, 5)
-		var fin: Array = t.ordem.slice(5, 9)
+		var sub: Array = t.ordem.slice(0, 3)
 		sub.sort()
+		var esperado := [0, 1, 2, 3]
+		esperado.erase(semente % 4)
+		var fin: Array = t.ordem_final.duplicate()
 		fin.sort()
-		if t.ordem.size() != 9 or t.ordem[0] != -1 or sub != [0, 1, 2, 3] or fin != [0, 1, 2, 3]:
-			_falha("torre: ordem inválida %s" % [t.ordem])
+		if t.ordem.size() != 4 or t.ordem[3] != semente % 4 or sub != esperado:
+			_falha("torre: subida inválida %s (personagem %d)" % [t.ordem, semente % 4])
+		if t.ordem_final.size() != 4 or fin != [0, 1, 2, 3]:
+			_falha("torre: etapa final inválida %s" % [t.ordem_final])
+		if int(t.jogador["classe"]) != semente % 4 or int(t.jogador["nivel"]) != 2 or not _perto(t.jogador["vida"], 1.0) \
+				or not t.jogador["historico"].is_empty():
+			_falha("torre: o jogador deveria começar com a classe, nível 2 e vida cheia (%s)" % [t.jogador])
 		t.free()
 	var ordens := {}
+	var finais := {}
 	for semente in 30:
 		var t = _torre_script.new()
 		t.comecar(0, 0, semente)
 		ordens[str(t.ordem)] = true
+		finais[str(t.ordem_final)] = true
 		t.free()
-	if ordens.size() < 5:
-		_falha("torre: a ordem dos adversários não varia (%d ordens em 30 sementes)" % ordens.size())
+	if ordens.size() < 3 or finais.size() < 5:
+		_falha("torre: a ordem dos adversários não varia (%d subidas, %d finais em 30 sementes)" % [ordens.size(), finais.size()])
 
 	var main = load("res://scenes/main.tscn").instantiate()
 	root.add_child(main)
@@ -1462,53 +1385,47 @@ func _testar_torre() -> void:
 		main.queue_free()
 		return
 	var classe_jogador := 1
-	var nivel_jogador := [1, 2, 3, 4, 5, 6, 6, 6, 6]
-	var nivel_cpu := [1, 3, 4, 5, 6, 7, 7, 7, 7]
-	var vida_antes := [0.2, 0.4, 0.5, 0.65, 0.1, 0.6, 0.35, 0.8, 0.5]
-	var vida_esperada := [0.0, 0.5, 0.7, 0.8, 0.95, 0.6, 0.6, 0.35, 0.8]  # no começo de cada andar (índice 0 = andar 1, não usado)  # andar 6: só os 50% da etapa final (não soma com os 30%)
-	var classes_cpu: Array[int] = []
-	var dano_somado := 0.0
-	for a in range(1, 10):
+	var nivel_jogador := [2, 3, 4, 5, 6]   # o CPU tem sempre o mesmo nível
+	var vida_antes := [0.2, 0.4, 0.5, 0.3, 0.6]
+	# no começo de cada andar: +30% por vitória na subida; antes da etapa final só +50% (não soma)
+	var vida_esperada := [1.0, 0.5, 0.7, 0.8, 0.8]
+	for a in range(1, 6):
 		var eu = p.jogadores[1]
 		var cpu = p.jogadores[2]
 		var rotulo := "torre andar %d" % a
-		if p.torre["andar"] != a or p.torre["final"] != (a > 5):
+		if p.torre["andar"] != a or p.torre["final"] != (a == 5):
 			_falha("%s: dados do andar errados %s" % [rotulo, p.torre])
+		if p.hud.rotulo_torre() != ("ETAPA FINAL 1/4" if a == 5 else "ANDAR %d/5" % a):
+			_falha("%s: rótulo do HUD '%s'" % [rotulo, p.hud.rotulo_torre()])
 		# níveis, classes, vida, melhorias
 		if eu.nivel != nivel_jogador[a - 1]:
 			_falha("%s: jogador nível %d (esperava %d)" % [rotulo, eu.nivel, nivel_jogador[a - 1]])
-		if cpu.nivel != nivel_cpu[a - 1]:
-			_falha("%s: CPU nível %d (esperava %d)" % [rotulo, cpu.nivel, nivel_cpu[a - 1]])
-		if a >= 2 and cpu.nivel != eu.nivel + 1:
-			_falha("%s: CPU deveria ter o nível do jogador + 1" % rotulo)
-		if a == 1:
-			if not eu.eh_recruta or not cpu.eh_recruta or eu.indice_classe() != -1 or cpu.indice_classe() != -1:
-				_falha("%s: o andar 1 é Recruta x Recruta" % rotulo)
-		else:
-			if eu.eh_recruta or eu.indice_classe() != classe_jogador:
-				_falha("%s: o jogador deveria ser o personagem escolhido (índice %d)" % [rotulo, eu.indice_classe()])
-			if cpu.eh_recruta or cpu.indice_classe() != torre.ordem[a - 1]:
-				_falha("%s: CPU com a classe errada" % rotulo)
-			classes_cpu.append(cpu.indice_classe())
-			if cpu.historico.size() != maxi(0, cpu.nivel - 2):
-				_falha("%s: CPU com %d melhorias (nível %d)" % [rotulo, cpu.historico.size(), cpu.nivel])
-			if not _perto(float(eu.vida) / eu.vida_max, vida_esperada[a - 1], 0.015):
-				_falha("%s: vida do jogador %.3f no começo (esperava %.3f)" % [rotulo, eu.vida / eu.vida_max, vida_esperada[a - 1]])
+		if cpu.nivel != eu.nivel:
+			_falha("%s: CPU nível %d (deveria ter o do jogador, %d)" % [rotulo, cpu.nivel, eu.nivel])
+		if eu.eh_recruta or eu.indice_classe() != classe_jogador or cpu.eh_recruta:
+			_falha("%s: o jogador deveria ser o personagem escolhido (índice %d)" % [rotulo, eu.indice_classe()])
+		var classe_esperada: int = torre.ordem[a - 1] if a <= 4 else torre.ordem_final[0]
+		if cpu.indice_classe() != classe_esperada:
+			_falha("%s: CPU com a classe errada (%d, esperava %d)" % [rotulo, cpu.indice_classe(), classe_esperada])
+		if a == 4 and cpu.indice_classe() != classe_jogador:
+			_falha("%s: o andar 4 deveria ser a luta espelhada" % rotulo)
+		if cpu.historico.size() != cpu.nivel - 2 or eu.historico.size() != eu.nivel - 2 - eu.escolhas.size():
+			_falha("%s: melhorias CPU %d, jogador %d (nível %d)" % [rotulo, cpu.historico.size(), eu.historico.size(), eu.nivel])
+		if not _perto(float(eu.vida) / eu.vida_max, vida_esperada[a - 1], 0.015):
+			_falha("%s: vida do jogador %.3f no começo (esperava %.3f)" % [rotulo, eu.vida / eu.vida_max, vida_esperada[a - 1]])
 		if not _perto(cpu.vida, cpu.vida_max):
 			_falha("%s: a CPU deveria começar com a vida cheia" % rotulo)
-		if eu.escolhas.size() != (1 if (a >= 3 and a <= 6) else 0):
+		if eu.escolhas.size() != (0 if a == 1 else 1):
 			_falha("%s: %d escolhas de melhoria pendentes" % [rotulo, eu.escolhas.size()])
 		if cpu.controle.get_script() != _bot_script or cpu.controle.dificuldade != _bot_script.Dificuldade.NORMAL:
 			_falha("%s: CPU deveria ser bot NORMAL" % rotulo)
 		# regras da partida
-		if p.tempo_restante != 90.0 or p.monstros_ligados or p.itens_ligados or p.morte_subita_ligada or p.regen or p.xp_ligado:
+		if p.tempo_restante != (240.0 if a == 5 else 90.0) or p.monstros_ligados or p.itens_ligados or p.morte_subita_ligada \
+				or p.regen or p.xp_ligado:
 			_falha("%s: flags da partida erradas" % rotulo)
-		# só os 2 lutadores; no máximo 1 mob de cura (nenhum monstro comum, nenhum item)
-		var extras := p.get_tree().get_nodes_in_group("alvo").filter(func(x): return x != eu and x != cpu)
-		if extras.size() > 1 or extras.any(func(x): return x.get("cura") == null or x.cura <= 0.0 or not x.fujao):
-			_falha("%s: só poderia haver 1 mob de cura além dos 2 lutadores (%d extras)" % [rotulo, extras.size()])
-		if not p.mobs_cura_ligado or not p.get_tree().get_nodes_in_group("item").is_empty():
-			_falha("%s: mobs de cura ligados e nenhum item" % rotulo)
+		# só os 2 lutadores: nenhum monstro (nem mob de cura) e nenhum item
+		if p.get_tree().get_nodes_in_group("alvo").size() != 2 or not p.get_tree().get_nodes_in_group("item").is_empty():
+			_falha("%s: só deveria haver os 2 lutadores, sem monstros nem itens" % rotulo)
 		# apresentação do andar e escolha de melhoria antes da contagem
 		if a == 3:
 			for i in 30:
@@ -1516,18 +1433,19 @@ func _testar_torre() -> void:
 			if p.contagem != 3.0 or not p.espera_inicio():
 				_falha("%s: a contagem não deveria começar antes da escolha da melhoria" % rotulo)
 			p.escolher(1, 0)
-			if not eu.escolhas.is_empty() or eu.historico.size() != 1:
+			if not eu.escolhas.is_empty() or eu.historico.size() != 2:
 				_falha("%s: a escolha da melhoria não foi aplicada" % rotulo)
 			for i in 150:
 				await process_frame
 			if p.contagem >= 3.0:
 				_falha("%s: a contagem deveria ter começado depois da apresentação" % rotulo)
 		elif a == 2:
+			p.escolher(1, 1)
 			for i in 60:
 				await process_frame
 			if p.contagem != 3.0 or p.intro_t <= 0.0:
 				_falha("%s: a apresentação do andar deveria segurar a contagem" % rotulo)
-		elif a >= 4 and a <= 6:
+		elif a >= 4:
 			p.escolher(1, 1)
 		# estatísticas: um golpe de 10 de dano base na CPU
 		var antes: float = cpu.vida
@@ -1535,32 +1453,38 @@ func _testar_torre() -> void:
 		var tirou: float = antes - cpu.vida
 		if tirou <= 0.0 or not _perto(eu.dano_causado, tirou, 0.001) or not _perto(cpu.dano_recebido, tirou, 0.001) or eu.maior_golpe < tirou - 0.001:
 			_falha("%s: estatísticas de dano erradas (tirou %.3f, causado %.3f)" % [rotulo, tirou, eu.dano_causado])
-		dano_somado += tirou
 		# o nível não sobe por XP (abater lacaios, por exemplo)
 		var nivel_antes: int = eu.nivel
 		eu.ganhar_xp(500)
 		if eu.nivel != nivel_antes or eu.xp != 0:
 			_falha("%s: XP não deveria contar na torre" % rotulo)
 		eu.vida = eu.vida_max * vida_antes[a - 1]
-		# vence o andar
-		cpu.receber_dano(99999.0, eu)
-		dano_somado += cpu.dano_recebido - tirou
-		if a < 9:
+		# vence o andar (na etapa final, os 4 adversários em sequência)
+		if a == 5:
+			p.contagem = -5.0   # a luta precisa estar rolando para o próximo adversário entrar
+			p._congelar(false)
+			for k in 4:
+				if not await _matar_adversario(p):
+					main.queue_free()
+					return
+				if k < 3 and (p.jogadores[2].indice_classe() != torre.ordem_final[k + 1] or p.jogadores[2].nivel != eu.nivel):
+					_falha("etapa final: adversário %d com classe/nível errados" % (k + 2))
+			if eu.nivel != 6 or not _perto(eu.vida / eu.vida_max, vida_antes[4], 0.001):
+				_falha("etapa final: o jogador não deveria subir de nível nem se curar (nível %d, vida %.3f)" % [eu.nivel, eu.vida / eu.vida_max])
+		else:
+			cpu.receber_dano(99999.0, eu)
+		if a < 5:
 			p = await _esperar_andar(main, a + 1)
 		else:
 			p = await _esperar_tela_fim(main)
 		if p == null:
 			main.queue_free()
 			return
-	var perm := classes_cpu.slice(0, 4)
-	perm.sort()
-	var perm2 := classes_cpu.slice(4, 8)
-	perm2.sort()
-	if perm != [0, 1, 2, 3] or perm2 != [0, 1, 2, 3]:
-		_falha("torre: andares 2-5 e 6-9 deveriam ter as 4 classes cada (%s)" % [classes_cpu])
 	# Campeão
-	if torre.estado != "campeao" or torre.abates != 9 or torre.nivel_final != 6 or torre.melhorias_finais.size() != 4:
+	if torre.estado != "campeao" or torre.abates != 8 or torre.nivel_final != 6 or torre.melhorias_finais.size() != 4:
 		_falha("torre: estado final errado (%s, abates %d, nível %d, melhorias %s)" % [torre.estado, torre.abates, torre.nivel_final, torre.melhorias_finais])
+	if torre.derrotados_final != 4:
+		_falha("torre: %d adversários derrotados na etapa final (esperava 4)" % torre.derrotados_final)
 	if torre.dano_causado <= 0.0 or torre.dano_recebido != 0.0 or torre.tempo_total < 0.0 or torre.maior_golpe <= 0.0:
 		_falha("torre: estatísticas finais erradas (causado %.1f, tempo %.1f)" % [torre.dano_causado, torre.tempo_total])
 	if not torre.desbloqueou_agora or not jogo.torre_muito_dificil("orc") or jogo.torre_muito_dificil("arqueiro"):
@@ -1581,11 +1505,15 @@ func _testar_torre() -> void:
 	torre = main._torre
 	if torre.andar != 1 or torre.personagem != 1 or torre.dificuldade != 0 or torre.estado != "andar" or torre.dano_causado != 0.0:
 		_falha("torre: TENTAR DE NOVO deveria recomeçar do zero com o mesmo personagem e dificuldade")
-	torre.andar = 9
+	torre.andar = 5
 	torre.jogador = {"classe": 1, "nivel": 6, "historico": [], "vida": 1.0}
 	main._nova_partida(torre.config_andar())
-	p = await _esperar_andar(main, 9)
-	p.jogadores[2].receber_dano(99999.0, p.jogadores[1])
+	p = await _esperar_andar(main, 5)
+	p.contagem = -5.0
+	p._congelar(false)
+	for k in 4:
+		if not await _matar_adversario(p):
+			break
 	var fim = await _esperar_tela_fim(main)
 	if torre.estado != "campeao" or torre.desbloqueou_agora:
 		_falha("torre: segunda vitória não deveria mostrar o desbloqueio de novo")
@@ -1594,7 +1522,7 @@ func _testar_torre() -> void:
 	p = await _esperar_andar(main, 1)
 	torre = main._torre
 	torre.andar = 4
-	torre.jogador = {"classe": 1, "nivel": 4, "historico": [], "vida": 1.0}
+	torre.jogador = {"classe": 1, "nivel": 5, "historico": [], "vida": 1.0}
 	main._nova_partida(torre.config_andar())
 	p = await _esperar_andar(main, 4)
 	p.jogadores[1].receber_dano(99999.0, p.jogadores[2])
@@ -1641,7 +1569,7 @@ func _testar_torre() -> void:
 	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://opcoes_teste_torre.cfg"))
 	jogo.arquivo_opcoes = jogo.ARQUIVO_OPCOES
 	jogo.torre_desbloqueada = desbloqueadas_antes
-	print("Torre (9 andares, níveis, vida, melhorias, campeão, game over, desbloqueio): ok")
+	print("Torre (4 andares + etapa final, níveis, vida, melhorias, campeão, game over, desbloqueio): ok")
 
 
 func _testar_torre_fim_do_tempo() -> void:
@@ -1700,130 +1628,172 @@ func _testar_torre_fim_do_tempo() -> void:
 	print("Torre (fim do tempo por % de vida, empate = CPU, sem regen/monstros/itens): ok")
 
 
-func _testar_traco_recruta() -> void:
-	## Traço sutil do Recruta do jogador no andar 1 da torre: só no jogador, só no andar 1,
-	## some ao ganhar a classe e não existe fora da torre. Rei: 1 lacaio pequeno por vez.
-	var jogo = root.get_node("Jogo")
-	var recruta: ClasseDados = jogo.dados_recruta()
+func _partida_etapa_final(main, t, ordem_final: Array, vida := 0.8) -> Node:
+	## Monta a etapa final (andar 5) sem contagem e com ninguém agindo.
+	t.comecar(1, 0, 11)   # Orc, NORMAL
+	t.andar = 5
+	t.jogador = {"classe": 1, "nivel": 6, "historico": [], "vida": vida}
+	t.ordem_final.assign(ordem_final)
+	main._nova_partida(t.config_andar())
+	await process_frame
+	var p = main._atual
+	p.contagem = -5.0
+	p._congelar(false)
+	for l in p.jogadores.values():
+		l.ativo = false
+		l._sem_dano = 100.0
+	return p
+
+
+func _testar_etapa_final() -> void:
+	## Etapa final: UMA luta de 4:00 contra os 4 em sequência (o próximo nasce longe do
+	## jogador quando o atual cai); vence ao derrubar os 4; o tempo acabar ou o jogador
+	## cair = game over; lacaios do Rei morto somem; o jogador não se cura nem sobe de nível.
 	var main = load("res://scenes/main.tscn").instantiate()
 	root.add_child(main)
 	await process_frame
-	var nomes := ["Arqueiro", "Orc", "Mago", "Rei"]
-	for pers in 4:
-		var d: ClasseDados = jogo.dados_classe(pers)
-		var rotulo := "traço do Recruta (%s)" % nomes[pers]
-		var t = _torre_script.new()
-		t.comecar(pers, 1, 11)
-		var config: Dictionary = t.config_andar()
-		if d.texto_traco() == "" or not str(config["torre"].get("traco", "")).contains(d.texto_traco()):
-			_falha("%s: o cartão do andar 1 não mostra o traço (%s)" % [rotulo, config["torre"].get("traco", "")])
-		main._nova_partida(config)
+	var t = _torre_script.new()
+	var p = await _partida_etapa_final(main, t, [3, 0, 1, 2])   # Rei, Arqueiro, Orc, Mago
+	var eu = p.jogadores[1]
+	var mapa_antes = p.mapa
+	var config: Dictionary = t.config_andar()
+	if config["tempo"] != 240.0 or config["sequencia"].size() != 4 or config["lutadores"][2] != config["sequencia"][0] \
+			or config["morte_subita"] or config["monstros"] or config.has("mobs_cura"):
+		_falha("etapa final: config errada %s" % [config.keys()])
+	for e in config["sequencia"]:
+		if e["nivel"] != 6 or e["vida"] != 1.0 or e["auto_melhorias"] != 4:
+			_falha("etapa final: adversário sem nível 6/vida cheia/4 melhorias (%s)" % [e])
+	if p.tempo_restante != 240.0 or p.adversario_total != 4 or p.adversario_atual != 1 or p.hud.rotulo_torre() != "ETAPA FINAL 1/4":
+		_falha("etapa final: tempo %.0f, adversário %d/%d, rótulo '%s'" % [p.tempo_restante, p.adversario_atual, p.adversario_total, p.hud.rotulo_torre()])
+	var rei = p.jogadores[2]
+	if rei.indice_classe() != 3 or rei.nivel != 6:
+		_falha("etapa final: o primeiro adversário deveria ser o Rei nível 6")
+	# lacaios do Rei somem quando ele cai
+	p.criar_lacaio(rei)
+	p.criar_lacaio(rei)
+	var lacaios := func() -> int:
+		return p.get_tree().get_nodes_in_group("alvo").filter(func(x): return x.get("dono") != null).size()
+	if lacaios.call() != 2:
+		_falha("etapa final: os lacaios do Rei não nasceram (%d)" % lacaios.call())
+	var vida_eu: float = eu.vida
+	var pontos: Array = p.mapa["pontos_monstro"]
+	var nivel_eu: int = eu.nivel
+	rei.receber_dano(99999.0, eu)
+	for i in 10:
+		await physics_frame
+	if p.fim or p.jogadores[2] != rei or p.adversario_atual != 1:
+		_falha("etapa final: a luta não deveria acabar nem trocar de adversário antes da pausa")
+	if lacaios.call() != 0:
+		_falha("etapa final: os lacaios do Rei deveriam sumir com ele (%d)" % lacaios.call())
+	# o próximo (Arqueiro) nasce logo em seguida, longe do jogador, com anúncio e pausa de ~1 s
+	var seguinte = null
+	for i in 240:
+		await physics_frame
+		if p.jogadores[2] != rei:
+			seguinte = p.jogadores[2]
+			break
+	if seguinte == null:
+		_falha("etapa final: o 2º adversário não entrou")
+		main.queue_free()
 		await process_frame
-		var p = main._atual
-		var eu = p.jogadores[1]
-		var cpu = p.jogadores[2]
-		if not eu.eh_recruta or not cpu.eh_recruta:
-			_falha("%s: os dois deveriam ser Recrutas no andar 1" % rotulo)
-		# O jogador ganha o bônus; a CPU continua Recruta puro
-		if not _perto(eu.vida_max, recruta.vida_max * (1.0 + d.traco_vida), 0.001) \
-				or not _perto(eu.dano, recruta.dano * (1.0 + d.traco_dano), 0.001) \
-				or not _perto(eu.alcance, recruta.alcance * (1.0 + d.traco_alcance), 0.001):
-			_falha("%s: atributos do jogador errados (vida %.1f, dano %.2f, alcance %.1f)" % [rotulo, eu.vida_max, eu.dano, eu.alcance])
-		if cpu.vida_max != recruta.vida_max or cpu.dano != recruta.dano or cpu.alcance != recruta.alcance or cpu.traco_lacaio != null:
-			_falha("%s: a CPU recebeu o traço" % rotulo)
-		var mudou := int(eu.vida_max != recruta.vida_max) + int(eu.dano != recruta.dano) + int(eu.alcance != recruta.alcance) + int(eu.traco_lacaio != null)
-		if mudou != 1:
-			_falha("%s: o traço deveria mexer em uma só coisa (mexeu em %d)" % [rotulo, mudou])
-		if (pers == 3) != (eu.traco_lacaio != null):
-			_falha("%s: lacaio do traço só para o Rei" % rotulo)
-		# Rei: no máximo 1 lacaio pequeno, com a fração do traço
-		if pers == 3:
-			p.contagem = -5.0
-			p._congelar(false)
-			eu.ativo = true
-			cpu.ativo = false
-			var max_vivos := 0
-			var visto = null
-			for i in 240:
-				await physics_frame
-				var n: int = p.contar_lacaios(eu)
-				max_vivos = maxi(max_vivos, n)
-				if n > 0 and visto == null:
-					for a in get_nodes_in_group("alvo"):
-						if a.get("dono") == eu:
-							visto = a
-			if visto == null:
-				_falha("%s: o lacaio não foi invocado" % rotulo)
-			else:
-				if not _perto(visto.vida_max, d.vida_lacaio * d.traco_lacaio, 0.001) or not _perto(visto.dano, d.dano * d.traco_lacaio, 0.001):
-					_falha("%s: lacaio com vida %.1f e dano %.2f" % [rotulo, visto.vida_max, visto.dano])
-				visto.receber_dano(9999.0, null)
-				var t0 := 0
-				while p.contar_lacaios(eu) == 0 and t0 < 60 * 20:
-					await physics_frame
-					t0 += 1
-					max_vivos = maxi(max_vivos, p.contar_lacaios(eu))
-				if t0 < 60 * 10 or t0 > 60 * 14:
-					_falha("%s: reinvocou após %.1f s (esperava ~%.0f)" % [rotulo, t0 / 60.0, d.traco_lacaio_espera])
-			if max_vivos > 1:
-				_falha("%s: %d lacaios vivos ao mesmo tempo" % [rotulo, max_vivos])
-		# Ao ganhar a classe o traço some
-		eu.receber_classe(d)
-		if eu.vida_max != d.vida_max or eu.dano != d.dano or eu.alcance != d.alcance or eu.traco_lacaio != null:
-			_falha("%s: o traço não sumiu ao ganhar a classe" % rotulo)
-		# Andar 2 em diante: sem traço (o jogador já tem a classe)
-		t.andar = 2
-		t.jogador = {"classe": pers, "nivel": 2, "historico": [], "vida": 1.0}
-		var c2: Dictionary = t.config_andar()
-		if c2["lutadores"][1].has("traco") or c2["torre"].has("traco"):
-			_falha("%s: o traço apareceu no andar 2" % rotulo)
-		t.free()
+		return
+	if seguinte.indice_classe() != 0 or seguinte.nivel != 6 or not _perto(seguinte.vida, seguinte.vida_max) \
+			or seguinte.historico.size() != 4 or not seguinte.vivo:
+		_falha("etapa final: o 2º adversário deveria ser o Arqueiro nível 6, vida cheia, 4 melhorias")
+	var melhor := 0.0
+	for pt in pontos:
+		melhor = maxf(melhor, eu.position.distance_to(pt))
+	if seguinte.position.distance_to(eu.position) < melhor - 4.0:
+		_falha("etapa final: o 2º adversário não nasceu longe (%.0f, o mais longe era %.0f)" % [seguinte.position.distance_to(eu.position), melhor])
+	if not p.anuncio.begins_with("PRÓXIMO: ARQUEIRO") or p.anuncio_t <= 0.0:
+		_falha("etapa final: faltou o anúncio 'PRÓXIMO: ARQUEIRO' ('%s')" % p.anuncio)
+	if seguinte.ativo or p.adversario_atual != 2 or p.hud.rotulo_torre() != "ETAPA FINAL 2/4" or p.jogadores[2].controle.get_script() != _bot_script:
+		_falha("etapa final: o recém-chegado deveria esperar, com rótulo 2/4 e bot")
+	if p.mapa != mapa_antes or p.fim:
+		_falha("etapa final: deveria seguir na mesma arena e sem fim")
+	for i in 20:
+		await physics_frame
+	if is_instance_valid(rei):
+		_falha("etapa final: o adversário derrotado deveria sair da cena")
+	for i in 100:  # 1,7 s: já pode agir
+		await physics_frame
+	if not seguinte.ativo:
+		_falha("etapa final: o recém-chegado deveria poder agir após ~1 s")
+	if eu.nivel != nivel_eu or not _perto(eu.vida, vida_eu, 0.0001) or p.tempo_restante >= 240.0 - 1.0:
+		_falha("etapa final: o jogador não deveria subir de nível nem se curar, e o relógio segue (nível %d, vida %.1f→%.1f, tempo %.1f)" % [eu.nivel, vida_eu, eu.vida, p.tempo_restante])
+	# tempo contínuo, sem morte súbita; derruba os outros 3
+	seguinte.ativo = false
+	eu.ativo = false
+	for k in 3:
+		if not await _matar_adversario(p):
+			break
+	if not p.fim or p.vencedor != 1 or p.derrotados != 4 or p.morte_subita:
+		_falha("etapa final: depois dos 4, deveria vencer (fim %s, vencedor %d, derrotados %d)" % [p.fim, p.vencedor, p.derrotados])
+	t.registrar(p.vencedor, p)
+	if t.estado != "campeao" or t.abates != 4 or t.derrotados_final != 4 or not _perto(t.tempo_total, 240.0 - p.tempo_restante, 0.01):
+		_falha("etapa final: controlador %s, abates %d, tempo %.1f" % [t.estado, t.abates, t.tempo_total])
+	main._atual.queue_free()
+	t.free()
+	await process_frame
 
-	# Fora da torre (partida normal): sem traço
-	var normal = await _nova_partida_livre(77)
-	for n in [1, 2]:
-		var l = normal.jogadores[n]
-		if l.vida_max != recruta.vida_max or l.dano != recruta.dano or l.alcance != recruta.alcance or l.traco_lacaio != null:
-			_falha("traço do Recruta: apareceu numa partida normal")
-	normal.get_parent().queue_free()
+	# O tempo (4:00) acaba com adversários restantes: game over, mesmo com o jogador na frente
+	t = _torre_script.new()
+	p = await _partida_etapa_final(main, t, [0, 1, 2, 3])
+	eu = p.jogadores[1]
+	for k in 2:
+		if not await _matar_adversario(p):
+			break
+	for i in 120:
+		await physics_frame
+	p.jogadores[2].vida = p.jogadores[2].vida_max * 0.05
+	eu.vida = eu.vida_max
+	if p.adversario_atual != 3:
+		_falha("etapa final: deveria estar no 3º adversário (%d)" % p.adversario_atual)
+	p.tempo_restante = 0.01
+	for i in 5:
+		await physics_frame
+	if not p.fim or p.vencedor != 2 or p.morte_subita:
+		_falha("etapa final: o fim do tempo deveria dar game over (fim %s, vencedor %d, súbita %s)" % [p.fim, p.vencedor, p.morte_subita])
+	t.registrar(p.vencedor, p)
+	if t.estado != "game_over" or t.andar_alcancado != 5 or t.derrotados_final != 2 or t.abates != 2 or not _perto(t.tempo_total, 240.0, 0.1):
+		_falha("etapa final: game over por tempo errado (%s, andar %d, derrotados %d, tempo %.1f)" % [t.estado, t.andar_alcancado, t.derrotados_final, t.tempo_total])
+	main._atual.queue_free()
+	t.free()
+	await process_frame
+
+	# O jogador cai: game over
+	t = _torre_script.new()
+	p = await _partida_etapa_final(main, t, [2, 3, 0, 1])
+	p.jogadores[1].receber_dano(99999.0, p.jogadores[2])
+	for i in 5:
+		await physics_frame
+	if not p.fim or p.vencedor != 2 or p.adversario_atual != 1:
+		_falha("etapa final: a morte do jogador deveria dar game over (vencedor %d)" % p.vencedor)
+	t.registrar(p.vencedor, p)
+	if t.estado != "game_over" or t.derrotados_final != 0:
+		_falha("etapa final: game over do jogador errado (%s)" % t.estado)
+	main._atual.queue_free()
+	t.free()
+	await process_frame
+
+	# O jogador cai na pausa entre dois adversários: game over e o próximo não entra
+	t = _torre_script.new()
+	p = await _partida_etapa_final(main, t, [2, 3, 0, 1])
+	var primeiro = p.jogadores[2]
+	primeiro.receber_dano(99999.0, p.jogadores[1])
+	for i in 3:
+		await physics_frame
+	p.jogadores[1].receber_dano(99999.0, null)
+	for i in 90:
+		await physics_frame
+	if not p.fim or p.vencedor != 2 or p.jogadores[2] != primeiro:
+		_falha("etapa final: cair durante a pausa deveria dar game over sem novo adversário")
+	main._atual.queue_free()
+	t.free()
+	await process_frame
 	main.queue_free()
 	await process_frame
-	print("Traço do Recruta (andar 1 da torre, só no jogador, some com a classe, Rei com 1 lacaio): ok")
-
-
-func _torre_andar1(n: int, so_personagem := -1, sem_traco := false) -> void:
-	## Andar 1 da torre com BOT no lugar do jogador (mesma dificuldade da CPU), usando a
-	## config que a torre gera (mob de cura, 90 s, sem Morte Súbita, decisão por % de vida).
-	## Imprime, por personagem e dificuldade (NORMAL, DIFÍCIL), a vitória do jogador e a duração.
-	## --sem_traco mede a linha de base. O tools/teste.gd roda um personagem por processo
-	## (--personagem K) para rodar os 4 em paralelo.
-	var main = load("res://scenes/main.tscn").instantiate()
-	root.add_child(main)
-	await process_frame
-	var nomes := ["Arqueiro", "Orc", "Mago", "Rei"]
-	for pers in 4:
-		if so_personagem >= 0 and pers != so_personagem:
-			continue
-		for dif in 2:
-			var vit := 0
-			var duracao := 0.0
-			for k in n:
-				var t = _torre_script.new()
-				t.comecar(pers, dif, 7000 + k)
-				var config: Dictionary = t.config_andar()
-				t.free()
-				config["bots"][1] = _torre_script.DIFICULDADES_BOT[dif]
-				if sem_traco:
-					config["lutadores"][1].erase("traco")
-					config["torre"].erase("traco")
-				var r: Dictionary = await _jogar(main, config, 60 * 110)
-				duracao += 90.0 - r.get("tempo", 0.0)
-				if r.get("vencedor", 0) == 1:
-					vit += 1
-			print("ANDAR1 %-8s %-8s vitória do jogador %3d%% (%d de %d), duração média %.0f s%s" % [
-					nomes[pers], ["NORMAL", "DIFÍCIL"][dif],
-					roundi(100.0 * vit / n), vit, n, duracao / n, " [sem traço]" if sem_traco else ""])
-	main.queue_free()
+	print("Etapa final (sequência dos 4, nasce longe, lacaios somem, vitória, tempo, derrota): ok")
 
 
 func jogo_melhoria(l, id: String) -> void:
