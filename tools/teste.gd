@@ -1433,7 +1433,9 @@ func _testar_torre() -> void:
 	# (a) ordem dos adversários
 	for semente in 50:
 		var t = _torre_script.new()
-		t.comecar(1, 0, semente)
+		t.comecar(semente % 4, 0, semente)
+		if t.ordem[4] != semente % 4:
+			_falha("torre: a luta espelhada deveria ser o andar 5 (ordem %s, personagem %d)" % [t.ordem, semente % 4])
 		var sub: Array = t.ordem.slice(1, 5)
 		var fin: Array = t.ordem.slice(5, 9)
 		sub.sort()

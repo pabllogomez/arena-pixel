@@ -3,8 +3,8 @@ extends Node
 ## Controlador da Torre da Tormenta (modo single player): guarda o que passa de
 ## uma luta para a seguinte e decide o que vem depois.
 ##
-## Subida: 5 andares (1 = Recruta x Recruta; 2 a 5 = as 4 classes em ordem
-## aleatória). Etapa final: 4 andares com as 4 classes em outra ordem. O
+## Subida: 5 andares (1 = Recruta x Recruta; 2 a 4 = as outras 3 classes em
+## ordem aleatória; 5 = luta espelhada, a mesma classe do jogador). Etapa final: 4 andares com as 4 classes em outra ordem. O
 ## jogador só usa o personagem escolhido; a CPU de cada andar >= 2 tem sempre
 ## o nível do jogador + 1. Quem monta a partida é o main.gd (config_andar) e
 ## quem devolve o resultado também (registrar).
@@ -66,7 +66,12 @@ func comecar(p_personagem: int, p_dificuldade: int, semente := -1) -> void:
 	andar_alcancado = 1
 	desbloqueou_agora = false
 	ordem = [-1]
-	ordem.append_array(_embaralhar_classes())
+	# Subida: as outras 3 classes em ordem aleatória e a luta espelhada (a mesma
+	# classe do jogador) sempre por último, no andar 5, antes da etapa final.
+	var subida := _embaralhar_classes()
+	subida.erase(personagem)
+	subida.append(personagem)
+	ordem.append_array(subida)
 	ordem.append_array(_embaralhar_classes())
 
 
