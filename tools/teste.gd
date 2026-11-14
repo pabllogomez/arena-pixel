@@ -667,11 +667,33 @@ func _testar_guarda_real() -> void:
 	g.receber_dano(10.0, null, "lanca", inim.position)
 	if absf((v0 - g.vida) - 20.0) > 0.01:
 		_falha("Guarda: projétil/lança pela frente tirou %.2f, esperado 20" % (v0 - g.vida))
-	# Proteção do Rei contra projéteis também vale só com Guarda (sem lacaios)
+	# Proteção do Rei contra projéteis NÃO vale só com Guarda (só lacaios ativam)
 	var vr: float = rei.vida
 	rei.receber_dano(10.0, null, "projetil")
-	if absf((vr - rei.vida) - 10.0 * rei.GUARDA_REAL) > 0.01:
-		_falha("Rei: proteção de projétil com Guarda vivo não aplicou (%.2f)" % (vr - rei.vida))
+	if absf((vr - rei.vida) - 10.0) > 0.01:
+		_falha("Rei: só o Guarda vivo não deveria proteger de projétil (%.2f)" % (vr - rei.vida))
+	# Projétil atravessa o Guarda; cerca de 1 em 4 é aparado (some sem dano)
+	g.vida = g.vida_max
+	var aparados := 0
+	var ProjetilScript = load("res://scripts/projetil.gd")
+	for k in 200:
+		var pj = ProjetilScript.new()
+		pj.partida = p
+		pj.equipe = inim.equipe
+		pj.dano = 5.0
+		pj.velocity = Vector2(-200, 0)
+		pj.position = g.global_position
+		p.entidades.add_child(pj)
+		pj._physics_process(0.0)
+		if pj.is_queued_for_deletion():
+			aparados += 1
+		else:
+			pj.queue_free()
+	if g.vida != g.vida_max:
+		_falha("Guarda: projétil que atravessa não deveria ferir o Guarda")
+	if aparados < 25 or aparados > 75:
+		_falha("Guarda: aparou %d de 200 projéteis (esperado ~50)" % aparados)
+	await process_frame
 	g.vida = g.vida_max
 
 	# Nascer sobreposto a um inimigo não o prende: só fica sólido quando o espaço está livre

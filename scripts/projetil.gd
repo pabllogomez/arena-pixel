@@ -5,6 +5,8 @@ extends Node2D
 
 const TEX_FLECHA := preload("res://assets/sprites/flecha.png")
 const TEX_ORBE := preload("res://assets/sprites/orbe.png")
+## Chance de o Guarda Real aparar um projétil que passa por ele (senão atravessa)
+const CHANCE_APARAR := 0.25
 
 var velocity := Vector2.ZERO
 var equipe := 0
@@ -18,6 +20,8 @@ var raio_explosao := 0.0
 var cooldown_porta := 0.0
 ## Lança de lacaio (conta como dano de lacaio, não de projétil)
 var de_lacaio := false
+## Guardas Reais pelos quais este projétil já passou (cada um tenta aparar uma vez)
+var _guardas_vistos: Array = []
 
 var _percorrido := 0.0
 var _t := 0.0
@@ -67,6 +71,15 @@ func _physics_process(delta: float) -> void:
 
 	for a in get_tree().get_nodes_in_group("alvo"):
 		if Jogo.hostis(self, a) and a.esta_vivo() and a.hitbox().grow(2.0).has_point(global_position):
+			if a.get("guarda") == true:
+				# Guarda Real: o projétil atravessa, mas 1 em 4 é aparado no escudo
+				if a in _guardas_vistos:
+					continue
+				_guardas_vistos.append(a)
+				if randf() < CHANCE_APARAR:
+					_aparado(a)
+					return
+				continue
 			_acertar(a)
 			return
 
@@ -93,6 +106,14 @@ func _acertar(alvo) -> void:
 					and a.global_position.distance_to(global_position) <= raio_explosao:
 				_ferir(a, d * 0.5)
 		partida.criar_brilho(global_position)
+	queue_free()
+
+
+func _aparado(guarda) -> void:
+	## O escudo do Guarda Real segura o projétil: some sem causar dano.
+	partida.fx("faisca_escudo", position, velocity.angle() + PI)
+	Jogo.tocar("bloqueio")
+	partida.mostrar_texto(guarda.global_position + Vector2(0, -12), "APAROU!", Color("73eff7"))
 	queue_free()
 
 

@@ -663,7 +663,7 @@ func receber_dano(qtd: float, origem, fonte := "", _pos_golpe := Vector2.INF) ->
 	if fonte == "lacaio" or fonte == "lanca":
 		qtd *= 1.0 - dados.resistencia_lacaios  # Orc: pele grossa contra lacaios
 	# Guarda real: com lacaios vivos, o Rei leva menos dano de projéteis
-	if fonte == "projetil" and dados.tipo_ataque == ClasseDados.TipoAtaque.INVOCAR and (partida.contar_lacaios(self) > 0 or partida.contar_guardas(self) > 0):
+	if fonte == "projetil" and dados.tipo_ataque == ClasseDados.TipoAtaque.INVOCAR and partida.contar_lacaios(self) > 0:  # só os lacaios (o Guarda Real não conta)
 		qtd *= GUARDA_REAL
 	# Dano entre jogadores passa pelas regras da partida (Recruta, PvP, morte súbita)
 	if origem_valida and origem is Lutador and origem != self:
