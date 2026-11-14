@@ -3,6 +3,10 @@
 Cada publicação na `main` cria a tag e o Release com a seção da versão atual
 (`config/version` em `project.godot`). Escreva a seção antes de publicar.
 
+## v0.4
+- Torre da Tormenta: no andar 1, o seu Recruta ganha um traço sutil do personagem escolhido (Arqueiro: mais alcance, Orc: mais vida, Mago: mais dano, Rei: um lacaio pequeno). O traço aparece no cartão do andar.
+- Torre da Tormenta: a luta espelhada (contra o seu próprio personagem) agora é sempre o andar 5, o último antes da etapa final.
+
 ## v0.3.1
 - Correção: o aviso de "CRÍTICO!" / "DASH!" saiu de cima do boneco e agora aparece em letras grandes, numa plaquinha logo abaixo do painel de vida de quem acertou.
 
