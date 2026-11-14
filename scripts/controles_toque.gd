@@ -8,6 +8,10 @@ extends Control
 ## Lado esquerdo: joystick flutuante. Aparece onde o dedo encostar; para os
 ## lados anda (mais longe = mais rápido), para baixo desce da plataforma.
 ## Lado direito: botão de pular. Suporta vários dedos ao mesmo tempo.
+## Arrastar rápido para o lado (> DASH_DISTANCIA px em até DASH_TEMPO s desde
+## que o dedo encostou) dá um dash para aquele lado: aperta p1_dash_esq ou
+## p1_dash_dir por um instante (o ControleHumano lê o sentido). O pulo continua
+## no toque, sem atraso; o arraste só soma o dash.
 
 ## "menu", "jogo", "pausa" ou "fim" (calculado a partir da partida atual)
 var modo := "menu"
@@ -27,6 +31,14 @@ var _joy_centro := Vector2.ZERO
 var _joy_pos := Vector2.ZERO
 var _joy_descendo := false
 
+const DASH_DISTANCIA := 24.0   ## deslocamento horizontal mínimo do arraste
+const DASH_TEMPO := 0.25       ## o arraste tem que acontecer logo depois do toque
+const DASH_SEGURA := 0.1       ## quanto tempo a ação do sentido fica apertada
+
+## dedo (lado direito) -> {"origem": Vector2, "t": ms do toque}; sai quando dispara ou solta
+var _arrastos := {}
+var _dash_solta := 0.0
+
 const COR_BOTAO := Color(1, 1, 1, 0.18)
 const COR_APERTADO := Color(1, 1, 1, 0.4)
 const COR_SIMBOLO := Color(1, 1, 1, 0.75)
@@ -39,7 +51,11 @@ func _ready() -> void:
 		Jogo.toque = true
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
+	if _dash_solta > 0.0:
+		_dash_solta -= delta
+		if _dash_solta <= 0.0:
+			_soltar_dash()
 	var novo := "menu"
 	if partida != null and is_instance_valid(partida):
 		if partida.fim:
@@ -153,6 +169,8 @@ func _input(event: InputEvent) -> void:
 		var t := event as InputEventScreenTouch
 		if t.pressed:
 			var nome := _botao_em(t.position)
+			if modo == "jogo" and t.position.x >= get_viewport().get_visible_rect().size.x * 0.5:
+				_arrastos[t.index] = {"origem": t.position, "t": Time.get_ticks_msec()}
 			if nome != "":
 				_trocar(t.index, nome)
 			elif modo == "jogo" and _joy_dedo < 0 and t.position.x < get_viewport().get_visible_rect().size.x * 0.5:
@@ -163,11 +181,39 @@ func _input(event: InputEvent) -> void:
 		elif t.index == _joy_dedo:
 			_soltar_joystick()
 		else:
+			_arrastos.erase(t.index)
 			_trocar(t.index, "")
 	elif event is InputEventScreenDrag:
 		var d := event as InputEventScreenDrag
 		if d.index == _joy_dedo:
 			_mover_joystick(d.position)
+		elif _arrastos.has(d.index):
+			_checar_arrasto(d)
+
+
+# ------------------------------------------------------------------ Dash
+
+func _checar_arrasto(d: InputEventScreenDrag) -> void:
+	var a: Dictionary = _arrastos[d.index]
+	if (Time.get_ticks_msec() - int(a["t"])) / 1000.0 > DASH_TEMPO:
+		_arrastos.erase(d.index)  # devagar demais: é só um dedo apoiado
+		return
+	var desvio: Vector2 = d.position - a["origem"]
+	if absf(desvio.x) > DASH_DISTANCIA and absf(desvio.x) > absf(desvio.y):
+		_arrastos.erase(d.index)
+		_disparar_dash(signf(desvio.x))
+
+
+func _disparar_dash(sentido: float) -> void:
+	_soltar_dash()
+	Input.action_press("p1_dash_dir" if sentido > 0.0 else "p1_dash_esq")
+	_dash_solta = DASH_SEGURA
+
+
+func _soltar_dash() -> void:
+	Input.action_release("p1_dash_esq")
+	Input.action_release("p1_dash_dir")
+	_dash_solta = 0.0
 
 
 # ------------------------------------------------------------------ Joystick
@@ -241,6 +287,8 @@ func soltar_tudo() -> void:
 	for dedo in _dedos.keys():
 		Input.action_release(_acao_de(_dedos[dedo]))
 	_dedos.clear()
+	_arrastos.clear()
+	_soltar_dash()
 	_soltar_joystick()
 
 

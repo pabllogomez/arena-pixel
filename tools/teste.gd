@@ -30,6 +30,8 @@ func _initialize() -> void:
 		return
 	_testar_mapas()
 	await _testar_pulos_e_itens()
+	await _testar_dash()
+	_testar_dash_rede()
 	await _testar_partidas()
 	print("RESULTADO: ", "OK" if _falhas == 0 else "%d FALHA(S)" % _falhas)
 	quit(1 if _falhas else 0)
@@ -220,6 +222,159 @@ func _testar_pulos_e_itens() -> void:
 	print("Itens e Bola: ok")
 	main.queue_free()
 	await process_frame
+
+
+func _testar_dash() -> void:
+	## Dash: desloca bem mais que andar, tem recarga e só um no ar até pousar.
+	var main = load("res://scenes/main.tscn").instantiate()
+	root.add_child(main)
+	await process_frame
+	main._nova_partida({"semente": 77, "tempo": 180.0, "bots": {1: -1, 2: -1}})
+	await process_frame
+	var p = main._atual
+	p.contagem = 0.0
+	p._congelar(false)
+	var l = p.jogadores[1]
+	l.receber_classe(load("res://resources/classes/orc.tres"))
+	l.eh_recruta = false
+	var c := ControleTeste.new()
+	l.controle = c
+	l.ativo = true
+	p.jogadores[2].ativo = false
+	var base: Vector2 = p.mapa["inicio"][1]
+
+	# (a) andar x dash, mesmo tempo (0,4 s)
+	l.position = base
+	l.velocity = Vector2.ZERO
+	for f in 30:
+		await physics_frame
+	var x0: float = l.position.x
+	c.eixo = 1.0
+	for f in 24:
+		await physics_frame
+	var andou: float = l.position.x - x0
+	c.eixo = 0.0
+	l._dash_cd = 0.0
+	for f in 30:
+		await physics_frame
+	l.velocity = Vector2.ZERO
+	x0 = l.position.x
+	c.eixo = 1.0
+	c.dash_apertou = true
+	await physics_frame
+	c.dash_apertou = false
+	for f in 23:
+		await physics_frame
+	var dashou: float = l.position.x - x0
+	c.eixo = 0.0
+	if dashou < andou * 1.5:
+		_falha("dash deslocou %.1f px, andar %.1f px (esperado bem mais)" % [dashou, andou])
+
+	# (b) recarga: segundo dash logo depois não acontece; depois de 1,2 s acontece
+	for f in 30:
+		await physics_frame
+	var posicoes := []
+	var comeca := func() -> bool:
+		c.dash_apertou = true
+		c.dash_dir = 1.0
+		return true
+	l._dash_cd = 0.0
+	comeca.call()
+	await physics_frame
+	c.dash_apertou = false
+	for f in 15:  # a arrancada acaba (0,15 s)
+		await physics_frame
+	if l._dash_t > 0.0:
+		_falha("a arrancada não terminou depois de DASH_DURACAO")
+	comeca.call()
+	await physics_frame
+	c.dash_apertou = false
+	if l._dash_t > 0.0:
+		_falha("segundo dash saiu antes da recarga")
+	for f in 60 * 12 / 10:  # passa de 1,2 s no total
+		await physics_frame
+	comeca.call()
+	await physics_frame
+	c.dash_apertou = false
+	if l._dash_t <= 0.0:
+		_falha("dash não saiu depois da recarga")
+	c.dash_dir = 0.0
+
+	# (c) no ar só um dash até tocar o chão
+	for f in 60:
+		await physics_frame
+	l.position = base + Vector2(0, -40)
+	l.velocity = Vector2.ZERO
+	l._dash_cd = 0.0
+	l._dash_ar_usado = false
+	await physics_frame
+	if l.is_on_floor():
+		_falha("teste do dash no ar: o lutador estava no chão")
+	c.dash_apertou = true
+	await physics_frame
+	c.dash_apertou = false
+	if l._dash_t <= 0.0:
+		_falha("o primeiro dash no ar não saiu")
+	l._dash_t = 0.0
+	l._dash_cd = 0.0
+	l.position.y = minf(l.position.y, base.y - 40)
+	l.velocity = Vector2.ZERO
+	c.dash_apertou = true
+	await physics_frame
+	c.dash_apertou = false
+	if l._dash_t > 0.0 and not l.is_on_floor():
+		_falha("saiu um segundo dash no ar sem tocar o chão")
+	l._dash_t = 0.0
+	l.velocity = Vector2.ZERO
+	for f in 90:
+		await physics_frame
+	if not l.is_on_floor():
+		_falha("o lutador não pousou no teste do dash")
+	l._dash_cd = 0.0
+	c.dash_apertou = true
+	await physics_frame
+	c.dash_apertou = false
+	if l._dash_t <= 0.0:
+		_falha("o dash não recarregou ao tocar o chão")
+	print("Dash: andou %.1f px, dashou %.1f px: ok" % [andou, dashou])
+	main.queue_free()
+	await process_frame
+
+
+class ControleTeste extends Controle:
+	## Controle manual para os testes: os campos são preenchidos pelo teste.
+	func atualizar(_l, _delta: float) -> void:
+		pass
+
+
+func _testar_dash_rede() -> void:
+	## ControleRede: um dash por contador; estado antigo (4 elementos) não quebra.
+	var c := ControleRede.new()
+	c.receber([0.0, 0, false, 0, 0, 0.0])
+	c.atualizar(null, 0.016)
+	if c.dash_apertou:
+		_falha("ControleRede: dash sem contador subir")
+	c.receber([0.5, 0, false, 0, 1, -1.0])
+	c.atualizar(null, 0.016)
+	if not c.dash_apertou or c.dash_dir != -1.0:
+		_falha("ControleRede: dash do contador não chegou (apertou=%s, dir=%s)" % [c.dash_apertou, c.dash_dir])
+	c.atualizar(null, 0.016)
+	if c.dash_apertou:
+		_falha("ControleRede: o mesmo dash saiu duas vezes")
+	c.receber([0.5, 0, false, 0, 1, -1.0])  # pacote repetido
+	c.atualizar(null, 0.016)
+	if c.dash_apertou:
+		_falha("ControleRede: pacote repetido gerou dash")
+	c.receber([0.0, 0, false, 0, 3, 1.0])   # perdeu um pacote: conta como um apertão só
+	c.atualizar(null, 0.016)
+	if not c.dash_apertou or c.dash_dir != 1.0:
+		_falha("ControleRede: contador que pulou não gerou dash")
+	var antigo := ControleRede.new()
+	antigo.receber([1.0, 2, true, 0])
+	antigo.atualizar(null, 0.016)
+	if antigo.dash_apertou or antigo.eixo != 1.0 or not antigo.pulo_apertou:
+		_falha("ControleRede: estado de 4 elementos quebrou")
+	print("ControleRede (dash): ok")
 
 
 func jogo_melhoria(l, id: String) -> void:

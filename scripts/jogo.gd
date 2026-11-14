@@ -37,7 +37,7 @@ func _ready() -> void:
 	_musica.volume_db = -8.0
 	add_child(_musica)
 	for nome in ["pulo", "flecha", "espada", "magia", "invocar", "acerto",
-			"morte", "nivel", "porta", "vitoria", "pouso", "pingo", "item", "bola"]:
+			"morte", "nivel", "porta", "vitoria", "pouso", "pingo", "item", "bola", "dash"]:
 		var p := AudioStreamPlayer.new()
 		p.stream = load("res://assets/sfx/%s.wav" % nome)
 		p.max_polyphony = 4
@@ -216,14 +216,20 @@ func _criar_controles() -> void:
 	_acao("p1_direita", [KEY_D])
 	_acao("p1_pular", [KEY_W, KEY_SPACE])
 	_acao("p1_descer", [KEY_S])
+	_acao("p1_dash", [KEY_SHIFT])
 	_acao("p1_opcao1", [KEY_Q])
 	_acao("p1_opcao2", [KEY_E])
 	_acao("p2_esquerda", [KEY_LEFT])
 	_acao("p2_direita", [KEY_RIGHT])
 	_acao("p2_pular", [KEY_UP, KEY_KP_0, KEY_0])
 	_acao("p2_descer", [KEY_DOWN])
+	_acao("p2_dash", [KEY_CTRL])
 	_acao("p2_opcao1", [KEY_KP_1, KEY_K])
 	_acao("p2_opcao2", [KEY_KP_2, KEY_L])
+	# Sentido do dash por toque (sem tecla: o controles_toque.gd aperta por um instante)
+	for j in [1, 2]:
+		_acao("p%d_dash_esq" % j, [])
+		_acao("p%d_dash_dir" % j, [])
 	# Menus
 	_acao("menu_cima", [KEY_W, KEY_UP])
 	_acao("menu_baixo", [KEY_S, KEY_DOWN])
@@ -243,6 +249,8 @@ func _criar_controles() -> void:
 		_botao("p%d_direita" % j, dev, JOY_BUTTON_DPAD_RIGHT)
 		_botao("p%d_descer" % j, dev, JOY_BUTTON_DPAD_DOWN)
 		_botao("p%d_pular" % j, dev, JOY_BUTTON_A)
+		_botao("p%d_dash" % j, dev, JOY_BUTTON_RIGHT_SHOULDER)
+		_botao("p%d_dash" % j, dev, JOY_BUTTON_LEFT_SHOULDER)
 		_botao("p%d_opcao1" % j, dev, JOY_BUTTON_X)
 		_botao("p%d_opcao2" % j, dev, JOY_BUTTON_Y)
 		_eixo("p%d_esquerda" % j, dev, JOY_AXIS_LEFT_X, -1.0)

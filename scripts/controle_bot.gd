@@ -49,6 +49,8 @@ func atualizar(l, delta: float) -> void:
 	pulo_apertou = false
 	pulo_soltou = false
 	descer_apertou = false
+	dash_apertou = false
+	dash_dir = 0.0
 	opcao = -1
 	eixo = 0.0
 	if _seguidor == null:
@@ -226,6 +228,7 @@ func _mover(l, delta: float) -> void:
 			ClasseDados.TipoAtaque.FLECHA, ClasseDados.TipoAtaque.MAGIA:
 				if _alvo is Lutador and d < l.atk_alcance() * 0.4 and absf(dif.y) < 24.0:
 					eixo = -signf(dif.x)  # recua para não apanhar de perto
+					_tentar_dash(l, eixo, 0.06)  # e, às vezes, arranca para longe
 					if l.is_on_wall() and l.is_on_floor():
 						pulo_apertou = true
 					return
@@ -239,10 +242,25 @@ func _mover(l, delta: float) -> void:
 	eixo = r["eixo"]
 	pulo_apertou = r["pular"]
 	descer_apertou = r["descer"]
+	# Alvo longe no mesmo nível, caminho livre à frente: encurta a distância
+	if _alvo != null and is_instance_valid(_alvo) and _alvo is Lutador and _modo == "atacar" and eixo != 0.0 and l.is_on_floor():
+		var dx: float = _alvo.position.x - l.position.x
+		if absf(dx) > 110.0 and absf(_alvo.position.y - l.position.y) < 16.0 and signf(dx) == eixo:
+			_tentar_dash(l, eixo, 0.02)
 	# Sem caminho (ou já chegou): vai direto na direção do alvo
 	if _seguidor.chegou() and _alvo != null and is_instance_valid(_alvo) and _modo != "fugir":
 		var dx: float = _alvo.position.x - l.position.x
 		eixo = signf(dx) if absf(dx) > 6.0 else 0.0
+
+
+func _tentar_dash(l, sentido: float, chance: float) -> void:
+	## Dash com moderação (chance por quadro, só se a recarga permitir). O bot
+	## fácil não usa; só arranca no chão, para não se jogar em buracos no ar.
+	if dificuldade == Dificuldade.FACIL or not l.dash_pronto() or not l.is_on_floor():
+		return
+	if randf() < chance:
+		dash_apertou = true
+		dash_dir = sentido
 
 
 func _escolher_melhoria(l, delta: float) -> void:

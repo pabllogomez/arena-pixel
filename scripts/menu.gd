@@ -154,7 +154,7 @@ func _draw() -> void:
 	_desenhar_tela_cheia()
 	if Jogo.toque:
 		UI.texto(self, Vector2(cx, 238), "Toque em uma opção", UI.P, UI.BORDA)
-		UI.texto(self, Vector2(cx, 249), "Arraste na esquerda: andar    Toque na direita: pular    Melhorias: toque na carta", UI.P, Color("41a6f6"))
+		UI.texto(self, Vector2(cx, 249), "Esquerda: arraste para andar    Direita: toque pula, arraste de lado dá dash    Melhorias: toque na carta", UI.P, Color("41a6f6"))
 		UI.texto(self, Vector2(cx, 260), "O ataque é automático. Partidas de 3 minutos + Morte Súbita.", UI.P, UI.BORDA)
 		return
 	var ajuda := "W/S ou ↑/↓: escolher     ESPAÇO: confirmar"
@@ -162,9 +162,9 @@ func _draw() -> void:
 		ajuda += "     ESC: voltar"
 	UI.texto(self, Vector2(cx, 238), ajuda, UI.P, UI.BORDA)
 	if _tela == "modo" and _sel == 1:
-		UI.texto(self, Vector2(cx, 249), "P1: A/D andar, W pular, S descer, Q/E melhorias    P2: setas, 1/2 melhorias", UI.P, Color("ef7d57"))
+		UI.texto(self, Vector2(cx, 249), "P1: A/D andar, W pular, S descer, SHIFT dash, Q/E melhorias    P2: setas, CTRL dash, 1/2 melhorias", UI.P, Color("ef7d57"))
 	else:
-		UI.texto(self, Vector2(cx, 249), "A/D: andar    W ou ESPAÇO: pular    S: descer    Q/E: melhorias", UI.P, Color("41a6f6"))
+		UI.texto(self, Vector2(cx, 249), "A/D: andar    W ou ESPAÇO: pular    SHIFT: dash    S: descer    Q/E: melhorias", UI.P, Color("41a6f6"))
 	UI.texto(self, Vector2(cx, 260), "O ataque é automático. Partidas de 3 minutos + Morte Súbita.", UI.P, UI.BORDA)
 
 

@@ -7,6 +7,8 @@ var eixo := 0.0                ## -1 esquerda .. 1 direita
 var pulo_apertou := false      ## apertou neste quadro
 var pulo_soltou := false       ## soltou neste quadro (corta o pulo)
 var descer_apertou := false
+var dash_apertou := false      ## pediu uma arrancada neste quadro
+var dash_dir := 0.0            ## -1/1 = direção pedida; 0 = usa o eixo (ou para onde olha)
 var opcao := -1                ## melhoria escolhida neste quadro (0 ou 1)
 
 

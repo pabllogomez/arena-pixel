@@ -226,6 +226,9 @@ func fx(nome: String, pos: Vector2, a = 0.0, b = 0.0) -> void:
 		"pulo":
 			for lado in [-1.0, 1.0]:
 				_leque(pos, 3, 0.0 if lado > 0.0 else PI, 0.3, 14.0, 34.0, 0.26, POEIRA, 1, -20.0, 3.0)
+		"dash":
+			# a = sentido do dash: a poeira sai para trás
+			_leque(pos, 6, 0.0 if float(a) < 0.0 else PI, 0.35, 20.0, 70.0, 0.24, POEIRA, 1, -10.0, 3.0)
 		"pouso":
 			# a = velocidade da queda
 			var forca := clampf(float(a) / 240.0, 0.5, 1.8)

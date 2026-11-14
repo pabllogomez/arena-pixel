@@ -106,6 +106,7 @@ func _draw() -> void:
 	draw_texture_rect_region(_tex, Rect2(dx - 8, chao - 16 - altura, 16, 16), Rect2(q * 16, 0, 16, 16))
 	_dedo(Vector2(dx, dy0), ciclo < 0.18)
 	UI.texto(self, Vector2(dx, cy + 54), "Segure para pular mais alto", UI.P, UI.BORDA)
+	UI.texto(self, Vector2(dx, cy + 66), "Arraste rápido para o lado: dash", UI.P, UI.BORDA)
 
 	# ---- Rodapé
 	UI.texto(self, Vector2(cx, cy + 84), "O ataque é automático. As melhorias aparecem em cartas: toque na carta.", UI.P, UI.LUZ)

@@ -106,6 +106,8 @@ var _fantasmas := {}      ## convidado: id da entidade no anfitrião -> Sprite2D
 var _alvos := {}          ## convidado: nó -> posição recebida (para suavizar)
 var _pulos_enviados := 0
 var _descidas_enviadas := 0
+var _dashes_enviados := 0
+var _ultima_dir_dash := 0.0
 const TEX_PROJETIL := {
 	"flecha": preload("res://assets/sprites/flecha.png"),
 	"orbe": preload("res://assets/sprites/orbe.png"),
@@ -918,10 +920,15 @@ func _physics_convidado() -> void:
 			_pulos_enviados += 1
 		if Input.is_action_just_pressed("p1_descer"):
 			_descidas_enviadas += 1
+		if Input.is_action_just_pressed("p1_dash") or Input.is_action_just_pressed("p1_dash_esq") \
+				or Input.is_action_just_pressed("p1_dash_dir"):
+			_dashes_enviados += 1
+			_ultima_dir_dash = (1.0 if Input.is_action_pressed("p1_dash_dir") else 0.0) \
+					- (1.0 if Input.is_action_pressed("p1_dash_esq") else 0.0)
 		Rede.enviar_entrada([Input.get_axis("p1_esquerda", "p1_direita"), _pulos_enviados,
-				Input.is_action_pressed("p1_pular"), _descidas_enviadas])
+				Input.is_action_pressed("p1_pular"), _descidas_enviadas, _dashes_enviados, _ultima_dir_dash])
 	else:
-		Rede.enviar_entrada([0.0, _pulos_enviados, false, _descidas_enviadas])
+		Rede.enviar_entrada([0.0, _pulos_enviados, false, _descidas_enviadas, _dashes_enviados, _ultima_dir_dash])
 	# Suaviza o movimento entre um pacote e outro
 	for no in _alvos.keys():
 		if not is_instance_valid(no):

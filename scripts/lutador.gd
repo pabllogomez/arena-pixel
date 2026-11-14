@@ -18,6 +18,12 @@ const REGEN_ESPERA := 5.0
 const REGEN_TAXA := 0.03
 ## Rei com lacaios vivos leva só esta fração do dano de projéteis
 const GUARDA_REAL := 0.8
+## Dash: arrancada horizontal curta (sem gravidade), igual para todas as classes.
+const DASH_DURACAO := 0.15
+const DASH_MULT := 3.0       ## velocidade durante o dash = DASH_MULT x velocidade da classe
+const DASH_RECARGA := 1.2    ## segundos entre um dash e o próximo (contados do início)
+const TEMPO_BUFFER_DASH := 0.1
+const DASH_FANTASMA_VIDA := 0.18
 const QUADROS := {
 	"parado": [0, 1],
 	"correr": [2, 3, 4, 5],
@@ -87,6 +93,15 @@ var _sem_dano := 0.0
 ## Estica/achata o sprite por um instante (pulo, pouso, golpe); volta para (1, 1)
 var _esticar := Vector2.ONE
 var _t_poeira := 0.0
+# Dash
+var _dash_t := 0.0             ## tempo restante da arrancada (> 0 = dashando)
+var _dash_cd := 0.0            ## recarga restante
+var _dash_dir := 1.0
+var _dash_ar_usado := false    ## já usou o dash no ar (volta ao tocar o chão)
+var _dash_buffer := 0.0
+var _t_fantasma := 0.0
+## Rastro do dash: cada fantasma é [posição global, espelhado, quadro, idade]
+var _fantasmas: Array = []
 
 
 func configurar(n: int, d: ClasseDados, p: Node, c: Controle) -> void:
@@ -267,12 +282,15 @@ func _physics_process(delta: float) -> void:
 	var sentido := -1.0 if gravidade_invertida else 1.0
 	up_direction = Vector2.DOWN if gravidade_invertida else Vector2.UP
 	if not is_on_floor():
-		var caindo := velocity.y * sentido > 0.0
-		var g := GRAVIDADE * (dados.mult_gravidade if caindo else 1.0)
-		velocity.y = clampf(velocity.y + g * sentido * delta, -QUEDA_MAX, QUEDA_MAX)
+		if _dash_t <= 0.0:  # durante o dash não há gravidade
+			var caindo := velocity.y * sentido > 0.0
+			var g := GRAVIDADE * (dados.mult_gravidade if caindo else 1.0)
+			velocity.y = clampf(velocity.y + g * sentido * delta, -QUEDA_MAX, QUEDA_MAX)
 		_coyote -= delta
 	else:
 		_coyote = TEMPO_COYOTE
+		_dash_ar_usado = false
+	_dash_cd -= delta
 
 	var dir := 0.0
 	if ativo:
@@ -292,6 +310,16 @@ func _physics_process(delta: float) -> void:
 			velocity.y *= 0.5
 		if controle.descer_apertou and is_on_floor() and not gravidade_invertida:
 			_atravessar_plataforma()
+		_dash_buffer -= delta
+		if controle.dash_apertou:
+			_dash_buffer = TEMPO_BUFFER_DASH
+		if _dash_buffer > 0.0 and dash_pronto():
+			var d := controle.dash_dir
+			if d == 0.0:
+				d = dir
+			if d == 0.0:
+				d = -1.0 if sprite.flip_h else 1.0
+			_iniciar_dash(signf(d))
 		_ler_escolhas()
 
 	if _descer > 0.0:
@@ -299,7 +327,18 @@ func _physics_process(delta: float) -> void:
 		if _descer <= 0.0:
 			set_collision_mask_value(5, true)
 
-	if dir != 0.0:
+	var em_dash := _dash_t > 0.0
+	if em_dash:
+		# Arrancada: ignora eixo e atrito; segura a velocidade e a altura
+		_dash_t -= delta
+		velocity.x = _dash_dir * velocidade * mult_vel_efeito * DASH_MULT
+		velocity.y = 0.0
+		sprite.flip_h = _dash_dir < 0.0
+		_t_fantasma -= delta
+		if _t_fantasma <= 0.0:
+			_t_fantasma = 0.04
+			_fantasmas.append([global_position, sprite.flip_h, sprite.frame, 0.0])
+	elif dir != 0.0:
 		velocity.x = move_toward(velocity.x, dir * velocidade * mult_vel_efeito, dados.aceleracao * delta)
 		sprite.flip_h = dir < 0.0
 	else:
@@ -308,6 +347,11 @@ func _physics_process(delta: float) -> void:
 	var estava_no_ar := not is_on_floor()
 	var queda := velocity.y * sentido
 	move_and_slide()
+	if em_dash and _dash_t <= 0.0:
+		# Fim da arrancada: volta à velocidade normal de corrida
+		var vmax := velocidade * mult_vel_efeito
+		velocity.x = clampf(velocity.x, -vmax, vmax)
+	_atualizar_fantasmas(delta)
 	if estava_no_ar and is_on_floor() and queda > 90.0:
 		_esticar = Vector2(1.3, 0.72) if queda > 200.0 else Vector2(1.18, 0.85)
 		if queda > 200.0 and dados.pouso_pesado:
@@ -339,6 +383,31 @@ func _physics_process(delta: float) -> void:
 		_flash -= delta
 	Jogo.pintar_clarao(sprite, _flash > 0.0)
 	queue_redraw()
+
+
+func dash_pronto() -> bool:
+	## Recarga zerada, fora de outro dash e (no ar) sem ter gasto o dash do ar.
+	return _dash_cd <= 0.0 and _dash_t <= 0.0 and (is_on_floor() or not _dash_ar_usado)
+
+
+func _iniciar_dash(sentido_x: float) -> void:
+	if not is_on_floor():
+		_dash_ar_usado = true
+	_dash_dir = sentido_x
+	_dash_t = DASH_DURACAO
+	_dash_cd = DASH_RECARGA
+	_dash_buffer = 0.0
+	_t_fantasma = 0.0
+	_esticar = Vector2(1.3, 0.8)
+	Jogo.tocar("dash")
+	partida.fx("dash", _pes(), sentido_x)
+
+
+func _atualizar_fantasmas(delta: float) -> void:
+	for f in _fantasmas:
+		f[3] += delta
+	while not _fantasmas.is_empty() and _fantasmas[0][3] > DASH_FANTASMA_VIDA:
+		_fantasmas.pop_front()
 
 
 func _atravessar_plataforma() -> void:
@@ -596,6 +665,7 @@ func _draw() -> void:
 	if not vivo:
 		return
 	var cor: Color = Jogo.COR_TIME[equipe]
+	_desenhar_fantasmas(cor)
 	# Rótulo ("VOCÊ", "CPU", "P1"...), seta e barra de vida acima da cabeça
 	var acima := maxf(0.0, (escala - 1.0) * 16.0)  # sobe o rótulo quando está gigante
 	draw_set_transform(Vector2(0, -acima))
@@ -605,3 +675,18 @@ func _draw() -> void:
 		draw_rect(Rect2(-2 + i, -19 + i, 5 - 2 * i, 1), cor)
 	draw_rect(Rect2(-8, -14, 16, 3), Color("1a1c2c"))
 	draw_rect(Rect2(-7, -13, roundf(14.0 * vida / vida_max), 1), cor)
+
+
+func _desenhar_fantasmas(cor: Color) -> void:
+	## Rastro do dash: cópias do sprite na cor do time que vão sumindo.
+	if _fantasmas.is_empty() or sprite.texture == null:
+		return
+	var lado := 16.0 * escala
+	for f in _fantasmas:
+		var alfa: float = 0.45 * (1.0 - float(f[3]) / DASH_FANTASMA_VIDA)
+		var c: Vector2 = to_local(f[0]) + Vector2(0, sprite.position.y)
+		var larg: float = -lado if f[1] else lado
+		var alt: float = -lado if gravidade_invertida else lado
+		var origem := Vector2(c.x - larg / 2.0, c.y - alt / 2.0)
+		draw_texture_rect_region(sprite.texture, Rect2(origem, Vector2(larg, alt)),
+				Rect2(int(f[2]) * 16, 0, 16, 16), Color(cor.r, cor.g, cor.b, alfa))

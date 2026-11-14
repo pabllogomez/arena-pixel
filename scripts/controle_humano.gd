@@ -14,6 +14,13 @@ func atualizar(_l, _delta: float) -> void:
 	pulo_apertou = Input.is_action_just_pressed(_a("pular"))
 	pulo_soltou = Input.is_action_just_released(_a("pular"))
 	descer_apertou = Input.is_action_just_pressed(_a("descer"))
+	# Teclado/controle: dash_dir = 0 (usa o eixo). O toque aperta dash_esq/dash_dir
+	# para indicar o sentido do arraste.
+	var dash_esq := Input.is_action_pressed(_a("dash_esq"))
+	var dash_dire := Input.is_action_pressed(_a("dash_dir"))
+	dash_apertou = Input.is_action_just_pressed(_a("dash")) \
+			or Input.is_action_just_pressed(_a("dash_esq")) or Input.is_action_just_pressed(_a("dash_dir"))
+	dash_dir = (1.0 if dash_dire else 0.0) - (1.0 if dash_esq else 0.0)
 	opcao = -1  # melhorias de humanos são escolhidas pela partida (funciona até pausado)
 
 

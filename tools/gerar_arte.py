@@ -591,6 +591,23 @@ def som(nome, notas, volume=0.22, taxa=22050):
         w.writeframes(b"".join(struct.pack("<h", a) for a in amostras))
 
 
+def whoosh(nome, dur=0.16, volume=0.2, taxa=22050):
+    """Ruído passado por um filtro que vai abrindo (som de arrancada)."""
+    n = int(taxa * dur)
+    y = 0.0
+    amostras = []
+    for i in range(n):
+        t = i / n
+        y += (0.15 + 0.6 * t) * (random.uniform(-1, 1) - y)
+        env = min(1.0, t / 0.15) * (1 - t) ** 1.5
+        amostras.append(int(max(-1.0, min(1.0, y * 2.0)) * env * volume * 32767))
+    with wave.open(os.path.join(SFX, nome), "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(taxa)
+        w.writeframes(b"".join(struct.pack("<h", a) for a in amostras))
+
+
 som("pulo.wav", [(300, 600, 0.12)], 0.15)
 som("flecha.wav", [(0, 0, 0.06), (900, 400, 0.06)], 0.12)
 som("espada.wav", [(0, 0, 0.14)], 0.25)
@@ -602,6 +619,7 @@ som("nivel.wav", [(523, 523, 0.08), (784, 784, 0.08), (1047, 1047, 0.2)], 0.18)
 som("item.wav", [(700, 1400, 0.08), (1400, 2100, 0.12)], 0.14)
 som("bola.wav", [(300, 900, 0.15), (900, 300, 0.15), (300, 1200, 0.25)], 0.16)
 som("pingo.wav", [(1800, 1400, 0.05), (1400, 1100, 0.08)], 0.05)
+whoosh("dash.wav")
 som("pouso.wav", [(0, 0, 0.05), (120, 40, 0.18)], 0.3)
 som("porta.wav", [(800, 200, 0.1), (200, 800, 0.1)], 0.12)
 som("vitoria.wav", [(523, 523, 0.12), (659, 659, 0.12), (784, 784, 0.12), (1047, 1047, 0.45)])
