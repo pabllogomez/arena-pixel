@@ -67,7 +67,7 @@ jobs:
       - name: Testar e exportar
         run: |
           set -eo pipefail
-          exportar() {  # $1 = pasta do projeto, $2 = pasta de saída
+          exportar() {  # $1 = pasta do projeto, $2 = pasta de saída, $3 = "teste" na build de teste
             echo "::group::$1"
             cd "$GITHUB_WORKSPACE/$1"
             ~/godot/godot --headless --import --path . || true
@@ -86,6 +86,12 @@ jobs:
                 echo "::error::Teste de rede falhou"; exit 1
               fi
             fi
+            # Build de teste: a versão mostrada no menu ganha "-teste" e o commit
+            if [ "$3" = "teste" ]; then
+              COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "?")
+              sed -i -E "s/^config\/version=\"([^\"]*)\"/config\/version=\"\1-teste · $COMMIT\"/" project.godot
+              grep "^config/version" project.godot
+            fi
             mkdir -p "$2"
             ~/godot/godot --headless --path . --export-release "Web" "$2/index.html"
             test -f "$2/index.wasm"
@@ -93,7 +99,7 @@ jobs:
           }
           exportar ramo-main "$GITHUB_WORKSPACE/site"
           if [ -d "$GITHUB_WORKSPACE/ramo-dev" ]; then
-            exportar ramo-dev "$GITHUB_WORKSPACE/site/teste"
+            exportar ramo-dev "$GITHUB_WORKSPACE/site/teste" teste
           fi
 
       - uses: actions/upload-pages-artifact@v3
