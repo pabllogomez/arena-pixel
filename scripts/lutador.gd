@@ -19,7 +19,7 @@ const CURA_NIVEL := 0.02
 const REGEN_ESPERA := 5.0
 const REGEN_TAXA := 0.03
 ## Rei com lacaios vivos leva só esta fração do dano de projéteis
-const GUARDA_REAL := 0.8
+const GUARDA_REAL := 0.9
 ## Dash: arrancada horizontal curta (sem gravidade), igual para todas as classes.
 const DASH_DURACAO := 0.15
 const DASH_MULT := 3.0       ## velocidade durante o dash = DASH_MULT x velocidade da classe
