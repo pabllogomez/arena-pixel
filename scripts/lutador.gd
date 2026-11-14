@@ -921,11 +921,6 @@ func _draw() -> void:
 		draw_rect(Rect2(-2 + i, -19 + i, 5 - 2 * i, 1), cor)
 	draw_rect(Rect2(-8, -14, 16, 3), Color("1a1c2c"))
 	draw_rect(Rect2(-7, -13, roundf(14.0 * vida / vida_max), 1), cor)
-	if _rotulo_critico != "" and _rotulo_t > 0.0:
-		# Crítico que este personagem acertou: logo abaixo da barra, some piscando no fim
-		if _rotulo_t > 0.3 or int(_rotulo_t * 20.0) % 2 == 0:
-			UI.texto(self, Vector2(0, -7), "CRÍTICO!" if _rotulo_critico == "costas" else "DASH!",
-					UI.P, COR_CRITICO[_rotulo_critico])
 
 
 func _desenhar_fantasmas(cor: Color) -> void:

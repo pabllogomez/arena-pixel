@@ -3,6 +3,9 @@
 Cada publicação na `main` cria a tag e o Release com a seção da versão atual
 (`config/version` em `project.godot`). Escreva a seção antes de publicar.
 
+## v0.3.1
+- Correção: o aviso de "CRÍTICO!" / "DASH!" saiu de cima do boneco e agora aparece em letras grandes, numa plaquinha logo abaixo do painel de vida de quem acertou.
+
 ## v0.3
 - Rei: o Guarda Real saiu. No lugar, o Rei ganhou o GOLPE DE CETRO: um golpe fraco que empurra o inimigo para longe. Usado durante o dash, o empurrão fica 25% mais forte.
 - ACERTO CRÍTICO: acertar alguém pelas costas causa dano x3 (todos os personagens). O Recruta que golpeia com dash causa x2.

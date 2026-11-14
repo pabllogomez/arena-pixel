@@ -96,6 +96,22 @@ func _draw() -> void:
 
 # ------------------------------------------------------------------ Painel do jogador
 
+func _rotulo_critico(l: Lutador, x0: float) -> void:
+	## Crítico que este jogador acertou: letras grandes logo abaixo do painel de
+	## vida, numa plaquinha na cor do tipo; pisca branco ao aparecer e some piscando.
+	if l._rotulo_critico == "" or l._rotulo_t <= 0.0:
+		return
+	if l._rotulo_t < 0.3 and int(l._rotulo_t * 20.0) % 2 == 1:
+		return
+	var texto := "CRÍTICO!" if l._rotulo_critico == "costas" else "DASH!"
+	var cor: Color = Lutador.COR_CRITICO[l._rotulo_critico]
+	var novo := l._rotulo_t > Lutador.ROTULO_CRITICO_TEMPO - 0.12
+	var larg := UI.largura(texto, UI.M) + 16.0
+	var placa := Rect2(roundf(x0 + LARG_PAINEL / 2.0 - larg / 2.0), ALT_PAINEL + 3.0, larg, 20.0)
+	UI.moldura(self, placa, Color(UI.TINTA, 0.9), cor.darkened(0.3), cor)
+	UI.texto(self, placa.get_center() + Vector2(0, -1), texto, UI.M, UI.BRANCO if novo else cor)
+
+
 func _painel(l: Lutador, n: int) -> void:
 	var cor: Color = Jogo.COR_TIME[n]
 	var dir := n == 2  # o painel do jogador 2 é espelhado
@@ -129,6 +145,8 @@ func _painel(l: Lutador, n: int) -> void:
 	else:
 		UI.texto(self, Vector2(bx, 6), titulo, UI.P, cor, UI.ESQ)
 		UI.texto(self, Vector2(bx + larg_barra, 6), nivel, UI.P, cor_nivel, UI.DIR)
+
+	_rotulo_critico(l, x0)
 
 	# Vida: pisca em vermelho quando está acabando
 	var f: float = _vida_vista[n]
