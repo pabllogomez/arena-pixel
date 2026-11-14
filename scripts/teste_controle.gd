@@ -1,7 +1,7 @@
 extends Control
 ## Tela "TESTE DO CONTROLE" (OPÇÕES): mostra cada controle conectado (nome, GUID e
-## se foi reconhecido ou corrigido automaticamente) e, ao vivo, o último botão ou
-## eixo recebido e o que o jogo entende dele. B ou Esc fecha.
+## plataforma) e, ao vivo, o último botão ou eixo recebido (índice cru), o botão que
+## o jogo entende (pelo MapaControle) e as ações que ele aciona. B ou Esc fecha.
 
 signal fechado
 
@@ -34,11 +34,21 @@ var _t := 0.0
 var _ultimo := {}  # dispositivo -> {"entrada": String, "acao": String}
 
 
+static func logico(indice: int) -> int:
+	## Índice cru do evento -> botão lógico do Godot (no navegador, desfaz o MapaControle).
+	if MapaControle.web:
+		for b: int in MapaControle.W3C:
+			if MapaControle.W3C[b] == indice:
+				return b
+		return -1  # gatilhos W3C (6 e 7) e o que o jogo não usa
+	return indice
+
+
 static func nome_entrada(ev: InputEvent) -> String:
 	## "LB (botão 4)" ou "Analógico esq. Y (eixo 1) = -0.85"
 	if ev is InputEventJoypadButton:
 		var i: int = ev.button_index
-		return "%s (botão %d)" % [BOTOES.get(i, "?"), i]
+		return "%s (botão %d)" % [BOTOES.get(logico(i), "gatilho/outro" if MapaControle.web else "?"), i]
 	if ev is InputEventJoypadMotion:
 		var e: int = ev.axis
 		return "%s (eixo %d) = %.2f" % [EIXOS.get(e, "?"), e, ev.axis_value]
@@ -116,16 +126,15 @@ func _draw() -> void:
 	for dev in devs.slice(0, 2):
 		var quadro := Rect2(cx - 220, y, 440, 84)
 		UI.moldura(self, quadro, Color("23263a"))
-		var corrigido: bool = Jogo.texto_estado_controle(dev).begins_with("corrigido")
 		UI.texto(self, Vector2(quadro.position.x + 8, y + 10), "CONTROLE %d: %s" % [dev + 1, _corta(Input.get_joy_name(dev), 38)], UI.P, UI.BRANCO, UI.ESQ)
 		UI.texto(self, Vector2(quadro.position.x + 8, y + 22), "GUID: " + _corta(Input.get_joy_guid(dev), 60), UI.P, UI.BORDA, UI.ESQ)
-		UI.texto(self, Vector2(quadro.position.x + 8, y + 34), "Estado: " + Jogo.texto_estado_controle(dev).to_upper(), UI.P,
-				UI.OURO if corrigido else UI.VERDE, UI.ESQ)
+		UI.texto(self, Vector2(quadro.position.x + 8, y + 34), "Plataforma: " + ("NAVEGADOR (W3C)" if MapaControle.web else "PC"), UI.P,
+				UI.OURO, UI.ESQ)
 		var ult: Dictionary = _ultimo.get(dev, {})
 		if ult.is_empty():
 			UI.texto(self, Vector2(quadro.position.x + 8, y + 54), "Aperte um botão ou mexa um analógico...", UI.P, UI.LUZ, UI.ESQ)
 		else:
-			UI.texto(self, Vector2(quadro.position.x + 8, y + 52), "Recebido: " + ult["entrada"], UI.P, UI.BRANCO, UI.ESQ)
+			UI.texto(self, Vector2(quadro.position.x + 8, y + 52), "Último botão: " + ult["entrada"], UI.P, UI.BRANCO, UI.ESQ)
 			UI.texto(self, Vector2(quadro.position.x + 8, y + 66), "O jogo entende: " + ult["acao"], UI.P, UI.VERDE, UI.ESQ)
 		y += 92.0
 	UI.texto(self, Vector2(cx, size.y - 12), "B ou ESC: sair", UI.P, UI.LUZ)

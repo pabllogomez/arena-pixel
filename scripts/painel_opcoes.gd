@@ -13,6 +13,7 @@ var na_pausa := true
 var _sel := 0
 var _tutorial: Control = null  # tutorial ou teste do controle aberto por cima
 var _confirmando := false      # "voltar ao menu" apertado uma vez (falta confirmar)
+var _quadro_voltar := -1  # quadro em que _voltar já valeu
 var _quadros := 0  # ignora o teclado no 1º quadro (a tecla que abriu o painel)
 const LARG := 190.0
 const ALT_ITEM := 18.0
@@ -22,6 +23,12 @@ const ESPACO := 3.0
 func _ready() -> void:
 	set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 	mouse_filter = MOUSE_FILTER_STOP
+	Jogo.pausa_pedida.connect(_voltar)
+
+
+func _exit_tree() -> void:
+	if Jogo.pausa_pedida.is_connected(_voltar):
+		Jogo.pausa_pedida.disconnect(_voltar)
 
 
 func _itens() -> Array:
@@ -102,6 +109,19 @@ func _gui_input(event: InputEvent) -> void:
 				return
 
 
+func _voltar() -> void:
+	## B/Esc/Start/P: cancela a confirmação ou fecha. Esc chega por dois caminhos no mesmo
+	## quadro (menu_voltar e pausa_pedida), então só vale uma vez por quadro.
+	var quadro := Engine.get_process_frames()
+	if quadro == _quadro_voltar or _quadros < 2 or (_tutorial != null and is_instance_valid(_tutorial)):
+		return
+	_quadro_voltar = quadro
+	if _confirmando:
+		_confirmando = false
+	else:
+		continuar.emit()
+
+
 func _process(_delta: float) -> void:
 	_quadros += 1
 	queue_redraw()
@@ -116,11 +136,8 @@ func _process(_delta: float) -> void:
 		_confirmando = false
 	elif Input.is_action_just_pressed("menu_ok"):
 		_acionar(itens[_sel][0])
-	elif Input.is_action_just_pressed("menu_voltar") or Input.is_action_just_pressed("pausar"):
-		if _confirmando:
-			_confirmando = false  # B/Esc só cancela a confirmação
-		else:
-			continuar.emit()
+	elif Input.is_action_just_pressed("menu_voltar"):
+		_voltar()
 	queue_redraw()
 
 

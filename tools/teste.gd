@@ -34,7 +34,9 @@ func _initialize() -> void:
 	await _testar_dash()
 	_testar_dash_rede()
 	_testar_mapeamento_controle()
+	_testar_controle_mapa()
 	await _testar_controle_menus()
+	await _testar_pausa_partida()
 	await _testar_cartas_layout()
 	await _testar_partidas()
 	print("RESULTADO: ", "OK" if _falhas == 0 else "%d FALHA(S)" % _falhas)
@@ -476,44 +478,167 @@ func _testar_mapeamento_controle() -> void:
 	print("Controle (mapeamento e último dispositivo): ok")
 
 
-func _testar_controle_menus() -> void:
-	## Mapeamento automático (string e registro), analógico nos menus e repetição ao segurar.
+func _evento_eixo(dev: int, eixo: JoyAxis, valor: float) -> InputEventJoypadMotion:
+	var ev := InputEventJoypadMotion.new()
+	ev.device = dev
+	ev.axis = eixo
+	ev.axis_value = valor
+	return ev
+
+
+func _testar_controle_mapa() -> void:
+	## Índices crus: no navegador (W3C) e no PC (Godot). Os atalhos são refeitos a cada troca.
 	var jogo = root.get_node("Jogo")
-	# (a) string de mapeamento
-	var m: String = jogo.mapeamento_xbox("guidfalso123", "Controle, Falso\nX")
-	var campos := m.split(",")
-	if campos[0] != "guidfalso123" or campos[1] != "Controle  Falso X" or campos.size() != 23:
-		_falha("mapeamento_xbox: cabeçalho errado: %s" % m)
-	if not m.contains("leftshoulder:b4") or not m.contains("dpup:-a7") or not m.contains("start:b7"):
-		_falha("mapeamento_xbox: campos do mapeamento faltando")
-	if m.contains("platform"):
-		_falha("mapeamento_xbox: não deveria ter platform")
-	var mp: String = jogo.mapeamento_padrao("guidfalso123", "Pad")
-	if not ("leftshoulder:b4" in mp and "start:b9" in mp and "righttrigger:b7" in mp and "dpleft:b14" in mp):
-		_falha("mapeamento_padrao: campos errados: %s" % mp)
-	if jogo.layout_por_formato(17, 4) != "padrao" or jogo.layout_por_formato(16, 4) != "padrao":
-		_falha("formato 16/17 botões e 4 eixos deveria ser a ordem padrão")
-	if jogo.layout_por_formato(11, 8) != "xbox" or jogo.layout_por_formato(11, 6) != "xbox":
-		_falha("formato 11 botões e 6/8 eixos deveria ser o layout Xbox")
-	if jogo.mapeamento_xbox("", "x") != "":
-		_falha("mapeamento_xbox: GUID vazio deveria dar string vazia")
-	if jogo.mapeamento_xbox("abc", "").split(",")[1] != "Controle":
-		_falha("mapeamento_xbox: nome vazio deveria virar 'Controle'")
-	Input.add_joy_mapping(m, true)  # não pode quebrar
-	jogo._verificar_controle(7)     # dispositivo inexistente: não pode quebrar
-	jogo._ao_mudar_controle(7, false)
-	Input.joy_connection_changed.emit(7, true)
-	Input.joy_connection_changed.emit(7, false)
-	# (b) analógico esquerdo (Y) nos menus
-	var casos := [[0, -1.0, "menu_cima", true], [0, 1.0, "menu_baixo", true], [1, -1.0, "menu_cima", true],
-			[0, -1.0, "menu_baixo", false], [0, -0.3, "menu_cima", false], [0, 0.4, "menu_baixo", false]]
-	for c in casos:
-		var ev := InputEventJoypadMotion.new()
-		ev.device = c[0]
-		ev.axis = JOY_AXIS_LEFT_Y
-		ev.axis_value = c[1]
-		if ev.is_action_pressed(c[2]) != c[3]:
-			_falha("analógico Y %.1f dispositivo %d ação %s (esperava %s)" % [c[1], c[0], c[2], c[3]])
+	var web_antes: bool = MapaControle.web
+	# (a) navegador: índices W3C
+	MapaControle.web = true
+	jogo._criar_controles()
+	var w3c := [
+		[0, 4, "p1_opcao1", true], [0, 5, "p1_opcao2", true], [1, 4, "p2_opcao1", true], [1, 5, "p2_opcao2", true],
+		[0, 0, "p1_pular", true], [0, 0, "menu_ok", true], [1, 0, "p2_pular", true],
+		[0, 1, "p1_dash", true], [0, 1, "menu_voltar", true], [1, 1, "p2_dash", true],
+		[0, 9, "pausar", true], [0, 8, "pausar", true], [1, 9, "pausar", true],
+		[0, 12, "menu_cima", true], [0, 13, "menu_baixo", true], [0, 13, "p1_descer", true],
+		[0, 14, "p1_esquerda", true], [0, 15, "p1_direita", true], [1, 14, "p2_esquerda", true], [1, 15, "p2_direita", true],
+		[1, 13, "p2_descer", true], [1, 13, "p1_descer", false], [1, 1, "p1_dash", false],
+		# gatilhos W3C não fazem nada (principalmente não pausam)
+		[0, 6, "pausar", false], [0, 7, "pausar", false], [0, 6, "p1_opcao1", false], [0, 7, "p1_opcao2", false],
+		[0, 6, "p1_pular", false], [0, 7, "p1_dash", false], [0, 6, "menu_ok", false], [0, 7, "menu_voltar", false],
+		# os índices do Godot não valem no navegador (6 e 7 seriam Start/gatilho; 11 e 12 direcional)
+		[0, 10, "p1_opcao2", false], [0, 11, "menu_cima", false], [0, 12, "menu_baixo", false],
+		[0, 3, "p1_opcao1", false], [0, 2, "p1_opcao2", false],
+	]
+	for c in w3c:
+		if InputMap.event_is_action(_botao_joy(c[0], c[1]), c[2]) != c[3]:
+			_falha("navegador: dispositivo %d botão cru %d ação %s (esperava %s)" % [c[0], c[1], c[2], c[3]])
+	# traduzir o índice de volta (tela de teste)
+	var teste = load("res://scripts/teste_controle.gd")
+	if teste.logico(4) != JOY_BUTTON_LEFT_SHOULDER or teste.logico(9) != JOY_BUTTON_START or teste.logico(12) != JOY_BUTTON_DPAD_UP or teste.logico(6) != -1:
+		_falha("teste_controle: tradução W3C -> botão lógico errada")
+	if not teste.nome_entrada(_botao_joy(0, 4)).begins_with("LB (botão 4)"):
+		_falha("teste_controle: nome no navegador: %s" % teste.nome_entrada(_botao_joy(0, 4)))
+	# (b) PC: índices do Godot de sempre
+	MapaControle.web = false
+	jogo._criar_controles()
+	var pc := [
+		[0, JOY_BUTTON_LEFT_SHOULDER, "p1_opcao1", true], [0, JOY_BUTTON_RIGHT_SHOULDER, "p1_opcao2", true],
+		[0, JOY_BUTTON_START, "pausar", true], [0, JOY_BUTTON_BACK, "pausar", true],
+		[0, JOY_BUTTON_DPAD_UP, "menu_cima", true], [0, JOY_BUTTON_DPAD_DOWN, "menu_baixo", true],
+		[0, JOY_BUTTON_DPAD_DOWN, "p1_descer", true], [1, JOY_BUTTON_B, "p2_dash", true],
+		[0, JOY_BUTTON_DPAD_LEFT, "p1_esquerda", true], [0, JOY_BUTTON_DPAD_RIGHT, "p1_direita", true],
+		[0, 8, "pausar", false], [0, 12, "menu_cima", false],  # 8 = Guide e 12 = direcional baixo no PC
+		[0, JOY_BUTTON_GUIDE, "pausar", false],
+	]
+	for c in pc:
+		if InputMap.event_is_action(_botao_joy(c[0], c[1]), c[2]) != c[3]:
+			_falha("PC: dispositivo %d botão %d ação %s (esperava %s)" % [c[0], c[1], c[2], c[3]])
+	# Gatilhos (eixos 4 e 5) e analógico: sem função de menu/pausa; o analógico anda no jogo (zona morta 0,2)
+	if InputMap.event_is_action(_evento_eixo(0, JOY_AXIS_TRIGGER_LEFT, 1.0), "pausar"):
+		_falha("gatilho (eixo) não deveria pausar")
+	if not InputMap.event_is_action(_evento_eixo(0, JOY_AXIS_LEFT_X, 0.9), "p1_direita"):
+		_falha("analógico X não anda no jogo")
+	if not is_equal_approx(InputMap.action_get_deadzone("p1_direita"), 0.2) or not is_equal_approx(InputMap.action_get_deadzone("p2_descer"), 0.2):
+		_falha("zona morta do movimento deveria ser 0,2")
+	for a in ["menu_cima", "menu_baixo"]:
+		if InputMap.event_is_action(_evento_eixo(0, JOY_AXIS_LEFT_Y, -1.0), a) or InputMap.event_is_action(_evento_eixo(0, JOY_AXIS_LEFT_Y, 1.0), a):
+			_falha("analógico não pode estar no InputMap de %s (é tratado pelo Jogo)" % a)
+	MapaControle.web = web_antes
+	jogo._criar_controles()
+	print("Controle (índices W3C no navegador e do Godot no PC): ok")
+
+
+func _testar_controle_menus() -> void:
+	## Pausa (Start/Back/Esc/P), analógico nos menus e repetição ao segurar.
+	var jogo = root.get_node("Jogo")
+	var web_antes: bool = MapaControle.web
+	MapaControle.web = true
+	jogo._criar_controles()
+	# (a) pausa: Start e Back (W3C 9 e 8) emitem uma vez; gatilhos (6 e 7) nunca
+	var pedidos := [0]
+	var conta := func() -> void: pedidos[0] += 1
+	jogo.pausa_pedida.connect(conta)
+	for c in [[9, 1], [8, 1], [6, 0], [7, 0], [0, 0], [4, 0], [12, 0]]:
+		pedidos[0] = 0
+		jogo._input(_botao_joy(0, c[0]))
+		if pedidos[0] != c[1]:
+			_falha("pausa: botão cru %d emitiu %d vez(es) (esperava %d)" % [c[0], pedidos[0], c[1]])
+	pedidos[0] = 0
+	jogo._input(_botao_joy(0, 9, false))
+	if pedidos[0] != 0:
+		_falha("pausa: soltar o Start não deveria pausar")
+	var tecla := InputEventKey.new()
+	tecla.physical_keycode = KEY_P
+	tecla.pressed = true
+	jogo._input(tecla)
+	tecla = InputEventKey.new()
+	tecla.physical_keycode = KEY_ESCAPE
+	tecla.pressed = true
+	jogo._input(tecla)
+	tecla.echo = true  # repetição de tecla não conta
+	jogo._input(tecla)
+	if pedidos[0] != 2:
+		_falha("pausa: P e Esc deveriam emitir 2 vezes (emitiu %d)" % pedidos[0])
+	jogo.pausa_pedida.disconnect(conta)
+	MapaControle.web = web_antes
+	jogo._criar_controles()
+	# (b) analógico esquerdo nos menus: passo único acima de 0,5, solta abaixo de 0,3, repete 0,4 / 0,15
+	jogo.partida = null
+	jogo._eixos = {JOY_AXIS_LEFT_X: 0.0, JOY_AXIS_LEFT_Y: 0.0}
+	jogo._direcao = Vector2i.ZERO
+	jogo._pulso.clear()
+	var p0: int = jogo.passos_analogico
+	jogo._input(_evento_eixo(0, JOY_AXIS_LEFT_Y, 0.45))
+	if jogo.passos_analogico != p0:
+		_falha("analógico: 0,45 está na zona morta e não deveria dar passo")
+	jogo._input(_evento_eixo(0, JOY_AXIS_LEFT_Y, 0.9))
+	if jogo.passos_analogico != p0 + 1 or not jogo.menu_pulso("menu_baixo") or jogo.menu_pulso("menu_cima"):
+		_falha("analógico: empurrar para baixo deveria dar 1 passo em menu_baixo")
+	jogo._input(_evento_eixo(0, JOY_AXIS_LEFT_Y, 1.0))
+	jogo._input(_evento_eixo(0, JOY_AXIS_LEFT_Y, 0.35))  # ainda acima de 0,3: segue empurrado
+	if jogo.passos_analogico != p0 + 1:
+		_falha("analógico: mexer sem soltar não deveria dar passo novo")
+	jogo._pulso.clear()
+	jogo._atualizar_analogico(0.39)
+	if jogo.passos_analogico != p0 + 1:
+		_falha("analógico: repetiu antes de 0,4 s")
+	jogo._atualizar_analogico(0.02)
+	if jogo.passos_analogico != p0 + 2 or not jogo.menu_pulso("menu_baixo"):
+		_falha("analógico: deveria repetir aos 0,4 s")
+	jogo._pulso.clear()
+	jogo._atualizar_analogico(0.12)
+	if jogo.passos_analogico != p0 + 2:
+		_falha("analógico: repetiu antes de 0,15 s")
+	jogo._atualizar_analogico(0.03)
+	if jogo.passos_analogico != p0 + 3:
+		_falha("analógico: deveria repetir a cada 0,15 s")
+	jogo._input(_evento_eixo(0, JOY_AXIS_LEFT_Y, 0.25))  # soltou (abaixo de 0,3)
+	jogo._atualizar_analogico(1.0)
+	if jogo.passos_analogico != p0 + 3:
+		_falha("analógico: continuou repetindo depois de soltar")
+	jogo._input(_evento_eixo(0, JOY_AXIS_LEFT_Y, -0.8))
+	if jogo.passos_analogico != p0 + 4 or not jogo.menu_pulso("menu_cima"):
+		_falha("analógico: empurrar para cima deveria dar 1 passo em menu_cima")
+	jogo._input(_evento_eixo(0, JOY_AXIS_LEFT_Y, 0.0))
+	# Na partida sem pausa o analógico anda e não navega; pausada, navega
+	var falsa := Node.new()
+	var gd := GDScript.new()
+	gd.source_code = "extends Node\nvar pausado := false\n"
+	gd.reload()
+	falsa.set_script(gd)
+	root.add_child(falsa)
+	jogo.partida = falsa
+	var p1: int = jogo.passos_analogico
+	jogo._input(_evento_eixo(0, JOY_AXIS_LEFT_Y, 0.9))
+	if jogo.passos_analogico != p1:
+		_falha("analógico: não deveria navegar com a partida rodando")
+	jogo._input(_evento_eixo(0, JOY_AXIS_LEFT_Y, 0.0))
+	falsa.pausado = true
+	jogo._input(_evento_eixo(0, JOY_AXIS_LEFT_Y, 0.9))
+	if jogo.passos_analogico != p1 + 1:
+		_falha("analógico: deveria navegar com a partida pausada")
+	jogo._input(_evento_eixo(0, JOY_AXIS_LEFT_Y, 0.0))
+	jogo.partida = null
+	falsa.queue_free()
 	# (c) repetição ao segurar: 1 pulso ao apertar, nada até 0,4 s, depois a cada 0,15 s
 	Input.action_press("menu_baixo")
 	var pulsos: Array[float] = []
@@ -536,7 +661,47 @@ func _testar_controle_menus() -> void:
 	var lb := _botao_joy(0, JOY_BUTTON_LEFT_SHOULDER)
 	if not teste.nome_entrada(lb).begins_with("LB (botão") or not teste.entendimento(lb).contains("escolher melhoria 1"):
 		_falha("teste_controle: LB → %s / %s" % [teste.nome_entrada(lb), teste.entendimento(lb)])
-	print("Controle (mapeamento automático, analógico e repetição nos menus): ok")
+	print("Controle (pausa, analógico e repetição nos menus): ok")
+
+
+func _testar_pausa_partida() -> void:
+	## A pausa abre e fecha por Jogo.pausa_pedida, uma vez por aperto (sem abrir e fechar junto).
+	var jogo = root.get_node("Jogo")
+	var main = load("res://scenes/main.tscn").instantiate()
+	root.add_child(main)
+	await process_frame
+	main._nova_partida({"semente": 77, "tempo": 180.0, "bots": {1: -1, 2: -1}})
+	await process_frame
+	var partida = main._atual
+	if jogo.partida != partida:
+		_falha("pausa: a partida não se registrou no Jogo")
+	jogo.pausa_pedida.emit()
+	await process_frame
+	if not partida.pausado or partida._painel_pausa == null:
+		_falha("pausa: o pedido não abriu a pausa")
+	for i in 4:
+		await process_frame
+	if not jogo.em_menu():
+		_falha("pausa: com a partida pausada o analógico deveria navegar nos menus")
+	# Esc: chega como pausa_pedida e como menu_voltar no mesmo quadro; fecha uma vez só
+	Input.action_press("menu_voltar")
+	jogo.pausa_pedida.emit()
+	await process_frame
+	Input.action_release("menu_voltar")
+	await process_frame
+	if partida.pausado or partida._painel_pausa != null:
+		_falha("pausa: o pedido não fechou a pausa")
+	for i in 3:
+		await process_frame
+	if partida.pausado:
+		_falha("pausa: reabriu sozinha no mesmo aperto")
+	if jogo.em_menu():
+		_falha("pausa: com a partida rodando o analógico não deveria navegar")
+	main.queue_free()
+	await process_frame
+	if jogo.partida != null:
+		_falha("pausa: o Jogo ainda aponta para a partida destruída")
+	print("Pausa na partida (abrir e fechar por Start/Esc): ok")
 
 
 func _testar_cartas_layout() -> void:

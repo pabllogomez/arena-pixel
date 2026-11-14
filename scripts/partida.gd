@@ -96,6 +96,7 @@ var itens_ligados := true  ## (só os testes de equilíbrio desligam)
 var momentos_bola: Array[float] = []
 ## Jogo pausado pelo botão de pausa / Esc
 var pausado := false
+var _quadro_despausa := -1  ## quadro em que a pausa fechou (evita reabrir no mesmo aperto)
 var _painel_pausa: Control
 var _tremor := 0.0
 var _t_nevoa := 0.0
@@ -227,6 +228,7 @@ func pausar() -> void:
 
 
 func _despausar() -> void:
+	_quadro_despausa = Engine.get_process_frames()
 	if _painel_pausa != null:
 		_painel_pausa.queue_free()
 		_painel_pausa = null
@@ -277,8 +279,6 @@ func _process(delta: float) -> void:
 				if l.vivo:
 					l.ativo = true
 	_atualizar_escolhas()
-	if not fim and not pausado and Input.is_action_just_pressed("pausar"):
-		pausar()
 	# Pausa curtinha dos golpes fortes (contada em quadros, não em segundos)
 	if _quadros_impacto > 0:
 		_quadros_impacto -= 1
@@ -741,8 +741,25 @@ func _decidir_vencedor() -> void:
 	Jogo.tocar("vitoria")
 
 
+func _ready() -> void:
+	Jogo.partida = self
+	Jogo.pausa_pedida.connect(_ao_pedir_pausa)
+
+
 func _exit_tree() -> void:
 	Engine.time_scale = 1.0
+	if Jogo.partida == self:
+		Jogo.partida = null
+	if Jogo.pausa_pedida.is_connected(_ao_pedir_pausa):
+		Jogo.pausa_pedida.disconnect(_ao_pedir_pausa)
+
+
+func _ao_pedir_pausa() -> void:
+	## Start/Back/Esc/P (Jogo.pausa_pedida). Só ABRE a pausa; o painel fecha a si mesmo
+	## com o mesmo sinal. Se acabou de fechar neste quadro, não reabre (um aperto só).
+	if fim or pausado or Engine.get_process_frames() == _quadro_despausa:
+		return
+	pausar()
 
 
 # ------------------------------------------------------------------ Itens
@@ -925,8 +942,6 @@ func _process_convidado(delta: float) -> void:
 			Rede.enviar_escolha(0)
 		elif Input.is_action_just_pressed("p1_opcao2"):
 			Rede.enviar_escolha(1)
-	if not fim and not pausado and Input.is_action_just_pressed("pausar"):
-		pausar()
 	if fim and _t_fim > 1.5 and Input.is_action_just_pressed("menu_voltar"):
 		voltar.emit()
 

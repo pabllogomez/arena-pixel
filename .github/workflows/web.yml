@@ -115,3 +115,31 @@ jobs:
     steps:
       - id: deploy
         uses: actions/deploy-pages@v4
+
+  # Ao publicar a main: cria a tag v<versão> e o Release com as notas de
+  # NOVIDADES.md (seção "## v<versão>"), se essa versão ainda não tiver tag.
+  versao:
+    needs: publicar
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Criar tag e Release da versão
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSAO=$(sed -n -E 's/^config\/version="([^"]*)"/\1/p' project.godot)
+          if [ -z "$VERSAO" ]; then echo "::warning::Sem config/version no project.godot"; exit 0; fi
+          TAG="v$VERSAO"
+          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+            echo "A tag $TAG já existe; nada a fazer."; exit 0
+          fi
+          # Notas: o trecho de NOVIDADES.md entre "## v<versão>" e o próximo "## "
+          awk -v t="## $TAG" '$0 == t {achou=1; next} achou && /^## / {exit} achou {print}' NOVIDADES.md > notas.md 2>/dev/null || true
+          if [ ! -s notas.md ]; then echo "Versão $TAG." > notas.md; fi
+          cat notas.md
+          gh release create "$TAG" --target "$GITHUB_SHA" --title "Arena Pixel $TAG" --notes-file notas.md

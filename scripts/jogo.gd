@@ -1,10 +1,13 @@
 extends Node
-## Autoload "Jogo": controles, sons, modo de jogo e dados das classes.
+## Autoload "Jogo": controles (atalhos pelo MapaControle, pausa e analógico nos menus),
+## sons, modo de jogo e dados das classes.
 
 const COR_TIME := {0: Color("94b0c2"), 1: Color("41a6f6"), 2: Color("ef7d57")}
 ## Classes sorteadas no nível 2 (o Recruta é a classe inicial de todos)
 const CLASSES: Array[String] = ["arqueiro", "orc", "mago", "rei"]
 const TEMPO_PARTIDA := 180.0
+## Zona morta do analógico nas ações de movimento da partida (kit de controle)
+const ZONA_MORTA_JOGO := 0.2
 
 ## Modo escolhido no menu
 var solo := true
@@ -26,28 +29,33 @@ var botoes_tela := false
 var tutorial_visto := false
 const ARQUIVO_OPCOES := "user://opcoes.cfg"
 
-## Mapeamentos para controles que o Godot não conhece (o campo platform é
-## ignorado por add_joy_mapping, então não é preciso informá-lo).
-## Ordem "padrão" do navegador, mas sem a etiqueta mapping="standard" (o Brave
-## esconde a etiqueta; Chrome/Edge às vezes também). Os gatilhos chegam como
-## botões 6 e 7, porque o Godot só os converte em eixo quando há a etiqueta.
-const MAPEAMENTO_PADRAO := "a:b0,b:b1,x:b2,y:b3,leftshoulder:b4,rightshoulder:b5," \
-		+ "lefttrigger:b6,righttrigger:b7,back:b8,start:b9,leftstick:b10,rightstick:b11," \
-		+ "dpup:b12,dpdown:b13,dpleft:b14,dpright:b15,guide:b16,leftx:a0,lefty:a1,rightx:a2,righty:a3"
-## Ordem "crua" estilo Xbox (xpad), como o Firefox entrega no Linux.
-const MAPEAMENTO_XBOX := "a:b0,b:b1,y:b3,x:b2,start:b7,guide:b8,back:b6,leftstick:b9,rightstick:b10," \
-		+ "leftshoulder:b4,rightshoulder:b5,dpup:-a7,dpleft:-a6,dpdown:+a7,dpright:+a6," \
-		+ "leftx:a0,lefty:a1,rightx:a3,righty:a4,lefttrigger:a2,righttrigger:a5"
-## Por controle (número do dispositivo): "reconhecido" ou "corrigido automaticamente"
-var estado_controle := {}
+## Pausa pedida por Start/Back do controle, Esc ou P (tratada em _input, antes da
+## interface, para valer mesmo com um botão focado). Quem pausa/despausa escuta aqui.
+signal pausa_pedida
+## Partida em andamento (a Partida se registra); sem ela, ou com ela pausada, o analógico navega nos menus
+var partida: Node = null
+var _ultima_pausa_ms := -1000
+var _controle_apertado := false
 
-## Repetição ao segurar cima/baixo nos menus (teclado, direcional e analógico)
+## Repetição ao segurar cima/baixo nos menus (teclado e direcional)
 const ACOES_REPETIVEIS: Array[String] = ["menu_cima", "menu_baixo"]
 const ATRASO_REPETICAO := 0.4
 const INTERVALO_REPETICAO := 0.15
 var _relogio := 0.0
 var _rep_proximo := {}
 var _pulso := {}
+
+## Analógico esquerdo nos menus: zona morta 0,5 com histerese (solta abaixo de 0,3),
+## um passo ao empurrar e, segurando, repete depois de 0,4 s a cada 0,15 s.
+## Cada passo vira um pulso de menu_cima/menu_baixo (o analógico NÃO fica no InputMap
+## dessas ações, senão cada movimento do eixo contaria como um aperto novo).
+const ZONA_MORTA_MENU := 0.5
+const SOLTAR_MENU := 0.3
+var _eixos := {JOY_AXIS_LEFT_X: 0.0, JOY_AXIS_LEFT_Y: 0.0}
+var _direcao := Vector2i.ZERO
+var _proximo_passo := 0.0
+## Passos dados pelo analógico nos menus (os testes conferem o ritmo por aqui)
+var passos_analogico := 0
 
 var _musica: AudioStreamPlayer
 var _musica_atual := ""
@@ -56,11 +64,9 @@ var _sons := {}
 
 
 func _ready() -> void:
+	process_mode = Node.PROCESS_MODE_ALWAYS
 	_criar_controles()
 	_carregar_opcoes()
-	Input.joy_connection_changed.connect(_ao_mudar_controle)
-	for dev in Input.get_connected_joypads():
-		_verificar_controle(dev)
 	_musica = AudioStreamPlayer.new()
 	_musica.volume_db = -8.0
 	add_child(_musica)
@@ -75,11 +81,13 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	_atualizar_pulsos(delta / maxf(Engine.time_scale, 0.05))
+	_conferir_pausa_por_polling()
 
 
 func _atualizar_pulsos(delta: float) -> void:
 	## Calcula, uma vez por quadro, quais ações de menu "disparam" agora: ao apertar
-	## e depois, com a tecla/direcional/analógico segurado, a cada INTERVALO_REPETICAO.
+	## e depois, com a tecla/direcional segurado, a cada INTERVALO_REPETICAO. O analógico
+	## (ver _atualizar_analogico) soma seus próprios passos.
 	_relogio += delta
 	for a in ACOES_REPETIVEIS:
 		var dispara := false
@@ -95,6 +103,7 @@ func _atualizar_pulsos(delta: float) -> void:
 		else:
 			_rep_proximo.erase(a)
 		_pulso[a] = dispara
+	_atualizar_analogico(delta)
 
 
 func menu_pulso(acao: String) -> bool:
@@ -102,86 +111,107 @@ func menu_pulso(acao: String) -> bool:
 	return _pulso.get(acao, false)
 
 
-# ------------------------------------------------------------------ Controles
-
-static func mapeamento_xbox(guid: String, nome: String) -> String:
-	## Linha de mapeamento SDL (layout cru estilo Xbox) para um controle desconhecido.
-	return _linha_mapeamento(guid, nome, MAPEAMENTO_XBOX)
+func em_menu() -> bool:
+	## true quando não há partida rodando (menu, lobby) ou ela está pausada/com painel aberto.
+	return partida == null or not is_instance_valid(partida) or partida.pausado
 
 
-static func mapeamento_padrao(guid: String, nome: String) -> String:
-	## Linha de mapeamento SDL (ordem padrão do navegador, sem a etiqueta "standard").
-	return _linha_mapeamento(guid, nome, MAPEAMENTO_PADRAO)
+# ------------------------------------------------------------------ Analógico nos menus
 
-
-static func _linha_mapeamento(guid: String, nome: String, campos: String) -> String:
-	if guid.strip_edges() == "":
-		return ""
-	var limpo := nome.replace(",", " ").replace("\n", " ").strip_edges()
-	if limpo == "":
-		limpo = "Controle"
-	return "%s,%s,%s" % [guid.strip_edges(), limpo, campos]
-
-
-static func layout_por_formato(botoes: int, eixos: int) -> String:
-	## Decide o layout pelo formato que o navegador informa: a ordem padrão tem
-	## 16+ botões e até 4 eixos; a crua estilo Xbox, ~11 botões e 6–8 eixos.
-	if botoes >= 16 and eixos <= 4:
-		return "padrao"
-	return "xbox"
-
-
-func _formato_no_navegador(dev: int) -> Vector2i:
-	## (botões, eixos) do controle segundo o navegador; (-1, -1) fora do navegador.
-	if not OS.has_feature("web"):
-		return Vector2i(-1, -1)
-	var r = JavaScriptBridge.eval("(function(){var p=(navigator.getGamepads?navigator.getGamepads():[])[%d];return p?(p.buttons.length+','+p.axes.length):''})()" % dev, true)
-	var partes := str(r).split(",")
-	if partes.size() != 2:
-		return Vector2i(-1, -1)
-	return Vector2i(int(partes[0]), int(partes[1]))
-
-
-func _ao_mudar_controle(dev: int, conectado: bool) -> void:
-	if conectado:
-		_verificar_controle(dev)
-	else:
-		estado_controle.erase(dev)
-
-
-func _verificar_controle(dev: int) -> void:
-	## Controle que o Godot reconhece fica como está; os desconhecidos recebem o
-	## mapeamento estilo Xbox (senão LB/RB/Start chegam trocados no navegador).
-	if not dev in Input.get_connected_joypads():
+func _atualizar_analogico(delta: float) -> void:
+	_ler_analogico()
+	if _direcao == Vector2i.ZERO:
 		return
-	if Input.is_joy_known(dev):
-		estado_controle[dev] = "reconhecido"
-		return
-	var formato := _formato_no_navegador(dev)
-	if formato.x < 0:
-		# Fora do navegador o Godot usa o banco de controles do sistema; não mexe.
-		estado_controle[dev] = "desconhecido"
-		return
-	var layout := layout_por_formato(formato.x, formato.y)
-	var guid := Input.get_joy_guid(dev)
-	var nome := Input.get_joy_name(dev)
-	var m := mapeamento_padrao(guid, nome) if layout == "padrao" else mapeamento_xbox(guid, nome)
-	if m == "":
-		return
-	Input.add_joy_mapping(m, true)
-	estado_controle[dev] = "corrigido (%s, %d botões, %d eixos)" % [
-			"ordem padrão" if layout == "padrao" else "layout Xbox", formato.x, formato.y]
-	print("Controle %d (%s): %s" % [dev, nome, estado_controle[dev]])
+	_proximo_passo -= delta
+	while _proximo_passo <= 0.0 and _direcao != Vector2i.ZERO:
+		_passo_analogico()
+		_proximo_passo += INTERVALO_REPETICAO
 
 
-func texto_estado_controle(dev: int) -> String:
-	if estado_controle.has(dev):
-		return estado_controle[dev]
-	return "reconhecido" if Input.is_joy_known(dev) else "desconhecido"
+func _ler_analogico() -> void:
+	## No navegador os eventos de eixo nem sempre chegam: lê direto do Input (o maior
+	## valor entre os controles conectados). Sem controle (testes) valem os eventos.
+	var ids := Input.get_connected_joypads()
+	if ids.is_empty():
+		return
+	var x := 0.0
+	var y := 0.0
+	for id in ids:
+		var ax := Input.get_joy_axis(id, JOY_AXIS_LEFT_X)
+		var ay := Input.get_joy_axis(id, JOY_AXIS_LEFT_Y)
+		if absf(ax) > absf(x):
+			x = ax
+		if absf(ay) > absf(y):
+			y = ay
+	if is_equal_approx(x, _eixos[JOY_AXIS_LEFT_X]) and is_equal_approx(y, _eixos[JOY_AXIS_LEFT_Y]):
+		return
+	_eixos[JOY_AXIS_LEFT_X] = x
+	_eixos[JOY_AXIS_LEFT_Y] = y
+	_atualizar_direcao_analogico()
+
+
+func _atualizar_direcao_analogico() -> void:
+	var v := Vector2(_eixos[JOY_AXIS_LEFT_X], _eixos[JOY_AXIS_LEFT_Y])
+	var nova := Vector2i.ZERO
+	var dominante := Vector2i(signi(roundi(v.x * 100.0)), 0) if absf(v.x) >= absf(v.y) else Vector2i(0, signi(roundi(v.y * 100.0)))
+	var forca := maxf(absf(v.x), absf(v.y))
+	if _direcao != Vector2i.ZERO:
+		# Histerese: continua enquanto passar de 0,3 na mesma direção.
+		var ao_longo := v.x * _direcao.x + v.y * _direcao.y
+		nova = _direcao if ao_longo >= SOLTAR_MENU else Vector2i.ZERO
+		if forca > ZONA_MORTA_MENU and dominante != _direcao and dominante != Vector2i.ZERO:
+			nova = dominante
+	elif forca > ZONA_MORTA_MENU:
+		nova = dominante
+	if nova == _direcao:
+		return
+	_direcao = nova
+	if nova != Vector2i.ZERO:
+		_passo_analogico()
+		_proximo_passo = ATRASO_REPETICAO
+
+
+func _passo_analogico() -> void:
+	# Só em menus (na partida sem pausa o analógico anda). Os menus só usam cima/baixo.
+	if not em_menu() or _direcao.y == 0:
+		return
+	passos_analogico += 1
+	_pulso["menu_cima" if _direcao.y < 0 else "menu_baixo"] = true
+
+
+# ------------------------------------------------------------------ Pausa
+
+func _conferir_pausa_por_polling() -> void:
+	## Reserva: alguns navegadores/controles não entregam o evento do botão Start/Back.
+	var apertado := false
+	for id in Input.get_connected_joypads():
+		if Input.is_joy_button_pressed(id, MapaControle.botao(JOY_BUTTON_START)) \
+				or Input.is_joy_button_pressed(id, MapaControle.botao(JOY_BUTTON_BACK)):
+			apertado = true
+	if apertado and not _controle_apertado and Time.get_ticks_msec() - _ultima_pausa_ms > 400:
+		_pedir_pausa()
+	_controle_apertado = apertado
+
+
+func _pedir_pausa() -> void:
+	_ultima_pausa_ms = Time.get_ticks_msec()
+	pausa_pedida.emit()
 
 
 func _input(event: InputEvent) -> void:
-	## Guarda o último tipo de entrada usado (controle x teclado/toque/mouse).
+	## Pausa (Start/Back/Esc/P) e último tipo de entrada usado (controle x teclado/toque/mouse).
+	var pausa := false
+	if event is InputEventJoypadButton:
+		pausa = event.pressed and (event.button_index == MapaControle.botao(JOY_BUTTON_START) \
+				or event.button_index == MapaControle.botao(JOY_BUTTON_BACK))
+	elif event is InputEventKey:
+		pausa = event.pressed and not event.echo and event.is_action_pressed("pausar")
+	elif event is InputEventJoypadMotion and _eixos.has(event.axis):
+		_eixos[event.axis] = event.axis_value
+		_atualizar_direcao_analogico()
+	if pausa:
+		_pedir_pausa()
+		get_viewport().set_input_as_handled()
 	if event is InputEventJoypadButton:
 		if event.pressed:
 			usando_controle = true
@@ -366,18 +396,22 @@ static func acao(jogador: int, nome: String) -> String:
 
 
 func _criar_controles() -> void:
+	# Refaz tudo do zero (também usado pelos testes ao trocar MapaControle.web)
+	for a in InputMap.get_actions():
+		if a.begins_with("p1_") or a.begins_with("p2_") or a.begins_with("menu_") or a == "pausar":
+			InputMap.erase_action(a)
 	# Jogador 1: WASD + Espaço | Jogador 2: setas + 0
-	_acao("p1_esquerda", [KEY_A])
-	_acao("p1_direita", [KEY_D])
+	_acao("p1_esquerda", [KEY_A], ZONA_MORTA_JOGO)
+	_acao("p1_direita", [KEY_D], ZONA_MORTA_JOGO)
 	_acao("p1_pular", [KEY_W, KEY_SPACE])
-	_acao("p1_descer", [KEY_S])
+	_acao("p1_descer", [KEY_S], ZONA_MORTA_JOGO)
 	_acao("p1_dash", [KEY_SHIFT])
 	_acao("p1_opcao1", [KEY_Q])
 	_acao("p1_opcao2", [KEY_E])
-	_acao("p2_esquerda", [KEY_LEFT])
-	_acao("p2_direita", [KEY_RIGHT])
+	_acao("p2_esquerda", [KEY_LEFT], ZONA_MORTA_JOGO)
+	_acao("p2_direita", [KEY_RIGHT], ZONA_MORTA_JOGO)
 	_acao("p2_pular", [KEY_UP, KEY_KP_0, KEY_0])
-	_acao("p2_descer", [KEY_DOWN])
+	_acao("p2_descer", [KEY_DOWN], ZONA_MORTA_JOGO)
 	_acao("p2_dash", [KEY_CTRL])
 	_acao("p2_opcao1", [KEY_KP_1, KEY_K])
 	_acao("p2_opcao2", [KEY_KP_2, KEY_L])
@@ -385,21 +419,19 @@ func _criar_controles() -> void:
 	for j in [1, 2]:
 		_acao("p%d_dash_esq" % j, [])
 		_acao("p%d_dash_dir" % j, [])
-	# Menus
+	# Menus (qualquer controle; o analógico não entra aqui, ver _atualizar_analogico)
 	_acao("menu_cima", [KEY_W, KEY_UP], 0.5)
 	_acao("menu_baixo", [KEY_S, KEY_DOWN], 0.5)
 	_acao("menu_ok", [KEY_SPACE, KEY_ENTER, KEY_KP_ENTER, KEY_KP_0, KEY_0])
 	_acao("menu_voltar", [KEY_ESCAPE, KEY_BACKSPACE])
 	_acao("pausar", [KEY_ESCAPE, KEY_P])
-	for dev in [0, 1]:
-		_botao("menu_cima", dev, JOY_BUTTON_DPAD_UP)
-		_botao("menu_baixo", dev, JOY_BUTTON_DPAD_DOWN)
-		_eixo("menu_cima", dev, JOY_AXIS_LEFT_Y, -1.0)
-		_eixo("menu_baixo", dev, JOY_AXIS_LEFT_Y, 1.0)
-		_botao("menu_ok", dev, JOY_BUTTON_A)
-		_botao("menu_voltar", dev, JOY_BUTTON_B)
-		_botao("pausar", dev, JOY_BUTTON_START)
-	# Controles (gamepad): 1º controle = P1, 2º controle = P2
+	_botao("menu_cima", -1, JOY_BUTTON_DPAD_UP)
+	_botao("menu_baixo", -1, JOY_BUTTON_DPAD_DOWN)
+	_botao("menu_ok", -1, JOY_BUTTON_A)
+	_botao("menu_voltar", -1, JOY_BUTTON_B)
+	_botao("pausar", -1, JOY_BUTTON_START)
+	_botao("pausar", -1, JOY_BUTTON_BACK)
+	# Controles (gamepad): 1º controle = P1, 2º controle = P2. Gatilhos não são ligados.
 	for j in [1, 2]:
 		var dev: int = j - 1
 		_botao("p%d_esquerda" % j, dev, JOY_BUTTON_DPAD_LEFT)
@@ -426,7 +458,7 @@ func _acao(nome: String, teclas: Array, zona_morta := 0.3) -> void:
 func _botao(nome: String, dispositivo: int, botao: JoyButton) -> void:
 	var ev := InputEventJoypadButton.new()
 	ev.device = dispositivo
-	ev.button_index = botao
+	ev.button_index = MapaControle.botao(botao)  # no navegador, o índice W3C
 	InputMap.action_add_event(nome, ev)
 
 
