@@ -43,7 +43,7 @@ const PVP_BASE := 0.4
 ## Aumento geral do dano PvP (vale para tudo, inclusive Recruta e Morte Súbita)
 const PVP_GERAL := 1.35
 ## Recruta atacando jogador
-const PVP_RECRUTA_ATACA := 0.25
+const PVP_RECRUTA_ATACA := 0.6
 ## Jogador com classe atacando Recruta
 const PVP_CONTRA_RECRUTA := 1.0 / 3.0
 

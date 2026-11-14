@@ -222,6 +222,11 @@ func _draw() -> void:
 		var r := _rect_opcao(i)
 		r.position.y += roundf(pow(1.0 - e, 2.0) * 14.0)
 		UI.botao(self, r, opcoes[i], i == _sel, false, UI.P, _t)
+		if _tela == "personagem" and i < _texturas.size():
+			# Ícone com o sprite do personagem (anda quando selecionado)
+			var quadro := (2 + int(_t * 8.0) % 4) if i == _sel else 0
+			draw_texture_rect_region(_texturas[i], Rect2(r.position.x + 4.0, r.position.y, 16, 16),
+					Rect2(quadro * 16, 0, 16, 16), Color.WHITE if i == _sel else Color(1, 1, 1, 0.7))
 		if _bloqueada(i):
 			if i != _sel:
 				draw_rect(r.grow(-2), Color(UI.TINTA, 0.6))

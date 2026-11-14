@@ -156,7 +156,7 @@ func _subir_de_nivel() -> void:
 	else:
 		jogador["pendente"] = true
 	if andar == ANDARES_SUBIDA:
-		cura += CURA_ETAPA_FINAL
+		cura = CURA_ETAPA_FINAL  # antes da etapa final: só os 50% (não soma com os 30%)
 	jogador["vida"] = minf(float(jogador["vida"]) + cura, 1.0)
 
 

@@ -952,7 +952,7 @@ func _testar_torre() -> void:
 	var nivel_jogador := [1, 2, 3, 4, 5, 6, 6, 6, 6]
 	var nivel_cpu := [1, 3, 4, 5, 6, 7, 7, 7, 7]
 	var vida_antes := [0.2, 0.4, 0.5, 0.65, 0.1, 0.6, 0.35, 0.8, 0.5]
-	var vida_esperada := [0.0, 0.5, 0.7, 0.8, 0.95, 0.9, 0.6, 0.35, 0.8]  # no começo de cada andar (índice 0 = andar 1, não usado)
+	var vida_esperada := [0.0, 0.5, 0.7, 0.8, 0.95, 0.6, 0.6, 0.35, 0.8]  # no começo de cada andar (índice 0 = andar 1, não usado)  # andar 6: só os 50% da etapa final (não soma com os 30%)
 	var classes_cpu: Array[int] = []
 	var dano_somado := 0.0
 	for a in range(1, 10):

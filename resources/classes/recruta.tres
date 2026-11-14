@@ -14,6 +14,6 @@ vida_max = 130.0
 velocidade = 106.0
 forca_pulo = 295.0
 tipo_ataque = 1
-dano = 6.0
+dano = 8.1
 alcance = 18.0
 intervalo_ataque = 0.7
