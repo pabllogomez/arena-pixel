@@ -97,7 +97,7 @@ func _acertar(alvo) -> void:
 
 
 func _ferir(alvo, qtd: float) -> void:
-	var fonte := "lacaio" if de_lacaio else "projetil"
+	var fonte := "lanca" if de_lacaio else "projetil"
 	if dono != null and is_instance_valid(dono):
 		dono.causar_dano(alvo, qtd, fonte)
 	else:

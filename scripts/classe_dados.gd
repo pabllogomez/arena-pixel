@@ -64,3 +64,18 @@ enum TipoAtaque { FLECHA, CORPO_A_CORPO, MAGIA, INVOCAR }
 @export var max_lacaios := 0
 @export var vida_lacaio := 25.0
 @export var velocidade_lacaio := 55.0
+
+@export_group("Guarda real (Rei)")
+## A cada N lacaios invocados, a próxima invocação é um Guarda real
+## (L, L, L, G, ...). 0 = sem Guarda. Só 1 Guarda vivo por Rei; ele não
+## ocupa vaga dos lacaios.
+@export var guarda_a_cada := 0
+@export var vida_guarda := 0.0
+## Fração do dano do lacaio causada pelo golpe do Guarda.
+@export var dano_guarda := 0.5
+@export var velocidade_guarda := 80.0
+@export var intervalo_guarda := 1.5
+## 0 = empurrado normalmente; 1 = não se mexe (valem investida, pouso e golpes).
+@export_range(0.0, 1.0) var resistencia_guarda := 0.0
+## Fração do dano de golpes corpo a corpo vindos da frente que o escudo corta.
+@export_range(0.0, 1.0) var escudo_guarda := 0.0

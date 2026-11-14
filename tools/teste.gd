@@ -38,6 +38,7 @@ func _initialize() -> void:
 	await _testar_dinamica()
 	await _testar_dash()
 	await _testar_orc()
+	await _testar_guarda_real()
 	_testar_dash_rede()
 	_testar_mapeamento_controle()
 	_testar_controle_mapa()
@@ -544,6 +545,255 @@ func _testar_orc() -> void:
 	if o.vida >= vida_o:
 		_falha("Orc: pouso pesado não causou dano")
 	print("Orc (investida, fúria, pouso): ok")
+	main.queue_free()
+	await process_frame
+
+
+func _ultimo_minion(p):
+	var ultimo = null
+	for e in p.entidades.get_children():
+		if e.has_method("empurrar"):
+			ultimo = e
+	return ultimo
+
+
+func _matar_minions(p) -> void:
+	for e in p.entidades.get_children():
+		if e.has_method("empurrar") and e.vivo:
+			e.receber_dano(99999.0, null)
+
+
+func _testar_guarda_real() -> void:
+	## Guarda real do Rei: sequência L,L,L,G, escudo, bloqueio de corpo e freio no Orc.
+	var main = load("res://scenes/main.tscn").instantiate()
+	root.add_child(main)
+	await process_frame
+	main._nova_partida({"semente": 77, "tempo": 180.0, "bots": {1: -1, 2: -1}})
+	await process_frame
+	var p = main._atual
+	p.contagem = 0.0
+	p._congelar(false)
+	var rei = p.jogadores[1]
+	var inim = p.jogadores[2]
+	var rei_dados: ClasseDados = load("res://resources/classes/rei.tres")
+	rei.receber_classe(rei_dados)
+	rei.eh_recruta = false
+	rei.ativo = false
+	inim.receber_classe(load("res://resources/classes/orc.tres"))
+	inim.eh_recruta = false
+	inim.ativo = false
+	var base: Vector2 = p.mapa["inicio"][1]
+	rei.position = base
+	inim.position = base + Vector2(0, -400)  # longe, sem atrapalhar a contagem
+	inim.velocity = Vector2.ZERO
+
+	# Sequência de invocação: L, L, L, G (o Guarda não ocupa vaga dos lacaios)
+	var seq := ""
+	for i in 4:
+		rei._tentar_atacar()
+		seq += "G" if _ultimo_minion(p).guarda else "L"
+	if seq != "LLLG":
+		_falha("Guarda: sequência de invocação %s, esperado LLLG" % seq)
+	if p.contar_lacaios(rei) != 3 or p.contar_guardas(rei) != 1:
+		_falha("Guarda: contagem %d lacaios / %d guardas, esperado 3 / 1" % [p.contar_lacaios(rei), p.contar_guardas(rei)])
+	var g = _ultimo_minion(p)
+	var lac = null
+	for e in p.entidades.get_children():
+		if e.has_method("empurrar") and not e.guarda:
+			lac = e
+	if absf(g.vida_max - rei_dados.vida_guarda) > 0.01 or absf(g.dano - lac.dano * rei_dados.dano_guarda) > 0.01:
+		_falha("Guarda: vida %.1f / dano %.2f fora dos dados" % [g.vida_max, g.dano])
+	if absf(g.vida_max / lac.vida_max - rei_dados.vida_guarda / rei_dados.vida_lacaio) > 0.01:
+		_falha("Guarda: vida não escala como a do lacaio")
+	# Lacaios no máximo e Guarda vivo: nada novo (e a vez continua sendo de lacaio)
+	var antes: int = p.entidades.get_child_count()
+	rei._tentar_atacar()
+	if p.entidades.get_child_count() != antes:
+		_falha("Guarda: invocou além do limite de lacaios")
+	# Segundo ciclo com o Guarda vivo: a vez dele vira lacaio, e só há 1 Guarda
+	for e in p.entidades.get_children():
+		if e.has_method("empurrar") and not e.guarda:
+			e.receber_dano(99999.0, null)
+	var lacaios_novos := 0
+	for i in 6:
+		rei._tentar_atacar()
+		if p.contar_lacaios(rei) > 0 and p.contar_lacaios(rei) < 3:
+			pass
+		if p.contar_lacaios(rei) >= 3:
+			# esvazia para seguir a sequência (cada um conta uma invocação)
+			lacaios_novos += 3
+			for e in p.entidades.get_children():
+				if e.has_method("empurrar") and not e.guarda and e.vivo:
+					e.receber_dano(99999.0, null)
+	if p.contar_guardas(rei) != 1:
+		_falha("Guarda: %d guardas vivos, esperado 1" % p.contar_guardas(rei))
+	# Guarda morto: a próxima vez dele traz outro
+	g.receber_dano(99999.0, null)
+	_matar_minions(p)
+	rei.invocacoes = 3
+	rei._tentar_atacar()
+	if not _ultimo_minion(p).guarda:
+		_falha("Guarda: não veio novo Guarda após a morte do anterior")
+	_matar_minions(p)
+	await process_frame
+	await process_frame
+
+	# Escudo: pela frente -50%, por trás -100%, projétil e lança -100%
+	rei.ativo = false
+	rei._cd_ataque = 999.0
+	rei.position = base
+	p.criar_guarda(rei)
+	g = _ultimo_minion(p)
+	g.set_physics_process(false)
+	g.position = base + Vector2(40, 0)
+	var v0: float = g.vida_max
+	g._dir = 1.0
+	inim.position = g.position + Vector2(20, 0)
+	g.receber_dano(10.0, inim, "")
+	if absf((v0 - g.vida) - 5.0) > 0.01:
+		_falha("Guarda: golpe pela frente tirou %.2f, esperado 5" % (v0 - g.vida))
+	v0 = g.vida
+	g.receber_dano(10.0, inim, "lacaio", inim.position)
+	if absf((v0 - g.vida) - 5.0) > 0.01:
+		_falha("Guarda: golpe de lacaio pela frente tirou %.2f, esperado 5" % (v0 - g.vida))
+	v0 = g.vida
+	inim.position = g.position + Vector2(-20, 0)
+	g.receber_dano(10.0, inim, "")
+	if absf((v0 - g.vida) - 10.0) > 0.01:
+		_falha("Guarda: golpe por trás tirou %.2f, esperado 10" % (v0 - g.vida))
+	v0 = g.vida
+	inim.position = g.position + Vector2(20, 0)
+	g.receber_dano(10.0, inim, "projetil")
+	g.receber_dano(10.0, null, "lanca", inim.position)
+	if absf((v0 - g.vida) - 20.0) > 0.01:
+		_falha("Guarda: projétil/lança pela frente tirou %.2f, esperado 20" % (v0 - g.vida))
+	# Proteção do Rei contra projéteis também vale só com Guarda (sem lacaios)
+	var vr: float = rei.vida
+	rei.receber_dano(10.0, null, "projetil")
+	if absf((vr - rei.vida) - 10.0 * rei.GUARDA_REAL) > 0.01:
+		_falha("Rei: proteção de projétil com Guarda vivo não aplicou (%.2f)" % (vr - rei.vida))
+	g.vida = g.vida_max
+
+	# Nascer sobreposto a um inimigo não o prende: só fica sólido quando o espaço está livre
+	g.set_physics_process(true)
+	g._solido = false
+	g.set_collision_layer_value(6, false)
+	inim.position = g.position
+	inim.velocity = Vector2.ZERO
+	await physics_frame
+	await physics_frame
+	if g._solido:
+		_falha("Guarda: ficou sólido com inimigo sobreposto")
+	inim.position = base + Vector2(0, -400)
+	for f in 6:
+		await physics_frame
+	if not g._solido:
+		_falha("Guarda: não ficou sólido com o espaço livre")
+
+	# Bloqueio de corpo: inimigo não atravessa; aliado (o próprio Rei) atravessa
+	g.set_physics_process(false)
+	g.position = base + Vector2(60, 0)
+	g.velocity = Vector2.ZERO
+	var c := ControleTeste.new()
+	inim.controle = c
+	inim.ativo = true
+	inim._cd_ataque = 999.0
+	inim.position = g.position + Vector2(50, 0)
+	inim.velocity = Vector2.ZERO
+	c.eixo = -1.0
+	for f in 90:
+		await physics_frame
+	c.eixo = 0.0
+	if inim.position.x <= g.position.x:
+		_falha("Guarda: inimigo atravessou (x %.1f, Guarda %.1f)" % [inim.position.x, g.position.x])
+	inim.ativo = false
+	inim.position = base + Vector2(0, -400)
+	var c2 := ControleTeste.new()
+	rei.controle = c2
+	rei.ativo = true
+	rei._cd_ataque = 999.0
+	rei.position = g.position + Vector2(50, 0)
+	rei.velocity = Vector2.ZERO
+	c2.eixo = -1.0
+	for f in 30:  # (andar mais que isso leva a uma porta)
+		await physics_frame
+	c2.eixo = 0.0
+	if rei.position.x >= g.position.x:
+		_falha("Guarda: aliado não atravessou (x %.1f, Guarda %.1f)" % [rei.position.x, g.position.x])
+	rei.ativo = false
+
+	# Investida do Orc: acerta o Guarda, o dash acaba na hora e o empurrão é pequeno
+	var orc: ClasseDados = load("res://resources/classes/orc.tres")
+	g.position = base + Vector2(60, 0)
+	g.velocity = Vector2.ZERO
+	g._knock_x = 0.0
+	g._dir = 1.0
+	g.vida = g.vida_max
+	rei.position = base + Vector2(0, -400)
+	inim.controle = c
+	inim.ativo = true
+	inim._cd_ataque = 999.0
+	inim.position = g.position + Vector2(22, 0)
+	inim.velocity = Vector2.ZERO
+	inim._dash_cd = 0.0
+	for f in 12:
+		await physics_frame
+	c.eixo = -1.0
+	c.dash_apertou = true
+	await physics_frame
+	c.dash_apertou = false
+	var parou := false
+	var knock_max := 0.0
+	for f in 20:
+		await physics_frame
+		knock_max = maxf(knock_max, absf(g._knock_x))
+		if inim._dash_t <= 0.0 and f < 5:  # sem acertar, o dash duraria ~7 quadros
+			parou = true
+	c.eixo = 0.0
+	if not parou or inim._dash_t > 0.0:
+		_falha("Guarda: a investida do Orc não terminou ao acertar o escudo")
+	if g.vida >= g.vida_max:
+		_falha("Guarda: investida não causou dano")
+	elif absf((g.vida_max - g.vida) - inim.dano * orc.dano_investida * 0.5) > 0.1:
+		_falha("Guarda: investida tirou %.2f, esperado %.2f (escudo)" % [g.vida_max - g.vida, inim.dano * orc.dano_investida * 0.5])
+	if inim.position.x <= g.position.x:
+		_falha("Guarda: Orc atravessou o Guarda")
+	# Comparação com um lacaio no mesmo golpe
+	_matar_minions(p)
+	await process_frame
+	p.criar_lacaio(rei)
+	var lc = _ultimo_minion(p)
+	lc.set_physics_process(false)
+	lc.position = base + Vector2(60, 0)
+	lc.velocity = Vector2.ZERO
+	inim.position = lc.position + Vector2(22, 0)
+	inim.velocity = Vector2.ZERO
+	inim._dash_cd = 0.0
+	for f in 8:
+		await physics_frame
+	c.eixo = -1.0
+	c.dash_apertou = true
+	await physics_frame
+	c.dash_apertou = false
+	var vx_lacaio := 0.0
+	for f in 12:
+		await physics_frame
+		vx_lacaio = maxf(vx_lacaio, absf(lc.velocity.x))
+	c.eixo = 0.0
+	if knock_max <= 0.0 or knock_max >= vx_lacaio * 0.5:
+		_falha("Guarda: empurrão da investida %.1f deveria ser bem menor que o do lacaio %.1f" % [knock_max, vx_lacaio])
+	# Pouso do Orc: empurra pouco o Guarda também
+	p.criar_guarda(rei)
+	var g2 = _ultimo_minion(p)
+	g2.set_physics_process(false)
+	g2.position = base + Vector2(-100, 0)
+	inim.ativo = false
+	inim.position = g2.position + Vector2(10, 0)
+	inim._onda_pouso()
+	lc.position = base + Vector2(-60, 0)
+	if absf(g2._knock_x) <= 0.0 or absf(g2._knock_x) > orc.empurrao_pouso * 0.3:
+		_falha("Guarda: empurrão do pouso %.1f fora do esperado" % g2._knock_x)
+	print("Guarda real (invocação, escudo, bloqueio, investida): ok")
 	main.queue_free()
 	await process_frame
 

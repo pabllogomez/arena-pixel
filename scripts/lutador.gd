@@ -53,6 +53,8 @@ var intervalo := 1.0
 var velocidade_projetil := 200.0
 var max_lacaios := 0
 var mult_lacaio := 1.0
+## Invocações feitas (a cada `guarda_a_cada` lacaios vem um Guarda real)
+var invocacoes := 0
 var flechas_extra := 0
 var roubo_vida := 0.0
 var raio_explosao := 0.0
@@ -118,6 +120,9 @@ var _fantasmas: Array = []
 func configurar(n: int, d: ClasseDados, p: Node, c: Controle) -> void:
 	numero = n
 	equipe = n
+	# Guardas reais da equipe inimiga são sólidos para este lutador
+	if n == 1 or n == 2:
+		set_collision_mask_value(Minion.CAMADA_GUARDA + 2 - n, true)
 	partida = p
 	controle = c
 	_aplicar_classe(d)
@@ -249,6 +254,13 @@ func atk_vel_projetil() -> float:
 
 func atk_max_lacaios() -> int:
 	return 2 if _emprestado() else max_lacaios
+
+
+func _vez_do_guarda() -> bool:
+	## Sequência L, L, L, G, L, L, L, G... (a cada `guarda_a_cada` lacaios vem um Guarda)
+	if _emprestado() or ataque.guarda_a_cada <= 0 or ataque.vida_guarda <= 0.0:
+		return false
+	return invocacoes % (ataque.guarda_a_cada + 1) == ataque.guarda_a_cada
 
 
 # ------------------------------------------------------------------ Efeitos de item
@@ -491,9 +503,13 @@ func _investir() -> void:
 		if a is Lutador:
 			a.velocity.x += _dash_dir * dados.empurrao_investida * (1.0 - a.dados.resistencia_empurrao) * mult_empurrao
 		elif a is Minion:
-			a.velocity = Vector2(_dash_dir * dados.empurrao_investida, -60.0)
+			a.empurrar(Vector2(_dash_dir * dados.empurrao_investida, -60.0))
 		partida.fx("golpe", position + Vector2(_dash_dir * 6.0, 0.0), _dash_dir)
 		partida.tremer(0.8)
+		if a is Minion and a.guarda:
+			# O Orc para no escudo do Guarda real
+			_dash_t = 0.0
+			velocity.x = 0.0
 
 
 func _onda_pouso() -> void:
@@ -510,7 +526,7 @@ func _onda_pouso() -> void:
 		if a is Lutador:
 			a.velocity.x += s * dados.empurrao_pouso * (1.0 - a.dados.resistencia_empurrao) * mult_empurrao
 		elif a is Minion:
-			a.velocity = Vector2(s * dados.empurrao_pouso, -100.0)
+			a.empurrar(Vector2(s * dados.empurrao_pouso, -100.0))
 
 
 func _atualizar_fantasmas(delta: float) -> void:
@@ -530,8 +546,14 @@ func _atravessar_plataforma() -> void:
 
 func _tentar_atacar() -> void:
 	if atk_tipo() == ClasseDados.TipoAtaque.INVOCAR:
-		if partida.contar_lacaios(self) < atk_max_lacaios():
+		if _vez_do_guarda() and partida.contar_guardas(self) == 0:
+			# O Guarda não ocupa vaga dos lacaios
+			partida.criar_guarda(self)
+			invocacoes += 1
+			_cd_ataque = atk_intervalo()
+		elif partida.contar_lacaios(self) < atk_max_lacaios():
 			partida.criar_lacaio(self)
+			invocacoes += 1  # com Guarda vivo, a vez dele vira lacaio e a conta segue
 			_cd_ataque = atk_intervalo()
 		else:
 			_cd_ataque = 0.3
@@ -610,7 +632,7 @@ func _golpear(lado: float) -> void:
 			acertou = true
 			# O Orc arremessa lacaios para longe (abre caminho até o Rei)
 			if a is Minion and a.dono != null and dados.resistencia_lacaios > 0.0:
-				a.velocity = Vector2(s * 200.0, -140.0)
+				a.empurrar(Vector2(s * 200.0, -140.0))
 	partida.criar_corte(global_position + Vector2(s * 12.0, 0.0), s < 0.0)
 	partida.fx("golpe", position + Vector2(s * 6.0, 0.0), s)
 	Jogo.tocar("espada")
@@ -633,15 +655,15 @@ func _investida(lado: float) -> void:
 	tw.tween_property(sprite, "position:x", 0.0, 0.1)
 
 
-func receber_dano(qtd: float, origem, fonte := "") -> void:
-	## fonte: "" (golpe), "projetil" ou "lacaio"
+func receber_dano(qtd: float, origem, fonte := "", _pos_golpe := Vector2.INF) -> void:
+	## fonte: "" (golpe), "projetil", "lanca" (de lacaio) ou "lacaio" (golpe de lacaio)
 	if not vivo:
 		return
 	var origem_valida: bool = origem != null and is_instance_valid(origem)
-	if fonte == "lacaio":
+	if fonte == "lacaio" or fonte == "lanca":
 		qtd *= 1.0 - dados.resistencia_lacaios  # Orc: pele grossa contra lacaios
 	# Guarda real: com lacaios vivos, o Rei leva menos dano de projéteis
-	if fonte == "projetil" and dados.tipo_ataque == ClasseDados.TipoAtaque.INVOCAR and partida.contar_lacaios(self) > 0:
+	if fonte == "projetil" and dados.tipo_ataque == ClasseDados.TipoAtaque.INVOCAR and (partida.contar_lacaios(self) > 0 or partida.contar_guardas(self) > 0):
 		qtd *= GUARDA_REAL
 	# Dano entre jogadores passa pelas regras da partida (Recruta, PvP, morte súbita)
 	if origem_valida and origem is Lutador and origem != self:

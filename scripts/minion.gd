@@ -8,6 +8,9 @@ extends CharacterBody2D
 const GRAVIDADE := 700.0
 const FORCA_PULO := 295.0
 const ALCANCE_ATAQUE := 14.0
+## Camada de colisão do Guarda real: 6 = equipe 1, 7 = equipe 2 (só lutadores
+## da equipe inimiga têm esta camada na máscara; aliados e monstros atravessam).
+const CAMADA_GUARDA := 6
 
 @onready var sprite: Sprite2D = $Sprite2D
 @onready var sensor_chao: RayCast2D = $SensorChao
@@ -34,6 +37,19 @@ var alcance_arremesso := 0.0
 var _cd_arremesso := 1.0
 var vivo := true
 var cooldown_porta := 0.0
+## Guarda real do Rei: guarda-costas lento, com escudo, sólido para lutadores inimigos
+var guarda := false
+## 0 = empurrado normalmente pelos golpes, investidas e pousos; 1 = não se mexe
+var resistencia_empurrao := 0.0
+## Fração do dano corpo a corpo vindo da frente cortada pelo escudo
+var escudo := 0.0
+var _knock_x := 0.0
+var _solido := false
+const ALCANCE_GUARDA := 16.0     ## golpe do Guarda (corpo a corpo)
+const RAIO_AMEACA := 200.0       ## distância do Rei em que um lutador inimigo vira ameaça
+const RAIO_MONSTRO := 40.0       ## monstros só contam quando estão colados no Guarda
+const DIST_ESCOLTA := 14.0       ## quanto o Guarda se adianta do Rei rumo à ameaça
+const DIST_SEGUIR := 70.0        ## mais longe que isto do Rei, o Guarda o segue por caminho
 
 var _dir := 1.0
 var _cd := 0.6
@@ -66,6 +82,12 @@ func _ready() -> void:
 	add_to_group("viajante")
 	sprite.texture = textura
 	sprite.material = Jogo.material_clarao()
+	if guarda:
+		# Corpo um pouco maior que o do lacaio (a forma é própria: a da cena é compartilhada)
+		var forma := RectangleShape2D.new()
+		forma.size = Vector2(12, 12)
+		$CollisionShape2D.shape = forma
+		$CollisionShape2D.position = Vector2(0, 2)
 
 
 func _physics_process(delta: float) -> void:
@@ -78,6 +100,11 @@ func _physics_process(delta: float) -> void:
 
 	if not is_on_floor():
 		velocity.y = minf(velocity.y + GRAVIDADE * delta, 360.0)
+
+	if guarda:
+		_passo_caminho = {}
+		_aplicar_movimento(delta, _decidir_guarda(delta))
+		return
 
 	var alvo = _procurar_alvo()
 	if alvo != null and alcance_arremesso > 0.0 and _cd_arremesso <= 0.0:
@@ -112,6 +139,10 @@ func _physics_process(delta: float) -> void:
 			_dir *= -1.0
 			mover = _dir
 
+	_aplicar_movimento(delta, mover)
+
+
+func _aplicar_movimento(delta: float, mover: float) -> void:
 	if _descer > 0.0:
 		_descer -= delta
 		if _descer <= 0.0:
@@ -126,7 +157,8 @@ func _physics_process(delta: float) -> void:
 			set_collision_mask_value(5, false)
 		if mover != 0.0:
 			_dir = mover
-	velocity.x = mover * velocidade
+	_knock_x = move_toward(_knock_x, 0.0, 500.0 * delta)
+	velocity.x = mover * velocidade + _knock_x
 	move_and_slide()
 
 	sensor_chao.position.x = 6.0 * _dir
@@ -141,12 +173,12 @@ func _physics_process(delta: float) -> void:
 var _passo_caminho := {}
 
 
-func _seguir_caminho(alvo, delta: float) -> bool:
+func _seguir_caminho(alvo, delta: float, perto := 48.0) -> bool:
 	## Lacaios usam a navegação para caçar alvos longe ou em outro andar.
 	## Retorna false quando o alvo está perto (aí o ataque normal assume).
 	_passo_caminho = {}
 	var dif: Vector2 = alvo.global_position - global_position
-	if absf(dif.y) <= 14.0 and absf(dif.x) <= 48.0:
+	if absf(dif.y) <= 14.0 and absf(dif.x) <= perto:
 		return false
 	if _seguidor == null:
 		_seguidor = SeguidorCaminho.new(partida.nav)
@@ -160,6 +192,91 @@ func _seguir_caminho(alvo, delta: float) -> bool:
 	if _seguidor.chegou():
 		return false
 	_passo_caminho = _seguidor.passo(self, delta)
+	return true
+
+
+func _decidir_guarda(delta: float) -> float:
+	## Guarda real: fica perto do Rei, entre ele e o lutador inimigo mais próximo,
+	## e golpeia (devagar e fraco) quem encosta. Retorna o sentido de andar.
+	if not _solido and _livre_de_inimigos():
+		_solido = true
+		set_collision_layer_value(CAMADA_GUARDA + equipe - 1, true)
+	var rei = dono if (dono != null and is_instance_valid(dono) and dono.esta_vivo()) else null
+
+	var vizinho = _hostil_encostado()
+	if vizinho != null:
+		var dx: float = vizinho.global_position.x - global_position.x
+		if absf(dx) > 2.0:
+			_dir = signf(dx)
+		if _cd <= 0.0:
+			_atacar(vizinho)
+		return 0.0
+	if rei == null:
+		return 0.0
+
+	if _seguir_caminho(rei, delta, DIST_SEGUIR):
+		return 0.0  # indo até o Rei por um caminho (o passo é aplicado depois)
+	var ameaca = _ameaca_do_rei(rei)
+	var meta: float = rei.global_position.x
+	if ameaca != null:
+		var lado: float = signf(ameaca.global_position.x - rei.global_position.x)
+		if lado == 0.0:
+			lado = _dir
+		meta += lado * DIST_ESCOLTA
+		var dx2: float = ameaca.global_position.x - global_position.x
+		if absf(dx2) > 2.0:
+			_dir = signf(dx2)  # de frente para a ameaça (o escudo fica para ela)
+	elif absf(meta - global_position.x) < 24.0:
+		return 0.0  # perto do Rei e sem ameaça: fica parado
+	var mover := 0.0
+	if absf(meta - global_position.x) > 3.0:
+		mover = signf(meta - global_position.x)
+		if ameaca == null:
+			_dir = mover
+	if mover != 0.0 and is_on_floor() and is_on_wall() and _pulo_cd <= 0.0:
+		_pular()
+	return mover
+
+
+func _ameaca_do_rei(rei):
+	## Lutador inimigo mais perto do Rei (monstros só se estiverem colados no Guarda).
+	var melhor = null
+	var melhor_d := RAIO_AMEACA
+	for a in get_tree().get_nodes_in_group("alvo"):
+		if a == self or not Jogo.hostis(self, a) or not a.esta_vivo():
+			continue
+		var d: float = rei.global_position.distance_to(a.global_position)
+		if a is Lutador:
+			if d < melhor_d:
+				melhor_d = d
+				melhor = a
+		elif a is Minion and a.equipe == 0 and melhor == null \
+				and global_position.distance_to(a.global_position) < RAIO_MONSTRO:
+			melhor = a
+	return melhor
+
+
+func _hostil_encostado():
+	## Hostil ao alcance do golpe (lutador primeiro).
+	var melhor = null
+	for a in get_tree().get_nodes_in_group("alvo"):
+		if a == self or not Jogo.hostis(self, a) or not a.esta_vivo():
+			continue
+		var dif: Vector2 = a.global_position - global_position
+		if absf(dif.x) > ALCANCE_GUARDA or absf(dif.y) > 14.0:
+			continue
+		if a is Lutador:
+			return a
+		melhor = a
+	return melhor
+
+
+func _livre_de_inimigos() -> bool:
+	## Só vira sólido quando nenhum lutador inimigo está sobreposto (não prende ninguém).
+	var caixa := hitbox().grow(3.0)
+	for a in get_tree().get_nodes_in_group("alvo"):
+		if a is Lutador and Jogo.hostis(self, a) and caixa.intersects(a.hitbox()):
+			return false
 	return true
 
 
@@ -196,7 +313,7 @@ func _pular() -> void:
 
 func _atacar(alvo) -> void:
 	_cd = intervalo_ataque
-	alvo.receber_dano(dano, _origem(), "lacaio" if dono != null else "")
+	alvo.receber_dano(dano, _origem(), "lacaio" if dono != null else "", global_position)
 	var tw := create_tween()
 	tw.tween_property(sprite, "position:x", _dir * 3.0, 0.05)
 	tw.tween_property(sprite, "position:x", 0.0, 0.1)
@@ -209,9 +326,29 @@ func _origem():
 	return self
 
 
-func receber_dano(qtd: float, origem, _fonte := "") -> void:
+func empurrar(v: Vector2) -> void:
+	## Golpe, investida ou pouso empurrando o minion (o Guarda real resiste).
+	if not guarda:
+		velocity = v
+		return
+	var f := 1.0 - resistencia_empurrao
+	velocity.y = v.y * f
+	_knock_x = v.x * f
+
+
+func receber_dano(qtd: float, origem, fonte := "", pos_golpe := Vector2.INF) -> void:
+	## fonte: "" (golpe), "projetil", "lanca" (de lacaio) ou "lacaio" (golpe de lacaio)
 	if not vivo:
 		return
+	if guarda and escudo > 0.0 and fonte != "projetil" and fonte != "lanca":
+		# Escudo: corta golpes corpo a corpo vindos da frente
+		var de := pos_golpe
+		if de == Vector2.INF and origem != null and is_instance_valid(origem):
+			de = origem.global_position
+		if de != Vector2.INF and (de.x - global_position.x) * _dir > 0.0:
+			qtd *= 1.0 - escudo
+			partida.fx("faisca_escudo", position + Vector2(_dir * 7.0, 0.0), (de - global_position).angle())
+			Jogo.tocar("bloqueio")
 	vida -= qtd
 	_flash = 0.12
 	_provocado = true
@@ -256,6 +393,8 @@ func esta_vivo() -> bool:
 
 
 func hitbox() -> Rect2:
+	if guarda:
+		return Rect2(global_position + Vector2(-6, -4), Vector2(12, 12))
 	return Rect2(global_position + Vector2(-5, -2), Vector2(10, 10))
 
 

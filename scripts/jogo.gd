@@ -75,7 +75,7 @@ func _ready() -> void:
 	_musica.volume_db = -8.0
 	add_child(_musica)
 	for nome in ["pulo", "flecha", "espada", "magia", "invocar", "acerto",
-			"morte", "nivel", "porta", "vitoria", "pouso", "pingo", "item", "bola", "dash"]:
+			"morte", "nivel", "porta", "vitoria", "pouso", "pingo", "item", "bola", "dash", "bloqueio"]:
 		var p := AudioStreamPlayer.new()
 		p.stream = load("res://assets/sfx/%s.wav" % nome)
 		p.max_polyphony = 4

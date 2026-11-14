@@ -64,6 +64,9 @@ func _initialize() -> void:
 		# Itens: efeito de tamanho no convidado e a Bola voando
 		p.jogadores[2].aplicar_efeito("grande")
 		p._criar_item("bola")
+		# Guarda real do Rei (jogador 1): o convidado precisa vê-lo com a textura do time
+		p.jogadores[1].receber_classe(load("res://resources/classes/rei.tres"))
+		p.criar_guarda(p.jogadores[1])
 		await create_timer(3.0).timeout
 		p.jogadores[1].receber_dano(9999, null)
 		await create_timer(3.0).timeout
@@ -88,6 +91,7 @@ func _initialize() -> void:
 		p.escolher(2, 0)
 		_checar(await _esperar(func(): return p.jogadores[2].escala > 1.4, 10.0), "efeito de item não chegou ao convidado")
 		_checar(p._fantasmas.values().any(func(f): return f.texture.resource_path.ends_with("bola.png")), "a Bola não aparece no convidado")
+		_checar(await _esperar(func(): return p._fantasmas.values().any(func(f): return f.texture.resource_path.ends_with("guarda_1.png")), 10.0), "o Guarda real não aparece no convidado")
 		_checar(await _esperar(func(): return p.fim, 10.0), "fim de partida não chegou ao convidado")
 		_checar(p.vencedor == 2, "vencedor errado no convidado")
 	print("REDE OK" if falhas.is_empty() else "REDE FALHA: " + ", ".join(falhas))
