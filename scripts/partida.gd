@@ -1113,6 +1113,7 @@ func _aplicar_jogador(l: Lutador, d: Array) -> void:
 	l.nivel = d[6]
 	l.xp = d[7]
 	Jogo.pintar_clarao(l.sprite, d[12])
+	l.atualizar_furia(false)  # fúria deriva da vida e da classe (o convidado só desenha)
 	# Efeito de item (tamanho, gravidade, ataque trocado)
 	if d[13] != l.efeito:
 		if d[13] == "":

@@ -37,6 +37,7 @@ func _initialize() -> void:
 	await _testar_pulos_e_itens()
 	await _testar_dinamica()
 	await _testar_dash()
+	await _testar_orc()
 	_testar_dash_rede()
 	_testar_mapeamento_controle()
 	_testar_controle_mapa()
@@ -402,6 +403,149 @@ class ControleTeste extends Controle:
 	## Controle manual para os testes: os campos são preenchidos pelo teste.
 	func atualizar(_l, _delta: float) -> void:
 		pass
+
+
+func _testar_orc() -> void:
+	## Orc: investida (dash com dano, um acerto por alvo), fúria e onda de choque do pouso.
+	var main = load("res://scenes/main.tscn").instantiate()
+	root.add_child(main)
+	await process_frame
+	main._nova_partida({"semente": 77, "tempo": 180.0, "bots": {1: -1, 2: -1}})
+	await process_frame
+	var p = main._atual
+	p.contagem = 0.0
+	p._congelar(false)
+	var l = p.jogadores[1]
+	var o = p.jogadores[2]
+	l.receber_classe(load("res://resources/classes/orc.tres"))
+	l.eh_recruta = false
+	o.receber_classe(load("res://resources/classes/rei.tres"))
+	o.eh_recruta = false
+	var c := ControleTeste.new()
+	l.controle = c
+	l.ativo = true
+	o.ativo = false
+	var base: Vector2 = p.mapa["inicio"][1]
+	var orc: ClasseDados = load("res://resources/classes/orc.tres")
+	if orc.velocidade < 70.0 or orc.velocidade > 75.0:
+		_falha("Orc: velocidade fora de 70-75: %s" % orc.velocidade)
+
+	# Investida: um acerto só, dano = 0,8 x dano, empurra na direção do dash
+	for f in 20:
+		await physics_frame
+	l.position = base
+	l.velocity = Vector2.ZERO
+	o.position = base + Vector2(26, 0)
+	o.velocity = Vector2.ZERO
+	o.vida = o.vida_max
+	l._dash_cd = 0.0
+	l._cd_ataque = 99.0  # sem golpe normal no teste
+	for f in 10:
+		await physics_frame
+	var esperado: float = l.dano * orc.dano_investida * p.mult_pvp(l, o)
+	var vida0: float = o.vida
+	c.eixo = 1.0
+	c.dash_apertou = true
+	await physics_frame
+	c.dash_apertou = false
+	if absf(l._dash_t - (l.DASH_DURACAO - 1.0 / 60.0)) > 0.02 and l._dash_t > l.DASH_DURACAO:
+		_falha("Orc: duração do dash diferente (%s)" % l._dash_t)
+	if absf(l._dash_cd - (l.DASH_RECARGA - 1.0 / 60.0)) > 0.03:
+		_falha("Orc: recarga do dash diferente (%s)" % l._dash_cd)
+	var vx_max := 0.0
+	for f in 12:
+		await physics_frame
+		vx_max = maxf(vx_max, o.velocity.x)
+	c.eixo = 0.0
+	var tirou: float = vida0 - o.vida
+	if absf(tirou - esperado) > 0.05:
+		_falha("Orc: investida tirou %.2f, esperado %.2f (um acerto)" % [tirou, esperado])
+	if vx_max < 60.0:
+		_falha("Orc: investida não empurrou (vx máx %.1f)" % vx_max)
+
+	# Dash de outra classe não causa dano
+	l.receber_classe(load("res://resources/classes/arqueiro.tres"))
+	l.position = base
+	l.velocity = Vector2.ZERO
+	o.position = base + Vector2(26, 0)
+	o.vida = o.vida_max
+	l._dash_cd = 0.0
+	l._cd_ataque = 99.0
+	for f in 10:
+		await physics_frame
+	vida0 = o.vida
+	c.eixo = 1.0
+	c.dash_apertou = true
+	await physics_frame
+	c.dash_apertou = false
+	if absf(l._dash_cd - (l.DASH_RECARGA - 1.0 / 60.0)) > 0.03:
+		_falha("Arqueiro: recarga do dash diferente (%s)" % l._dash_cd)
+	for f in 12:
+		await physics_frame
+	c.eixo = 0.0
+	if o.vida < vida0:
+		_falha("Dash do Arqueiro causou dano (%.2f)" % (vida0 - o.vida))
+	l.receber_classe(orc)
+	l.eh_recruta = false
+
+	# Fúria: liga abaixo de 30%, desliga ao curar; afeta velocidade e dano
+	l.vida = l.vida_max
+	await physics_frame
+	var dano_normal: float = l.atk_dano()
+	var vel_normal: float = l._mult_vel()
+	if l.furia:
+		_falha("Orc: fúria ligada com vida cheia")
+	l.vida = l.vida_max * 0.29
+	await physics_frame
+	if not l.furia:
+		_falha("Orc: fúria não ligou abaixo de 30%")
+	if absf(l.atk_dano() - dano_normal * orc.furia_mult_dano) > 0.01 or absf(l._mult_vel() - vel_normal * orc.furia_mult_vel) > 0.001:
+		_falha("Orc: fúria não afetou dano/velocidade (%.2f, %.2f)" % [l.atk_dano(), l._mult_vel()])
+	l.vida = l.vida_max * 0.6
+	await physics_frame
+	if l.furia or absf(l.atk_dano() - dano_normal) > 0.01:
+		_falha("Orc: fúria não desligou ao curar")
+	l.receber_classe(load("res://resources/classes/mago.tres"))
+	l.eh_recruta = false
+	l.vida = l.vida_max * 0.1
+	await physics_frame
+	if l.furia:
+		_falha("Mago não deveria ter fúria")
+	l.receber_classe(orc)
+	l.eh_recruta = false
+	l.vida = l.vida_max
+
+	# Pouso pesado: onda de choque fere hostis no raio, não fora dele
+	l.position = base + Vector2(-100, 0)
+	l.velocity = Vector2.ZERO
+	o.vida = o.vida_max
+	o.position = base + Vector2(-100 + 20, 0)
+	await physics_frame
+	var vida_l: float = l.vida
+	var vida_o: float = o.vida
+	var esperado_p: float = l.dano * orc.dano_pouso * p.mult_pvp(l, o)
+	l._onda_pouso()
+	if absf((vida_o - o.vida) - esperado_p) > 0.05:
+		_falha("Orc: onda de choque tirou %.2f, esperado %.2f" % [vida_o - o.vida, esperado_p])
+	if l.vida != vida_l:
+		_falha("Orc: onda de choque machucou o próprio Orc")
+	o.position = l.position + Vector2(orc.raio_pouso + 12.0, 0)
+	vida_o = o.vida
+	l._onda_pouso()
+	if o.vida != vida_o:
+		_falha("Orc: onda de choque acertou fora do raio")
+	# Pouso de verdade (queda > 200) dispara a onda
+	o.position = l.position + Vector2(18, 0)
+	vida_o = o.vida
+	l.position.y -= 10.0
+	l.velocity.y = 300.0
+	for f in 12:
+		await physics_frame
+	if o.vida >= vida_o:
+		_falha("Orc: pouso pesado não causou dano")
+	print("Orc (investida, fúria, pouso): ok")
+	main.queue_free()
+	await process_frame
 
 
 func _testar_dash_rede() -> void:

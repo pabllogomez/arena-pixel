@@ -78,6 +78,9 @@ var gravidade_invertida := false
 var mult_dano_efeito := 1.0
 var mult_vel_efeito := 1.0
 var mult_empurrao := 1.0
+## Fúria (ver ClasseDados.furia_limite): liga sozinha conforme a vida.
+var furia := false
+var _t_furia := 0.0
 
 var nivel := 1
 var xp := 0
@@ -106,6 +109,7 @@ var _dash_cd := 0.0            ## recarga restante
 var _dash_dir := 1.0
 var _dash_ar_usado := false    ## já usou o dash no ar (volta ao tocar o chão)
 var _dash_buffer := 0.0
+var _investida_acertos: Array = []  ## quem já levou a investida deste dash
 var _t_fantasma := 0.0
 ## Rastro do dash: cada fantasma é [posição global, espelhado, quadro, idade]
 var _fantasmas: Array = []
@@ -123,6 +127,7 @@ func _aplicar_classe(d: ClasseDados) -> void:
 	var proporcao := vida / vida_max if dados != null else 1.0
 	dados = d
 	ataque = d
+	furia = false
 	vida_max = d.vida_max
 	vida = vida_max * proporcao
 	velocidade = d.velocidade
@@ -207,7 +212,27 @@ func _emprestado() -> bool:
 
 
 func atk_dano() -> float:
-	return (ataque.dano if _emprestado() else dano) * mult_dano_efeito
+	return (ataque.dano if _emprestado() else dano) * mult_dano_efeito * _mult_furia_dano()
+
+
+func _mult_furia_dano() -> float:
+	return dados.furia_mult_dano if furia else 1.0
+
+
+func _mult_vel() -> float:
+	return mult_vel_efeito * (dados.furia_mult_vel if furia else 1.0)
+
+
+func atualizar_furia(avisar := true) -> void:
+	## Liga a fúria abaixo do limite de vida e desliga ao curar acima dele.
+	var ligar := vivo and dados != null and dados.furia_limite > 0.0 and vida < vida_max * dados.furia_limite
+	if ligar == furia:
+		return
+	furia = ligar
+	if furia and avisar:
+		partida.mostrar_texto(global_position + Vector2(0, -20), "FÚRIA!", Color("ef4444"), true)
+		partida.fx("furia", position)
+		partida.tremer(1.2)
 
 
 func atk_alcance() -> float:
@@ -316,6 +341,7 @@ func _physics_process(delta: float) -> void:
 		efeito_t -= delta
 		if efeito_t <= 0.0:
 			_encerrar_efeito()
+	atualizar_furia()
 	# Gravidade (pode estar invertida pelo item). A gravidade extra da classe
 	# (ex.: Orc) vale só na descida: sobe como os outros, cai mais pesado.
 	var sentido := -1.0 if gravidade_invertida else 1.0
@@ -370,7 +396,7 @@ func _physics_process(delta: float) -> void:
 	if em_dash:
 		# Arrancada: ignora eixo e atrito; segura a velocidade e a altura
 		_dash_t -= delta
-		velocity.x = _dash_dir * velocidade * mult_vel_efeito * DASH_MULT
+		velocity.x = _dash_dir * velocidade * _mult_vel() * DASH_MULT
 		velocity.y = 0.0
 		sprite.flip_h = _dash_dir < 0.0
 		_t_fantasma -= delta
@@ -378,7 +404,7 @@ func _physics_process(delta: float) -> void:
 			_t_fantasma = 0.04
 			_fantasmas.append([global_position, sprite.flip_h, sprite.frame, 0.0])
 	elif dir != 0.0:
-		velocity.x = move_toward(velocity.x, dir * velocidade * mult_vel_efeito, dados.aceleracao * delta)
+		velocity.x = move_toward(velocity.x, dir * velocidade * _mult_vel(), dados.aceleracao * delta)
 		sprite.flip_h = dir < 0.0
 	else:
 		velocity.x = move_toward(velocity.x, 0.0, dados.atrito * delta)
@@ -388,14 +414,23 @@ func _physics_process(delta: float) -> void:
 	move_and_slide()
 	if em_dash and _dash_t <= 0.0:
 		# Fim da arrancada: volta à velocidade normal de corrida
-		var vmax := velocidade * mult_vel_efeito
+		var vmax := velocidade * _mult_vel()
 		velocity.x = clampf(velocity.x, -vmax, vmax)
 	_atualizar_fantasmas(delta)
+	if em_dash and dados.dano_investida > 0.0:
+		_investir()
+	if furia:
+		_t_furia -= delta
+		if _t_furia <= 0.0:
+			_t_furia = 0.3
+			partida.fx("brasa_furia", _pes())
 	if estava_no_ar and is_on_floor() and queda > 90.0:
 		_esticar = Vector2(1.3, 0.72) if queda > 200.0 else Vector2(1.18, 0.85)
 		if queda > 200.0 and dados.pouso_pesado:
 			partida.tremer(clampf(queda / 150.0, 1.0, 2.5))
 			partida.criar_poeira(_pes())
+			if dados.raio_pouso > 0.0:
+				_onda_pouso()
 		else:
 			partida.fx("pouso", _pes(), queda)
 	# Poeira de corrida (só enfeite local; o convidado faz a dele)
@@ -436,10 +471,46 @@ func _iniciar_dash(sentido_x: float) -> void:
 	_dash_t = DASH_DURACAO
 	_dash_cd = DASH_RECARGA
 	_dash_buffer = 0.0
+	_investida_acertos.clear()
 	_t_fantasma = 0.0
 	_esticar = Vector2(1.3, 0.8)
 	Jogo.tocar("dash")
 	partida.fx("dash", _pes(), sentido_x)
+
+
+func _investir() -> void:
+	## Investida (dash com dano): um acerto por alvo hostil por dash.
+	var caixa := hitbox().grow(2.0)
+	for a in get_tree().get_nodes_in_group("alvo"):
+		if a == self or not Jogo.hostis(self, a) or not a.esta_vivo() or _investida_acertos.has(a):
+			continue
+		if not caixa.intersects(a.hitbox()):
+			continue
+		_investida_acertos.append(a)
+		causar_dano(a, dano * dados.dano_investida * mult_dano_efeito * _mult_furia_dano())
+		if a is Lutador:
+			a.velocity.x += _dash_dir * dados.empurrao_investida * (1.0 - a.dados.resistencia_empurrao) * mult_empurrao
+		elif a is Minion:
+			a.velocity = Vector2(_dash_dir * dados.empurrao_investida, -60.0)
+		partida.fx("golpe", position + Vector2(_dash_dir * 6.0, 0.0), _dash_dir)
+		partida.tremer(0.8)
+
+
+func _onda_pouso() -> void:
+	## Pouso pesado: onda de choque que fere e empurra hostis por perto.
+	partida.fx("onda_choque", _pes(), dados.raio_pouso)
+	for a in get_tree().get_nodes_in_group("alvo"):
+		if a == self or not Jogo.hostis(self, a) or not a.esta_vivo():
+			continue
+		var dif: Vector2 = a.global_position - global_position
+		if dif.length() > dados.raio_pouso:
+			continue
+		causar_dano(a, dano * dados.dano_pouso * mult_dano_efeito * _mult_furia_dano())
+		var s := signf(dif.x) if dif.x != 0.0 else 1.0
+		if a is Lutador:
+			a.velocity.x += s * dados.empurrao_pouso * (1.0 - a.dados.resistencia_empurrao) * mult_empurrao
+		elif a is Minion:
+			a.velocity = Vector2(s * dados.empurrao_pouso, -100.0)
 
 
 func _atualizar_fantasmas(delta: float) -> void:
@@ -709,6 +780,12 @@ func _draw() -> void:
 	if not vivo:
 		return
 	var cor: Color = Jogo.COR_TIME[equipe]
+	# Fúria: o sprite pulsa avermelhado
+	if furia:
+		var pulso := 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.016)
+		sprite.modulate = Color(1.0, 0.45 + 0.3 * pulso, 0.45 + 0.3 * pulso)
+	else:
+		sprite.modulate = Color.WHITE
 	_desenhar_fantasmas(cor)
 	# Rótulo ("VOCÊ", "CPU", "P1"...), seta e barra de vida acima da cabeça
 	var acima := maxf(0.0, (escala - 1.0) * 16.0)  # sobe o rótulo quando está gigante

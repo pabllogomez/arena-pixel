@@ -226,6 +226,7 @@ func _mover(l, delta: float) -> void:
 	if _alvo != null and is_instance_valid(_alvo) and _alvo.esta_vivo() and _modo != "fugir":
 		var dif: Vector2 = _alvo.position - l.position
 		var d := dif.length()
+		_tentar_investida(l, dif)
 		match l.atk_tipo():
 			ClasseDados.TipoAtaque.FLECHA, ClasseDados.TipoAtaque.MAGIA:
 				if _alvo is Lutador and d < l.atk_alcance() * 0.4 and absf(dif.y) < 24.0:
@@ -253,6 +254,22 @@ func _mover(l, delta: float) -> void:
 	if _seguidor.chegou() and _alvo != null and is_instance_valid(_alvo) and _modo != "fugir":
 		var dx: float = _alvo.position.x - l.position.x
 		eixo = signf(dx) if absf(dx) > 6.0 else 0.0
+
+
+func _tentar_investida(l, dif: Vector2) -> void:
+	## Classes com investida (Orc): usa o dash como carga quando o alvo está ao
+	## alcance dela (o dash dura 0,15 s a 3x a velocidade), na mesma linha.
+	if l.dados.dano_investida <= 0.0 or dificuldade == Dificuldade.FACIL or not l.dash_pronto():
+		return
+	var alcance_carga: float = l.velocidade * l._mult_vel() * l.DASH_MULT * l.DASH_DURACAO
+	var dx := absf(dif.x)
+	if dx < l.atk_alcance() * 0.9 or dx > alcance_carga + 10.0 or absf(dif.y) > 12.0:
+		return
+	if not l.is_on_floor() and not l._linha_livre(_alvo.global_position):
+		return
+	if randf() < 0.2:
+		dash_apertou = true
+		dash_dir = signf(dif.x)
 
 
 func _tentar_dash(l, sentido: float, chance: float) -> void:

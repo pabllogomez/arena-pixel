@@ -32,6 +32,23 @@ enum TipoAtaque { FLECHA, CORPO_A_CORPO, MAGIA, INVOCAR }
 ## também arremessam lacaios para longe com o golpe.
 @export_range(0.0, 1.0) var resistencia_lacaios := 0.0
 
+@export_group("Investida, fúria e pouso")
+## Investida: fração do dano da classe causada ao encostar num hostil durante
+## o dash (1 acerto por alvo por dash). 0 = dash normal, sem dano.
+@export var dano_investida := 0.0
+## Empurrão (px/s) dado pela investida na direção do dash.
+@export var empurrao_investida := 0.0
+## Fúria: abaixo desta fração da vida máxima a classe ganha os multiplicadores
+## abaixo. 0 = sem fúria.
+@export_range(0.0, 1.0) var furia_limite := 0.0
+@export var furia_mult_vel := 1.0
+@export var furia_mult_dano := 1.0
+## Pouso pesado: onda de choque que fere hostis neste raio (px); 0 = sem onda.
+@export var raio_pouso := 0.0
+## Fração do dano da classe causada pela onda de choque do pouso.
+@export var dano_pouso := 0.0
+@export var empurrao_pouso := 0.0
+
 @export_group("Ataque")
 @export var tipo_ataque: TipoAtaque = TipoAtaque.FLECHA
 @export var dano := 10.0

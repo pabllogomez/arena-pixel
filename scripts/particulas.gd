@@ -238,6 +238,15 @@ func fx(nome: String, pos: Vector2, a = 0.0, b = 0.0) -> void:
 			for lado in [-1.0, 1.0]:
 				_leque(pos, 9, (-0.3 if lado > 0.0 else PI + 0.3), 0.4, 30.0, 110.0, 0.5, POEIRA, 2, -20.0, 3.0)
 				_leque(pos, 5, (-1.0 if lado > 0.0 else PI + 1.0), 0.4, 60.0, 130.0, 0.6, LASCA, 1, 420.0, 0.0, true)
+		"onda_choque":
+			# a = raio da onda: anel de poeira rente ao chão
+			for lado in [-1.0, 1.0]:
+				for i in 5:
+					emitir(pos + Vector2(lado * 3.0, 0.0), Vector2(lado * (float(a) * 2.6) * randf_range(0.6, 1.0), randf_range(-14.0, -2.0)), 0.3, POEIRA, 2, 0.0, 3.0)
+		"furia":
+			_anel(pos, 14, 70.0, 0.35, BRASA, 2, 4.0)
+		"brasa_furia":
+			emitir(pos + Vector2(randf_range(-4.0, 4.0), -2.0), Vector2(randf_range(-8.0, 8.0), randf_range(-40.0, -18.0)), randf_range(0.3, 0.5), BRASA, 1, 0.0, 1.0)
 		"correr":
 			# a = sentido da poeira (oposto ao movimento)
 			emitir(pos + Vector2(randf_range(-1.0, 1.0), 0.0), Vector2(float(a) * randf_range(8.0, 20.0), randf_range(-16.0, -4.0)), randf_range(0.2, 0.32), POEIRA, 1, 0.0, 3.0)
