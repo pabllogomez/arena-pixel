@@ -460,11 +460,20 @@ func _testar_cetro() -> void:
 	l._atualizar_cetro(0.6, false)
 	if o.vida >= vida1:
 		_falha("Cetro: não golpeou depois da recarga de 1 s")
-	# Alvo do outro lado: empurra para o lado oposto
+	# Alvo atrás do Rei: corpo a corpo não golpeia para trás
 	o.position = base + Vector2(-16, 0)
 	o.velocity = Vector2.ZERO
+	l.sprite.flip_h = false
+	l._cd_cetro = 0.0
+	var vida_atras: float = o.vida
+	l._atualizar_cetro(0.0, false)
+	if o.vida != vida_atras:
+		_falha("Cetro: golpeou um alvo que estava atrás do Rei")
+	# Virado para ele: golpeia e empurra para o lado oposto
+	l.sprite.flip_h = true
 	l._cd_cetro = 0.0
 	l._atualizar_cetro(0.0, false)
+	l.sprite.flip_h = false
 	if o.velocity.x > -100.0:
 		_falha("Cetro: não empurrou para longe do Rei (alvo à esquerda, vx %.1f)" % o.velocity.x)
 	# Fora do alcance / outro nível: nada

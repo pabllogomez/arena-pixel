@@ -26,6 +26,8 @@ const DASH_MULT := 3.0       ## velocidade durante o dash = DASH_MULT x velocida
 ## Críticos (ver _mult_critico)
 const CRITICO_COSTAS := 3.0
 const CRITICO_DASH_RECRUTA := 2.0
+## Cor do número de dano por tipo de crítico
+const COR_CRITICO := {"costas": Color("ef4444"), "dash": Color("73eff7")}
 const DASH_RECARGA := 1.2    ## segundos entre um dash e o próximo (contados do início)
 const TEMPO_BUFFER_DASH := 0.1
 const DASH_FANTASMA_VIDA := 0.18
@@ -530,7 +532,7 @@ func _atualizar_cetro(delta: float, em_dash: bool) -> void:
 		if a == self or not Jogo.hostis(self, a) or not a.esta_vivo():
 			continue
 		var dif: Vector2 = a.global_position - global_position
-		if absf(dif.y) < 18.0 * escala and absf(dif.x) <= ataque.alcance_cetro * escala:
+		if absf(dif.y) < 18.0 * escala and absf(dif.x) <= ataque.alcance_cetro * escala and _na_frente(dif):
 			alvos.append(a)
 			if lado == 0.0:
 				lado = signf(dif.x) if dif.x != 0.0 else (-1.0 if sprite.flip_h else 1.0)
@@ -647,6 +649,8 @@ func _escolher_alvo():
 			continue
 		if corpo_a_corpo and absf(dif.y) > 18.0:
 			continue
+		if corpo_a_corpo and not _na_frente(dif):
+			continue  # corpo a corpo só acerta quem está na frente
 		if not corpo_a_corpo and not _linha_livre(a.global_position):
 			continue
 		if a is Lutador:
@@ -687,24 +691,34 @@ func _golpear(lado: float) -> void:
 
 func causar_dano(alvo, qtd: float, fonte := "", critico_permitido := true) -> void:
 	if critico_permitido and fonte != "lanca":
-		var mult := _mult_critico(alvo)
-		if mult > 1.0:
-			qtd *= mult
-			partida.mostrar_texto(alvo.global_position + Vector2(0, -22), "CRÍTICO!", Color("ef7d57"), true)
+		var tipo := _tipo_critico(alvo)
+		if tipo != "":
+			qtd *= CRITICO_COSTAS if tipo == "costas" else CRITICO_DASH_RECRUTA
+			partida.mostrar_texto(alvo.global_position + Vector2(0, -24),
+					"CRÍTICO!" if tipo == "costas" else "DASH!", COR_CRITICO[tipo], true)
+			alvo.set_meta("critico", tipo)  # o alvo pinta o número de dano com a cor do crítico
 	alvo.receber_dano(qtd, self, fonte)
+	if alvo.has_meta("critico"):
+		alvo.remove_meta("critico")
 	if roubo_vida > 0.0:
 		curar(qtd * roubo_vida)
 
 
-func _mult_critico(alvo) -> float:
-	## Crítico: x3 acertando o alvo pelas costas (qualquer personagem); x2 para
-	## o Recruta que golpeia durante ou logo depois do dash. Não acumulam.
-	var mult := 1.0
-	if _recem_dash() and eh_recruta:
-		mult = CRITICO_DASH_RECRUTA
+func _tipo_critico(alvo) -> String:
+	## "costas" (x3, qualquer personagem), "dash" (x2, só o Recruta durante ou
+	## logo depois do dash) ou "". Não acumulam: pelas costas vale mais.
 	if _de_costas(alvo):
-		mult = maxf(mult, CRITICO_COSTAS)
-	return mult
+		return "costas"
+	if _recem_dash() and eh_recruta:
+		return "dash"
+	return ""
+
+
+func _na_frente(dif: Vector2) -> bool:
+	## O alvo (posição relativa `dif`) está do lado para onde o personagem olha.
+	if absf(dif.x) < 3.0:
+		return true
+	return signf(dif.x) == (-1.0 if sprite.flip_h else 1.0)
 
 
 func _de_costas(alvo) -> bool:
@@ -757,7 +771,12 @@ func receber_dano(qtd: float, origem, fonte := "", _pos_golpe := Vector2.INF) ->
 	Jogo.tocar("acerto")
 	var texto := str(roundi(qtd)) if qtd >= 1.0 else "%.1f" % qtd
 	var forte := qtd >= 10.0
-	partida.mostrar_texto(global_position + Vector2(0, -12), texto, Color("f4f4f4") if forte else Color("ffcd75"), forte)
+	var cor := Color("f4f4f4") if forte else Color("ffcd75")
+	var critico: String = get_meta("critico", "")
+	if critico != "":
+		cor = COR_CRITICO[critico]  # crítico: número na cor do tipo (vermelho costas, azul dash)
+		forte = true
+	partida.mostrar_texto(global_position + Vector2(0, -12), texto, cor, forte)
 	if origem_valida:
 		var ang: float = (global_position - origem.global_position).angle()
 		partida.fx("acerto", position, ang, qtd)
