@@ -32,6 +32,8 @@ func _initialize() -> void:
 	await _testar_pulos_e_itens()
 	await _testar_dash()
 	_testar_dash_rede()
+	_testar_mapeamento_controle()
+	await _testar_cartas_layout()
 	await _testar_partidas()
 	print("RESULTADO: ", "OK" if _falhas == 0 else "%d FALHA(S)" % _falhas)
 	quit(1 if _falhas else 0)
@@ -375,6 +377,85 @@ func _testar_dash_rede() -> void:
 	if antigo.dash_apertou or antigo.eixo != 1.0 or not antigo.pulo_apertou:
 		_falha("ControleRede: estado de 4 elementos quebrou")
 	print("ControleRede (dash): ok")
+
+
+func _botao_joy(dev: int, botao: JoyButton, apertado := true) -> InputEventJoypadButton:
+	var ev := InputEventJoypadButton.new()
+	ev.device = dev
+	ev.button_index = botao
+	ev.pressed = apertado
+	return ev
+
+
+func _testar_mapeamento_controle() -> void:
+	## Controle: A pula, B dash, LB/RB melhorias (X/Y livres); último dispositivo usado.
+	var casos := [
+		[0, JOY_BUTTON_A, "p1_pular", true], [0, JOY_BUTTON_B, "p1_dash", true],
+		[0, JOY_BUTTON_LEFT_SHOULDER, "p1_opcao1", true], [0, JOY_BUTTON_RIGHT_SHOULDER, "p1_opcao2", true],
+		[0, JOY_BUTTON_LEFT_SHOULDER, "p1_dash", false], [0, JOY_BUTTON_RIGHT_SHOULDER, "p1_dash", false],
+		[0, JOY_BUTTON_X, "p1_opcao1", false], [0, JOY_BUTTON_Y, "p1_opcao2", false],
+		[0, JOY_BUTTON_X, "p1_opcao2", false], [0, JOY_BUTTON_Y, "p1_opcao1", false],
+		[1, JOY_BUTTON_B, "p2_dash", true], [1, JOY_BUTTON_A, "p2_pular", true],
+		[1, JOY_BUTTON_LEFT_SHOULDER, "p2_opcao1", true], [1, JOY_BUTTON_RIGHT_SHOULDER, "p2_opcao2", true],
+		[1, JOY_BUTTON_B, "p1_dash", false], [0, JOY_BUTTON_B, "p2_dash", false],
+		[0, JOY_BUTTON_A, "menu_ok", true], [0, JOY_BUTTON_B, "menu_voltar", true],
+	]
+	for c in casos:
+		var ok := InputMap.event_is_action(_botao_joy(c[0], c[1]), c[2])
+		if ok != c[3]:
+			_falha("controle: dispositivo %d botão %d ação %s (esperava %s)" % [c[0], c[1], c[2], c[3]])
+	var jogo = root.get_node("Jogo")
+	jogo.usando_controle = false
+	jogo._input(_botao_joy(0, JOY_BUTTON_A))
+	if not jogo.usando_controle:
+		_falha("usando_controle não ligou com botão do controle")
+	var tecla := InputEventKey.new()
+	tecla.keycode = KEY_A
+	tecla.pressed = true
+	jogo._input(tecla)
+	if jogo.usando_controle:
+		_falha("usando_controle não desligou com tecla")
+	var eixo := InputEventJoypadMotion.new()
+	eixo.axis = JOY_AXIS_LEFT_X
+	eixo.axis_value = 0.2
+	jogo._input(eixo)
+	if jogo.usando_controle:
+		_falha("usando_controle ligou com movimento pequeno do analógico")
+	eixo.axis_value = 0.9
+	jogo._input(eixo)
+	if not jogo.usando_controle:
+		_falha("usando_controle não ligou com analógico")
+	jogo._input(InputEventScreenTouch.new())
+	if jogo.usando_controle:
+		_falha("usando_controle não desligou com toque")
+	jogo.usando_controle = false
+	print("Controle (mapeamento e último dispositivo): ok")
+
+
+func _testar_cartas_layout() -> void:
+	## Um humano local: cartas lado a lado (mesmo y); dois humanos: empilhadas (mesmo x).
+	var main = load("res://scenes/main.tscn").instantiate()
+	root.add_child(main)
+	await process_frame
+	for humanos in [1, 2]:
+		main._nova_partida({"semente": 77, "tempo": 180.0, "bots": {1: -1, 2: -1 if humanos == 2 else 1}})
+		await process_frame
+		var hud = main._atual.hud
+		for n in [1, 2]:
+			var r: Array = hud.rects_cartas(n)
+			if humanos == 1:
+				if n == 1 and (r[0].position.x >= r[1].position.x or not is_equal_approx(r[0].position.y, r[1].position.y)):
+					_falha("cartas (1 humano): não ficaram lado a lado na mesma altura: %s" % [r])
+				if n == 1 and (r[0].intersects(r[1]) or r[0].position.x > 10.0 or r[1].end.x < hud.size.x - 10.0):
+					_falha("cartas (1 humano): não ficaram uma em cada lateral: %s" % [r])
+			else:
+				if not is_equal_approx(r[0].position.x, r[1].position.x) or r[0].position.y >= r[1].position.y:
+					_falha("cartas (2 humanos, P%d): não ficaram empilhadas: %s" % [n, r])
+		if humanos == 2 and hud.rects_cartas(1)[0].position.x >= hud.rects_cartas(2)[0].position.x:
+			_falha("cartas (2 humanos): P1 deveria ficar à esquerda de P2")
+	main.queue_free()
+	await process_frame
+	print("Cartas (layout 1 e 2 humanos): ok")
 
 
 func jogo_melhoria(l, id: String) -> void:

@@ -110,5 +110,7 @@ func _draw() -> void:
 
 	# ---- Rodapé
 	UI.texto(self, Vector2(cx, cy + 84), "O ataque é automático. As melhorias aparecem em cartas: toque na carta.", UI.P, UI.LUZ)
+	if Jogo.tem_controle():
+		UI.texto(self, Vector2(cx, cy + 96), "Controle: A pula, B dash, LB/RB melhorias", UI.P, UI.OURO)
 	if int(_t * 2.0) % 2 == 0 or _t < 0.4:
 		UI.texto(self, Vector2(cx, cy + 108), "TOQUE PARA COMEÇAR" if partida != null else "TOQUE PARA FECHAR", UI.M, UI.VERDE)

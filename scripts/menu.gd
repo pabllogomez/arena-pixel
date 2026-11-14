@@ -157,11 +157,16 @@ func _draw() -> void:
 		UI.texto(self, Vector2(cx, 249), "Esquerda: arraste para andar    Direita: toque pula, arraste de lado dá dash    Melhorias: toque na carta", UI.P, Color("41a6f6"))
 		UI.texto(self, Vector2(cx, 260), "O ataque é automático. Partidas de 3 minutos + Morte Súbita.", UI.P, UI.BORDA)
 		return
+	var com_controle := Jogo.tem_controle()
 	var ajuda := "W/S ou ↑/↓: escolher     ESPAÇO: confirmar"
+	if com_controle:
+		ajuda = "W/S, ↑/↓ ou direcional: escolher     ESPAÇO ou A: confirmar"
 	if _tela == "dificuldade":
 		ajuda += "     ESC: voltar"
 	UI.texto(self, Vector2(cx, 238), ajuda, UI.P, UI.BORDA)
-	if _tela == "modo" and _sel == 1:
+	if com_controle:
+		UI.texto(self, Vector2(cx, 249), "Controle: direcional/analógico anda    A: pula    B: dash    LB/RB: melhorias", UI.P, Color("41a6f6"))
+	elif _tela == "modo" and _sel == 1:
 		UI.texto(self, Vector2(cx, 249), "P1: A/D andar, W pular, S descer, SHIFT dash, Q/E melhorias    P2: setas, CTRL dash, 1/2 melhorias", UI.P, Color("ef7d57"))
 	else:
 		UI.texto(self, Vector2(cx, 249), "A/D: andar    W ou ESPAÇO: pular    SHIFT: dash    S: descer    Q/E: melhorias", UI.P, Color("41a6f6"))

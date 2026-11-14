@@ -233,9 +233,26 @@ func _cartas_na_esquerda(n: int) -> bool:
 	return n == 1 or partida.rede != ""
 
 
+func _humanos_locais() -> int:
+	var qtd := 0
+	for n in [1, 2]:
+		if partida.jogadores.has(n) and partida.e_local(n):
+			qtd += 1
+	return qtd
+
+
+func _cartas_separadas() -> bool:
+	## Com um só humano local, as cartas ficam uma de cada lado da tela.
+	return _humanos_locais() <= 1
+
+
 func rects_cartas(n: int) -> Array:
-	## Duas cartas grandes empilhadas, centralizadas na vertical
-	## (P1 no lado esquerdo, P2 no direito).
+	## Um humano local: duas cartas grandes, uma em cada lateral, na mesma altura
+	## (opção 1 à esquerda, opção 2 à direita). Dois humanos: empilhadas,
+	## P1 no lado esquerdo e P2 no direito. Sempre centralizadas na vertical.
+	if _cartas_separadas():
+		var y := roundf(size.y / 2.0 - ALT_CARTA / 2.0)
+		return [Rect2(6.0, y, LARG_CARTA, ALT_CARTA), Rect2(size.x - 6.0 - LARG_CARTA, y, LARG_CARTA, ALT_CARTA)]
 	var x := 6.0 if _cartas_na_esquerda(n) else size.x - 6.0 - LARG_CARTA
 	var y0 := roundf(size.y / 2.0) - ALT_CARTA - 2.0
 	return [Rect2(x, y0, LARG_CARTA, ALT_CARTA), Rect2(x, y0 + ALT_CARTA + 5.0, LARG_CARTA, ALT_CARTA)]
@@ -245,13 +262,18 @@ func _cartas(n: int) -> void:
 	var l: Lutador = partida.jogadores[n]
 	var par: Array = l.escolhas[0]
 	var rects := rects_cartas(n)
+	var separadas := _cartas_separadas()
 	var lado := -1.0 if _cartas_na_esquerda(n) else 1.0
 	var usa_p1: bool = n == 1 or partida.rede != ""  # em rede, cada um joga com os controles do P1
 	var teclas := ["Q", "E"] if usa_p1 else ["1", "2"]
+	if Jogo.usando_controle:
+		teclas = ["LB", "RB"]
 	var aceso := int(_t * 3.0) % 2 == 0
 	for i in 2:
 		# Entrada: cada carta desliza da lateral, a de baixo um instante depois
-		var e := clampf((_cartas_t[n] - i * 0.06) / 0.18, 0.0, 1.0)
+		var e := clampf((_cartas_t[n] - (0.0 if separadas else i * 0.06)) / 0.18, 0.0, 1.0)
+		if separadas:
+			lado = -1.0 if i == 0 else 1.0  # cada carta desliza da sua lateral
 		var fora := roundf(pow(1.0 - e, 2.0) * (LARG_CARTA + 12.0)) * lado
 		var r: Rect2 = rects[i]
 		r.position.x += fora
@@ -268,7 +290,7 @@ func _cartas(n: int) -> void:
 		var cabe := UI.largura(nome, UI.M) <= r.end.x - x - 4.0
 		UI.texto(self, Vector2(x, meio - 7.0), nome, UI.M if cabe else UI.P, UI.BRANCO, UI.ESQ)
 		UI.texto(self, Vector2(x, meio + 9.0), m["desc"], UI.P, UI.LUZ, UI.ESQ)
-		if not (Jogo.toque and usa_p1):
+		if Jogo.usando_controle or not (Jogo.toque and usa_p1):
 			# Tecla correspondente, presa no canto da carta
 			UI.tecla(self, Vector2(r.end.x - 9.0, r.position.y + 2.0), teclas[i])
 		if i == 0 and e >= 1.0:

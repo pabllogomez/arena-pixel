@@ -11,6 +11,8 @@ var solo := true
 var dificuldade := 1  ## 0 fácil, 1 normal, 2 difícil
 ## true em celular/tablet (mostra os controles na tela)
 var toque := false
+## Último dispositivo usado foi um controle (esconde os botões da tela e mostra LB/RB nas cartas)
+var usando_controle := false
 
 ## Opções (salvas no navegador)
 signal opcoes_mudaram
@@ -43,6 +45,26 @@ func _ready() -> void:
 		p.max_polyphony = 4
 		add_child(p)
 		_sons[nome] = p
+
+
+func _input(event: InputEvent) -> void:
+	## Guarda o último tipo de entrada usado (controle x teclado/toque/mouse).
+	if event is InputEventJoypadButton:
+		if event.pressed:
+			usando_controle = true
+	elif event is InputEventJoypadMotion:
+		if absf(event.axis_value) > 0.5:
+			usando_controle = true
+	elif event is InputEventKey:
+		if event.pressed:
+			usando_controle = false
+	elif event is InputEventScreenTouch or event is InputEventMouseButton:
+		usando_controle = false
+
+
+static func tem_controle() -> bool:
+	## Há algum controle conectado ou foi o último dispositivo usado?
+	return Jogo.usando_controle or not Input.get_connected_joypads().is_empty()
 
 
 func dados_classe(indice: int) -> ClasseDados:
@@ -249,10 +271,9 @@ func _criar_controles() -> void:
 		_botao("p%d_direita" % j, dev, JOY_BUTTON_DPAD_RIGHT)
 		_botao("p%d_descer" % j, dev, JOY_BUTTON_DPAD_DOWN)
 		_botao("p%d_pular" % j, dev, JOY_BUTTON_A)
-		_botao("p%d_dash" % j, dev, JOY_BUTTON_RIGHT_SHOULDER)
-		_botao("p%d_dash" % j, dev, JOY_BUTTON_LEFT_SHOULDER)
-		_botao("p%d_opcao1" % j, dev, JOY_BUTTON_X)
-		_botao("p%d_opcao2" % j, dev, JOY_BUTTON_Y)
+		_botao("p%d_dash" % j, dev, JOY_BUTTON_B)
+		_botao("p%d_opcao1" % j, dev, JOY_BUTTON_LEFT_SHOULDER)
+		_botao("p%d_opcao2" % j, dev, JOY_BUTTON_RIGHT_SHOULDER)
 		_eixo("p%d_esquerda" % j, dev, JOY_AXIS_LEFT_X, -1.0)
 		_eixo("p%d_direita" % j, dev, JOY_AXIS_LEFT_X, 1.0)
 		_eixo("p%d_descer" % j, dev, JOY_AXIS_LEFT_Y, 1.0)

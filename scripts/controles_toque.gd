@@ -67,6 +67,8 @@ func _process(delta: float) -> void:
 	if novo != modo:
 		soltar_tudo()
 		modo = novo
+	if Jogo.usando_controle:
+		soltar_tudo()  # com controle, os botões da tela somem até alguém tocar nela
 	queue_redraw()
 
 
@@ -144,6 +146,8 @@ func _input(event: InputEvent) -> void:
 	if event is InputEventScreenTouch or event is InputEventScreenDrag:
 		if not Jogo.toque:
 			Jogo.toque = true
+		if event is InputEventScreenTouch:
+			Jogo.usando_controle = false  # tocar na tela traz os botões de volta
 	# Botão de pausa (o toque também chega aqui como clique)
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 		if _na_pausa(event.position):
@@ -297,7 +301,7 @@ func soltar_tudo() -> void:
 func _draw() -> void:
 	if modo == "jogo" and not partida.tutorial_aberto:
 		_desenhar_botao_pausa()
-	if not Jogo.toque:
+	if not Jogo.toque or Jogo.usando_controle:
 		return
 	var fonte: Font = UI.FONTE
 	var tela := get_viewport().get_visible_rect().size
