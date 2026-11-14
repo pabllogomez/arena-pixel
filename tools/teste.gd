@@ -258,7 +258,7 @@ func _testar_dinamica() -> void:
 	var b = p.jogadores[2]
 	if absf(p.mult_pvp(a, b) - p.PVP_BASE * 1.35) > 0.001:
 		_falha("PvP deveria ser 0,4 x 1,35: %.3f" % p.mult_pvp(a, b))
-	if a.XP_PARA_CLASSE != 8 or a.CURA_NIVEL != 0.05:
+	if a.XP_PARA_CLASSE != 8 or a.CURA_NIVEL != 0.02:
 		_falha("Recruta/cura com valores inesperados")
 	print("Dinâmica (Bola, PvP, Recruta): ok")
 	main.queue_free()

@@ -17,6 +17,6 @@ tipo_ataque = 0
 dano = 7.5
 alcance = 125.0
 intervalo_ataque = 0.42
-velocidade_projetil = 200.0
+velocidade_projetil = 250.0
 aceleracao = 1875.0
 atrito = 2000.0

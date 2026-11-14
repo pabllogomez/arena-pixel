@@ -13,7 +13,7 @@ const TEMPO_BUFFER := 0.12
 ## XP que o Recruta precisa para ganhar a classe (4 monstros iniciais, de 2 XP)
 const XP_PARA_CLASSE := 8
 ## Fração da vida máxima recuperada ao subir de nível
-const CURA_NIVEL := 0.05
+const CURA_NIVEL := 0.02
 ## Regeneração fora de combate: depois de REGEN_ESPERA s sem tomar dano,
 ## recupera REGEN_TAXA da vida máxima por segundo.
 const REGEN_ESPERA := 5.0
