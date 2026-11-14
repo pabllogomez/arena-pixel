@@ -17,6 +17,7 @@ const TEX_GOSMA: Array[Texture2D] = [
 	preload("res://assets/sprites/gosma_3.png"),
 	preload("res://assets/sprites/gosma_4.png"),
 ]
+const TEX_GOSMA_CURA := preload("res://assets/sprites/gosma_cura.png")
 const TEX_LACAIO := {
 	1: preload("res://assets/sprites/lacaio_1.png"),
 	2: preload("res://assets/sprites/lacaio_2.png"),
@@ -31,6 +32,13 @@ const ATLAS_CHAO := Vector2i(2, 0)
 
 ## Vida dos monstros de nível 1 (cresce 35% por nível)
 const VIDA_MONSTRO := 36.0
+## Mob de cura: fração da vida máxima devolvida a quem o derrota
+const CURA_MOB := 0.10
+## Fase de Recruta: chance de um monstro criado ser de cura
+const CHANCE_MOB_CURA_RECRUTA := 0.25
+## Torre: 1º mob de cura nasce após 10 s; os seguintes 20 s depois que o anterior morre
+const PRIMEIRO_MOB_CURA := 10.0
+const INTERVALO_MOB_CURA := 20.0
 ## Dano dos monstros de nível 1 (cresce 20% por nível)
 const DANO_MONSTRO := 3.0
 ## XP dos monstros de nível 1 (dos níveis seguintes: 4 + 2 por nível)
@@ -96,6 +104,10 @@ var _t_item := 0.0
 var itens_ligados := true  ## (só os testes de equilíbrio e a Torre desligam)
 ## Regras que a Torre da Tormenta desliga (o padrão é o comportamento normal)
 var monstros_ligados := true
+## Só mobs de cura (Torre): no máximo 1 vivo; ver _atualizar_mob_cura
+var mobs_cura_ligado := false
+var _t_mob_cura := PRIMEIRO_MOB_CURA
+var _mob_cura: Minion = null
 var morte_subita_ligada := true  ## false: no fim do tempo vence quem tem mais % de vida
 var regen := true                ## regeneração lenta fora de combate
 var xp_ligado := true            ## false: o nível só muda por fora (vitória na Torre)
@@ -136,7 +148,7 @@ const TEX_PROJETIL := {
 func iniciar(config: Dictionary) -> void:
 	## config: {"semente": int, "tempo": float, "bots": {1: dif, 2: dif}}
 	##   dificuldade -1 = humano; 0, 1, 2, 3 = bot fácil, normal, difícil, muito difícil.
-	## Chaves opcionais (padrão = partida normal): "itens", "monstros", "morte_subita",
+	## Chaves opcionais (padrão = partida normal): "itens", "monstros", "mobs_cura", "morte_subita",
 	## "regen", "xp" (bool), "lutadores" ({n: estado}, ver Lutador.importar_estado) e
 	## "torre" (dados do andar da Torre da Tormenta; ligam a apresentação e o fim de luta).
 	rede = config.get("rede", "")
@@ -188,6 +200,7 @@ func iniciar(config: Dictionary) -> void:
 	_sortear_momentos_bola(rng)
 	itens_ligados = config.get("itens", true)
 	monstros_ligados = config.get("monstros", true)
+	mobs_cura_ligado = config.get("mobs_cura", false)
 	morte_subita_ligada = config.get("morte_subita", true)
 	regen = config.get("regen", true)
 	xp_ligado = config.get("xp", true)
@@ -376,6 +389,8 @@ func _physics_process(delta: float) -> void:
 			_t_monstro = 0.0
 			if _contar_equipe(0) < maximo:
 				_criar_monstro()
+		if mobs_cura_ligado:
+			_atualizar_mob_cura(delta)
 		if itens_ligados:
 			_atualizar_itens(delta)
 	else:
@@ -554,38 +569,78 @@ func nivel_monstros() -> int:
 	return maxi(1, soma / maxi(jogadores.size(), 1))
 
 
-func _criar_monstro() -> void:
+func _atualizar_mob_cura(delta: float) -> void:
+	## Torre: um mob de cura por vez. Nasce 10 s depois do início da luta e,
+	## depois que morre, o próximo vem 20 s depois.
+	if _mob_cura != null:
+		if is_instance_valid(_mob_cura) and _mob_cura.vivo:
+			return
+		_mob_cura = null
+		_t_mob_cura = INTERVALO_MOB_CURA
+	_t_mob_cura -= delta
+	if _t_mob_cura <= 0.0:
+		_mob_cura = _criar_monstro(true)
+
+
+func ponto_longe_dos_jogadores() -> Vector2:
+	## Ponto de nascimento de monstro mais distante do jogador mais próximo.
 	var pontos: Array = mapa["pontos_monstro"]
-	if pontos.is_empty():
-		return
-	# Nasce longe dos jogadores: entre vários pontos sorteados, fica com o
-	# que está mais distante do jogador mais próximo
-	var pos: Vector2 = pontos.pick_random()
+	var melhor := Vector2.ZERO
 	var melhor_d := -1.0
-	for tentativa in 12:
-		var p: Vector2 = pontos.pick_random()
+	for p in pontos:
 		var d := INF
 		for l in jogadores.values():
 			d = minf(d, l.position.distance_to(p))
 		if d > melhor_d:
 			melhor_d = d
-			pos = p
+			melhor = p
+	return melhor
 
+
+func _criar_monstro(de_cura := false) -> Minion:
+	var pontos: Array = mapa["pontos_monstro"]
+	if pontos.is_empty():
+		return null
+	# Fase de Recruta: ~1 em cada 4 monstros é de cura (nunca fora dela)
+	if not de_cura and _tem_recruta() and randf() < CHANCE_MOB_CURA_RECRUTA:
+		de_cura = true
 	var n := nivel_monstros() - 1
-	var faixa := clampi(1 + n / 2, 1, 4)  # níveis 1, 2-3, 4-5, 6+
 	var m: Minion = CENA_MINION.instantiate()
-	m.configurar(self, 0, null, TEX_GOSMA[faixa - 1],
-			VIDA_MONSTRO * pow(1.35, n),     # vida
-			DANO_MONSTRO * pow(1.2, n),      # dano
-			minf(30.0 * (1.0 + 0.08 * n), 60.0),  # velocidade
-			minf(70.0 + 15.0 * n, 170.0),    # visão
-			XP_MONSTRO_NIVEL_1 if n == 0 else 4 + 2 * n)  # XP
-	m.intervalo_ataque = maxf(0.9 * pow(0.93, n), 0.5)
-	m.defensivo = n == 0  # nível 1: só revida
-	m.position = pos
+	if de_cura:
+		# Mesma vida de um monstro comum do nível; não ataca, só foge
+		m.configurar(self, 0, null, TEX_GOSMA_CURA, VIDA_MONSTRO * pow(1.35, n), 0.0,
+				minf(46.0 * (1.0 + 0.06 * n), 64.0), 110.0,
+				XP_MONSTRO_NIVEL_1 if n == 0 else 4 + 2 * n)
+		m.cura = CURA_MOB
+		m.fujao = true
+		m.position = ponto_longe_dos_jogadores()
+	else:
+		# Nasce longe dos jogadores: entre vários pontos sorteados, fica com o
+		# que está mais distante do jogador mais próximo
+		var pos: Vector2 = pontos.pick_random()
+		var melhor_d := -1.0
+		for tentativa in 12:
+			var p: Vector2 = pontos.pick_random()
+			var d := INF
+			for l in jogadores.values():
+				d = minf(d, l.position.distance_to(p))
+			if d > melhor_d:
+				melhor_d = d
+				pos = p
+		var faixa := clampi(1 + n / 2, 1, 4)  # níveis 1, 2-3, 4-5, 6+
+		m.configurar(self, 0, null, TEX_GOSMA[faixa - 1],
+				VIDA_MONSTRO * pow(1.35, n),     # vida
+				DANO_MONSTRO * pow(1.2, n),      # dano
+				minf(30.0 * (1.0 + 0.08 * n), 60.0),  # velocidade
+				minf(70.0 + 15.0 * n, 170.0),    # visão
+				XP_MONSTRO_NIVEL_1 if n == 0 else 4 + 2 * n)  # XP
+		m.intervalo_ataque = maxf(0.9 * pow(0.93, n), 0.5)
+		m.defensivo = n == 0  # nível 1: só revida
+		m.position = pos
 	entidades.add_child(m)
 	criar_brilho(m.position)
 	fx("nasce", m.position)
+	return m
 
 
 # ------------------------------------------------------------------ Criação de entidades
@@ -971,7 +1026,8 @@ func _montar_estado() -> Dictionary:
 			esc = [l.escolhas[0][0]["id"], l.escolhas[0][1]["id"], l.escolhas.size()]
 		js.append([l.position.x, l.position.y, l.sprite.frame, l.sprite.flip_h, l.vida, l.vida_max,
 				l.nivel, l.xp, l.xp_para_proximo(), _indice_classe(l), l.vivo, esc, l._flash > 0.0,
-				l.efeito, l.efeito_t, Jogo.CLASSES.find(l.ataque.nome.to_lower())])
+				l.efeito, l.efeito_t, Jogo.CLASSES.find(l.ataque.nome.to_lower()),
+				[l._rotulo_critico, l._rotulo_t]])
 	var es: Array = []
 	for e in entidades.get_children():
 		if e is Minion and e.vivo:
@@ -1121,6 +1177,9 @@ func _aplicar_jogador(l: Lutador, d: Array) -> void:
 		else:
 			l.aplicar_efeito(d[13])
 	l.efeito_t = d[14]
+	if d.size() > 16:
+		l._rotulo_critico = d[16][0]
+		l._rotulo_t = d[16][1]
 	if l.efeito == "ataque" and int(d[15]) >= 0:
 		l.ataque = Jogo.dados_classe(d[15])
 	var esc: Array = d[11]

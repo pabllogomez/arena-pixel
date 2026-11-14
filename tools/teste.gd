@@ -47,6 +47,8 @@ func _initialize() -> void:
 	await _testar_cartas_layout()
 	_testar_bot_muito_dificil()
 	await _testar_menu_navegacao()
+	await _testar_mob_cura()
+	await _testar_rotulo_critico()
 	await _testar_torre()
 	await _testar_torre_fim_do_tempo()
 	await _testar_partidas()
@@ -1246,6 +1248,174 @@ func _esperar_tela_fim(main) -> Node:
 	return null
 
 
+func _nova_partida_livre(semente: int, extra := {}) -> Node:
+	## Partida sem contagem, ninguém agindo, para testar monstros.
+	var main = load("res://scenes/main.tscn").instantiate()
+	root.add_child(main)
+	await process_frame
+	var cfg := {"semente": semente, "tempo": 600.0, "bots": {1: -1, 2: -1}, "monstros": false, "itens": false,
+			"morte_subita": false}
+	cfg.merge(extra, true)
+	main._nova_partida(cfg)
+	await process_frame
+	var p = main._atual
+	p.contagem = 0.0
+	p._congelar(false)
+	for l in p.jogadores.values():
+		l.ativo = false
+	return p
+
+
+func _testar_mob_cura() -> void:
+	## Mob de cura: 1 em 4 na fase de Recruta, nunca depois; não ataca, foge, cura 10%
+	## de quem dá o golpe final; nasce longe; na Torre é o único monstro (1 por vez).
+	var p = await _nova_partida_livre(41)
+	var main = p.get_parent()
+	if not p._tem_recruta():
+		_falha("mob de cura: a partida deveria começar com Recruta")
+	var total := 600
+	var curas := 0
+	for i in total:
+		var m = p._criar_monstro()
+		if m.cura > 0.0:
+			curas += 1
+		m.queue_free()
+	var frac := float(curas) / total
+	if frac < 0.17 or frac > 0.33:
+		_falha("mob de cura: %.0f%% dos monstros da fase de Recruta (esperava ~25%%)" % (frac * 100.0))
+	for l in p.jogadores.values():
+		l.eh_recruta = false
+	curas = 0
+	for i in 200:
+		var m = p._criar_monstro()
+		if m.cura > 0.0:
+			curas += 1
+		m.queue_free()
+	if curas != 0:
+		_falha("mob de cura: %d nasceram fora da fase de Recruta" % curas)
+
+	# Nasce longe: o ponto é o mais distante do jogador mais próximo
+	var a = p.jogadores[1]
+	var b = p.jogadores[2]
+	var pontos: Array = p.mapa["pontos_monstro"]
+	a.position = pontos[0]
+	b.position = pontos[pontos.size() / 2]
+	var melhor := -1.0
+	for q in pontos:
+		melhor = maxf(melhor, minf(a.position.distance_to(q), b.position.distance_to(q)))
+	var m = p._criar_monstro(true)
+	var d := minf(a.position.distance_to(m.position), b.position.distance_to(m.position))
+	if absf(d - melhor) > 0.01:
+		_falha("mob de cura: nasceu a %.1f do jogador mais próximo (o ponto mais longe está a %.1f)" % [d, melhor])
+	if m.dano != 0.0 or not m.fujao or not is_equal_approx(m.vida_max, p.VIDA_MONSTRO * pow(1.35, p.nivel_monstros() - 1)):
+		_falha("mob de cura: dados errados (dano %.1f, vida %.1f)" % [m.dano, m.vida_max])
+	m.queue_free()
+
+	# Foge e não ataca: perto de um personagem, em alguns pontos, ele se afasta
+	var afastou := 0
+	var testados := 0
+	for k in 6:
+		var ponto: Vector2 = pontos[(k * 7 + 3) % pontos.size()]
+		var mob = p._criar_monstro(true)
+		mob.position = ponto
+		a.position = ponto + Vector2(-24, 0)
+		b.position = Vector2(-500, -500)
+		a.velocity = Vector2.ZERO
+		a.vida = a.vida_max
+		await physics_frame
+		var antes: float = mob.position.distance_to(a.position)
+		for f in 45:
+			a.position = Vector2(ponto.x - 24, ponto.y)  # o personagem segue colado na esquerda
+			a.velocity = Vector2.ZERO
+			await physics_frame
+		testados += 1
+		if absf(mob.position.x - ponto.x) > 8.0 or mob.position.distance_to(a.position) > antes + 8.0:
+			afastou += 1
+		if a.vida < a.vida_max:
+			_falha("mob de cura: atacou o personagem")
+		mob.queue_free()
+	if afastou < 4:
+		_falha("mob de cura: só se afastou em %d de %d tentativas" % [afastou, testados])
+
+	# Ao morrer: quem deu o golpe final recupera 10% da vida máxima
+	b.position = pontos[0]
+	a.position = pontos[pontos.size() / 2]
+	a.vida = a.vida_max * 0.5
+	var mob = p._criar_monstro(true)
+	mob.receber_dano(9999.0, a)
+	if not _perto(a.vida, a.vida_max * 0.6, 0.01):
+		_falha("mob de cura: vida %.2f depois do abate (esperava %.2f)" % [a.vida, a.vida_max * 0.6])
+	b.vida = b.vida_max * 0.5
+	mob = p._criar_monstro(true)
+	mob.receber_dano(9999.0, b)   # um lacaio passa o dono como origem
+	if not _perto(b.vida, b.vida_max * 0.6, 0.01) or not _perto(a.vida, a.vida_max * 0.6, 0.01):
+		_falha("mob de cura: só quem deu o golpe final deveria curar")
+	main.queue_free()
+	await process_frame
+
+	# Torre: só mobs de cura, 1 por vez; 1º após 10 s, seguinte 20 s depois da morte
+	p = await _nova_partida_livre(42, {"mobs_cura": true})
+	main = p.get_parent()
+	var comuns := func() -> int:
+		return p.get_tree().get_nodes_in_group("alvo").filter(func(x): return x.get("cura") != null and x.cura <= 0.0).size()
+	var curas_vivas := func() -> int:
+		return p.get_tree().get_nodes_in_group("alvo").filter(func(x): return x.get("cura") != null and x.cura > 0.0).size()
+	var maximo := 0
+	for f in 540:  # 9 s
+		await physics_frame
+	if curas_vivas.call() != 0:
+		_falha("torre: o mob de cura nasceu antes dos 10 s")
+	for f in 90:   # 10,5 s
+		await physics_frame
+	if curas_vivas.call() != 1:
+		_falha("torre: deveria haver 1 mob de cura aos 10 s (%d)" % curas_vivas.call())
+	for f in 300:
+		await physics_frame
+		maximo = maxi(maximo, curas_vivas.call())
+	var vivo = p.get_tree().get_nodes_in_group("alvo").filter(func(x): return x.get("cura") != null)[0]
+	vivo.receber_dano(9999.0, p.jogadores[1])
+	for f in 1080:  # 18 s depois: ainda não
+		await physics_frame
+	if curas_vivas.call() != 0:
+		_falha("torre: o próximo mob de cura nasceu antes de 20 s")
+	for f in 180:
+		await physics_frame
+	if curas_vivas.call() != 1:
+		_falha("torre: o próximo mob de cura deveria nascer 20 s depois da morte")
+	if maximo > 1 or comuns.call() != 0:
+		_falha("torre: no máximo 1 mob de cura e nenhum monstro comum (máx %d, comuns %d)" % [maximo, comuns.call()])
+	main.queue_free()
+	await process_frame
+	print("Mob de cura (25% na fase de Recruta, foge, cura 10%, nasce longe, torre): ok")
+
+
+func _testar_rotulo_critico() -> void:
+	## O rótulo de crítico fica no ATACANTE (sob a barra de vida), não no alvo.
+	var p = await _nova_partida_livre(43)
+	var main = p.get_parent()
+	var a = p.jogadores[1]
+	var b = p.jogadores[2]
+	a.position = Vector2(200, 100)
+	b.position = Vector2(210, 100)
+	b.sprite.flip_h = false   # b olha para a direita; a está atrás dele
+	a.causar_dano(b, 5.0)
+	if a._rotulo_critico != "costas" or a._rotulo_t <= 0.5 or b._rotulo_critico != "" or b._rotulo_t > 0.0:
+		_falha("rótulo de crítico: atacante '%s' %.2f, alvo '%s' %.2f" % [a._rotulo_critico, a._rotulo_t, b._rotulo_critico, b._rotulo_t])
+	var snap: Array = p._montar_estado()["j"][0]
+	if snap.size() < 17 or snap[16][0] != "costas" or snap[16][1] <= 0.0:
+		_falha("rótulo de crítico: não vai no snapshot (%s)" % [snap.back()])
+	if p._montar_estado()["j"][1][16][0] != "":
+		_falha("rótulo de crítico: o alvo não deveria ter rótulo no snapshot")
+	for f in 70:
+		await physics_frame
+	if a._rotulo_critico != "" or a._rotulo_t > 0.0:
+		_falha("rótulo de crítico: deveria sumir em ~1 s")
+	main.queue_free()
+	await process_frame
+	print("Rótulo de crítico (no atacante, snapshot, some em 1 s): ok")
+
+
+
 func _testar_torre() -> void:
 	## Campanha completa pelo main com vitórias forçadas (oponente com vida 0).
 	var jogo = root.get_node("Jogo")
@@ -1323,8 +1493,12 @@ func _testar_torre() -> void:
 		# regras da partida
 		if p.tempo_restante != 90.0 or p.monstros_ligados or p.itens_ligados or p.morte_subita_ligada or p.regen or p.xp_ligado:
 			_falha("%s: flags da partida erradas" % rotulo)
-		if p.get_tree().get_nodes_in_group("alvo").size() != 2:
-			_falha("%s: deveria haver só os 2 lutadores (sem monstros)" % rotulo)
+		# só os 2 lutadores; no máximo 1 mob de cura (nenhum monstro comum, nenhum item)
+		var extras := p.get_tree().get_nodes_in_group("alvo").filter(func(x): return x != eu and x != cpu)
+		if extras.size() > 1 or extras.any(func(x): return x.get("cura") == null or x.cura <= 0.0 or not x.fujao):
+			_falha("%s: só poderia haver 1 mob de cura além dos 2 lutadores (%d extras)" % [rotulo, extras.size()])
+		if not p.mobs_cura_ligado or not p.get_tree().get_nodes_in_group("item").is_empty():
+			_falha("%s: mobs de cura ligados e nenhum item" % rotulo)
 		# apresentação do andar e escolha de melhoria antes da contagem
 		if a == 3:
 			for i in 30:

@@ -7,6 +7,7 @@ Tudo aqui é provisório: substitua os PNG/WAV em assets/ pelos definitivos
 mantendo o tamanho de quadro (16x16) e a ordem dos quadros:
   personagens: 0-1 parado | 2-5 correndo | 6 pulando | 7 caindo
   lacaio/gosma_N: 0-1 andando (N = faixa de nível do monstro)
+  gosma_cura: mob de cura (mesmos 2 quadros)
 """
 import math
 import os
@@ -235,6 +236,17 @@ for faixa, (corpo, brilho, sombra) in enumerate([("p", "r", "n"), ("g", "l", "t"
     troca = str.maketrans({"p": corpo, "r": brilho, "n": sombra})
     quadros = [[l.translate(troca) for l in q] for q in (GOSMA_A, GOSMA_B)]
     folha([grade(q) for q in quadros]).save(os.path.join(SPR, f"gosma_{faixa}.png"))
+
+# ---------------------------------------------------------------- Mob de cura (gosma verde com cruz)
+# Mesmo formato da gosma (2 quadros 16x16); a cruz flutua acima do corpo e balança.
+CRUZ = [".kwk.", "kwwwk", ".kwk."]
+CURA_A = [l for l in GOSMA_A]
+CURA_B = [l for l in GOSMA_B]
+for q, y0 in ((CURA_A, 2), (CURA_B, 4)):
+    for i, linha in enumerate(CRUZ):
+        q[y0 + i] = q[y0 + i][:5] + linha + q[y0 + i][10:]
+troca = str.maketrans({"p": "g", "r": "l", "n": "t"})
+folha([grade([l.translate(troca) for l in q]) for q in (CURA_A, CURA_B)]).save(os.path.join(SPR, "gosma_cura.png"))
 
 # ---------------------------------------------------------------- Projéteis e efeitos
 grade([

@@ -108,7 +108,7 @@ func config_andar() -> Dictionary:
 		"semente": _rng.randi(),
 		"tempo": TEMPO_LUTA,
 		"bots": {1: -1, 2: DIFICULDADES_BOT[dificuldade]},
-		"itens": false, "monstros": false, "morte_subita": false, "regen": false, "xp": false,
+		"itens": false, "monstros": false, "mobs_cura": true, "morte_subita": false, "regen": false, "xp": false,
 		"lutadores": {1: jogador.duplicate(true), 2: cpu},
 		"torre": {
 			"andar": andar, "final": e_final(), "tempo": TEMPO_LUTA,

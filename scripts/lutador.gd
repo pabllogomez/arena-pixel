@@ -28,6 +28,7 @@ const CRITICO_COSTAS := 3.0
 const CRITICO_DASH_RECRUTA := 2.0
 ## Cor do número de dano por tipo de crítico
 const COR_CRITICO := {"costas": Color("ef4444"), "dash": Color("73eff7")}
+const ROTULO_CRITICO_TEMPO := 1.0   ## quanto tempo o rótulo de crítico fica sob a barra de vida de quem acertou
 const DASH_RECARGA := 1.2    ## segundos entre um dash e o próximo (contados do início)
 const TEMPO_BUFFER_DASH := 0.1
 const DASH_FANTASMA_VIDA := 0.18
@@ -104,6 +105,9 @@ var _descer := 0.0
 var _anim := "parado"
 var _anim_t := 0.0
 var _flash := 0.0
+## Rótulo do último crítico que ESTE personagem acertou ("costas", "dash" ou ""), desenhado sob a barra de vida
+var _rotulo_critico := ""
+var _rotulo_t := 0.0
 var _sem_dano := 0.0
 ## Estica/achata o sprite por um instante (pulo, pouso, golpe); volta para (1, 1)
 var _esticar := Vector2.ONE
@@ -464,6 +468,10 @@ func _physics_process(delta: float) -> void:
 
 	if _flash > 0.0:
 		_flash -= delta
+	if _rotulo_t > 0.0:
+		_rotulo_t -= delta
+		if _rotulo_t <= 0.0:
+			_rotulo_critico = ""
 	Jogo.pintar_clarao(sprite, _flash > 0.0)
 	queue_redraw()
 
@@ -694,8 +702,8 @@ func causar_dano(alvo, qtd: float, fonte := "", critico_permitido := true) -> vo
 		var tipo := _tipo_critico(alvo)
 		if tipo != "":
 			qtd *= CRITICO_COSTAS if tipo == "costas" else CRITICO_DASH_RECRUTA
-			partida.mostrar_texto(alvo.global_position + Vector2(0, -24),
-					"CRÍTICO!" if tipo == "costas" else "DASH!", COR_CRITICO[tipo], true)
+			_rotulo_critico = tipo
+			_rotulo_t = ROTULO_CRITICO_TEMPO
 			alvo.set_meta("critico", tipo)  # o alvo pinta o número de dano com a cor do crítico
 	alvo.receber_dano(qtd, self, fonte)
 	if alvo.has_meta("critico"):
@@ -913,6 +921,11 @@ func _draw() -> void:
 		draw_rect(Rect2(-2 + i, -19 + i, 5 - 2 * i, 1), cor)
 	draw_rect(Rect2(-8, -14, 16, 3), Color("1a1c2c"))
 	draw_rect(Rect2(-7, -13, roundf(14.0 * vida / vida_max), 1), cor)
+	if _rotulo_critico != "" and _rotulo_t > 0.0:
+		# Crítico que este personagem acertou: logo abaixo da barra, some piscando no fim
+		if _rotulo_t > 0.3 or int(_rotulo_t * 20.0) % 2 == 0:
+			UI.texto(self, Vector2(0, -7), "CRÍTICO!" if _rotulo_critico == "costas" else "DASH!",
+					UI.P, COR_CRITICO[_rotulo_critico])
 
 
 func _desenhar_fantasmas(cor: Color) -> void:
