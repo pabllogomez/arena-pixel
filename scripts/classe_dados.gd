@@ -65,17 +65,17 @@ enum TipoAtaque { FLECHA, CORPO_A_CORPO, MAGIA, INVOCAR }
 @export var vida_lacaio := 25.0
 @export var velocidade_lacaio := 55.0
 
-@export_group("Guarda real (Rei)")
-## A cada N lacaios invocados, a próxima invocação é um Guarda real
-## (L, L, L, G, ...). 0 = sem Guarda. Só 1 Guarda vivo por Rei; ele não
-## ocupa vaga dos lacaios.
-@export var guarda_a_cada := 0
-@export var vida_guarda := 0.0
-## Fração do dano do lacaio causada pelo golpe do Guarda.
-@export var dano_guarda := 0.5
-@export var velocidade_guarda := 80.0
-@export var intervalo_guarda := 1.5
-## 0 = empurrado normalmente; 1 = não se mexe (valem investida, pouso e golpes).
-@export_range(0.0, 1.0) var resistencia_guarda := 0.0
-## Fração do dano de golpes corpo a corpo vindos da frente que o escudo corta.
-@export_range(0.0, 1.0) var escudo_guarda := 0.0
+@export_group("Cetro (Rei)")
+## Golpe corpo a corpo secundário, automático: sai quando um hostil (lutador,
+## monstro ou lacaio inimigo) chega perto. 0 = sem cetro. Não depende da
+## recarga de invocação nem entra nela.
+@export var alcance_cetro := 0.0
+## Segundos entre cetradas (sem contar as do dash).
+@export var intervalo_cetro := 1.0
+## Fração do dano do golpe de um lacaio (dano do Rei x mult_lacaio).
+@export var dano_cetro := 0.5
+## Múltiplo do empurrão base de um golpe (70 px/s x resistência x mult_empurrao).
+@export var empurrao_cetro := 2.0
+## Dash com cetro: encostar num hostil golpeia na hora (ignora a recarga, 1 por
+## alvo por dash) e o empurrão vira este múltiplo a mais.
+@export var mult_empurrao_cetro_dash := 1.0

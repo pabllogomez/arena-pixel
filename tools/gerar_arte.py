@@ -217,21 +217,6 @@ LACAIO_PERNAS = [
 for time in (1, 2):
     folha([grade(LACAIO + p, time) for p in LACAIO_PERNAS]).save(os.path.join(SPR, f"lacaio_{time}.png"))
 
-# ---------------------------------------------------------------- Guarda real do Rei
-# Elmo cinza, escudo grande na frente (lado direito; o jogo espelha) nas cores do time
-GUARDA = [
-    "................", "................", "....kkkkk.......", "...kmmssmk......",
-    "...kmmmmmk.kkkk.", "...kmddddmkkXXXk", "...kkeeekkXYYXXk", "....keeekXYwYXXk",
-    "...kXXXXXkXYYXXk", "..kXXYYYXkkXXXk.", "..kXXYYYXXk.kkk.", "...kXXXXXk......",
-    "...kkkkkkk......",
-]
-GUARDA_PERNAS = [
-    ["...kndnk.knk....", "...kndnk.knk....", "...kkkkk.kkk...."],
-    ["..knk...knnk....", ".knk.....knk....", ".kkk.....kkk...."],
-]
-for time in (1, 2):
-    folha([grade(GUARDA + p, time) for p in GUARDA_PERNAS]).save(os.path.join(SPR, f"guarda_{time}.png"))
-
 # ---------------------------------------------------------------- Monstro neutro (gosma)
 GOSMA_A = [
     "................", "................", "................", "................",
@@ -628,7 +613,6 @@ som("flecha.wav", [(0, 0, 0.06), (900, 400, 0.06)], 0.12)
 som("espada.wav", [(0, 0, 0.14)], 0.25)
 som("magia.wav", [(200, 900, 0.25)], 0.15)
 som("invocar.wav", [(300, 300, 0.08), (450, 450, 0.08), (600, 600, 0.15)], 0.15)
-som("bloqueio.wav", [(0, 0, 0.03), (1500, 900, 0.05), (700, 500, 0.08)], 0.2)
 som("acerto.wav", [(220, 80, 0.08)], 0.2)
 som("morte.wav", [(0, 0, 0.1), (300, 50, 0.3)])
 som("nivel.wav", [(523, 523, 0.08), (784, 784, 0.08), (1047, 1047, 0.2)], 0.18)

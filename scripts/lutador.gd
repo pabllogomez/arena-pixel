@@ -53,8 +53,6 @@ var intervalo := 1.0
 var velocidade_projetil := 200.0
 var max_lacaios := 0
 var mult_lacaio := 1.0
-## Invocações feitas (a cada `guarda_a_cada` lacaios vem um Guarda real)
-var invocacoes := 0
 var flechas_extra := 0
 var roubo_vida := 0.0
 var raio_explosao := 0.0
@@ -112,6 +110,8 @@ var _dash_dir := 1.0
 var _dash_ar_usado := false    ## já usou o dash no ar (volta ao tocar o chão)
 var _dash_buffer := 0.0
 var _investida_acertos: Array = []  ## quem já levou a investida deste dash
+var _cetro_acertos: Array = []      ## quem já levou a cetrada deste dash
+var _cd_cetro := 0.0
 var _t_fantasma := 0.0
 ## Rastro do dash: cada fantasma é [posição global, espelhado, quadro, idade]
 var _fantasmas: Array = []
@@ -120,9 +120,6 @@ var _fantasmas: Array = []
 func configurar(n: int, d: ClasseDados, p: Node, c: Controle) -> void:
 	numero = n
 	equipe = n
-	# Guardas reais da equipe inimiga são sólidos para este lutador
-	if n == 1 or n == 2:
-		set_collision_mask_value(Minion.CAMADA_GUARDA + 2 - n, true)
 	partida = p
 	controle = c
 	_aplicar_classe(d)
@@ -254,13 +251,6 @@ func atk_vel_projetil() -> float:
 
 func atk_max_lacaios() -> int:
 	return 2 if _emprestado() else max_lacaios
-
-
-func _vez_do_guarda() -> bool:
-	## Sequência L, L, L, G, L, L, L, G... (a cada `guarda_a_cada` lacaios vem um Guarda)
-	if _emprestado() or ataque.guarda_a_cada <= 0 or ataque.vida_guarda <= 0.0:
-		return false
-	return invocacoes % (ataque.guarda_a_cada + 1) == ataque.guarda_a_cada
 
 
 # ------------------------------------------------------------------ Efeitos de item
@@ -431,6 +421,8 @@ func _physics_process(delta: float) -> void:
 	_atualizar_fantasmas(delta)
 	if em_dash and dados.dano_investida > 0.0:
 		_investir()
+	if ativo and _tem_cetro():
+		_atualizar_cetro(delta, em_dash)
 	if furia:
 		_t_furia -= delta
 		if _t_furia <= 0.0:
@@ -484,6 +476,7 @@ func _iniciar_dash(sentido_x: float) -> void:
 	_dash_cd = DASH_RECARGA
 	_dash_buffer = 0.0
 	_investida_acertos.clear()
+	_cetro_acertos.clear()
 	_t_fantasma = 0.0
 	_esticar = Vector2(1.3, 0.8)
 	Jogo.tocar("dash")
@@ -503,13 +496,65 @@ func _investir() -> void:
 		if a is Lutador:
 			a.velocity.x += _dash_dir * dados.empurrao_investida * (1.0 - a.dados.resistencia_empurrao) * mult_empurrao
 		elif a is Minion:
-			a.empurrar(Vector2(_dash_dir * dados.empurrao_investida, -60.0))
+			a.velocity = Vector2(_dash_dir * dados.empurrao_investida, -60.0)
 		partida.fx("golpe", position + Vector2(_dash_dir * 6.0, 0.0), _dash_dir)
 		partida.tremer(0.8)
-		if a is Minion and a.guarda:
-			# O Orc para no escudo do Guarda real
-			_dash_t = 0.0
-			velocity.x = 0.0
+
+
+func _tem_cetro() -> bool:
+	## Só quem está usando o ataque do Rei (a Bola/troca de classe o leva junto).
+	return ataque.alcance_cetro > 0.0 and ataque.dano_cetro > 0.0
+
+
+func _atualizar_cetro(delta: float, em_dash: bool) -> void:
+	## Cetro: golpe automático em hostis colados (recarga própria). Com dash,
+	## encostar num hostil golpeia na hora, uma vez por alvo por dash.
+	_cd_cetro -= delta
+	if em_dash:
+		var caixa := hitbox().grow(2.0)
+		for a in get_tree().get_nodes_in_group("alvo"):
+			if a == self or not Jogo.hostis(self, a) or not a.esta_vivo() or _cetro_acertos.has(a):
+				continue
+			if caixa.intersects(a.hitbox()):
+				_cetro_acertos.append(a)
+				_cetrada(a, _dash_dir, ataque.mult_empurrao_cetro_dash)
+		return
+	if _cd_cetro > 0.0:
+		return
+	var lado := 0.0
+	var alvos: Array = []
+	for a in get_tree().get_nodes_in_group("alvo"):
+		if a == self or not Jogo.hostis(self, a) or not a.esta_vivo():
+			continue
+		var dif: Vector2 = a.global_position - global_position
+		if absf(dif.y) < 18.0 * escala and absf(dif.x) <= ataque.alcance_cetro * escala:
+			alvos.append(a)
+			if lado == 0.0:
+				lado = signf(dif.x) if dif.x != 0.0 else (-1.0 if sprite.flip_h else 1.0)
+	if alvos.is_empty():
+		return
+	_cd_cetro = ataque.intervalo_cetro
+	for a in alvos:
+		_cetrada(a, lado, 1.0)
+
+
+func _cetrada(a, lado: float, mult_emp: float) -> void:
+	## Uma cetrada num alvo: dano = dano_cetro x golpe do lacaio, empurrão
+	## forte (empurrao_cetro x o base, x mult_emp no dash) e impulso para cima.
+	causar_dano(a, atk_dano() * mult_lacaio * ataque.dano_cetro)
+	var total := ataque.empurrao_cetro * mult_emp
+	if a is Lutador:
+		# receber_dano já deu 1x o empurrão base: completa até o total
+		a.velocity.x += lado * 70.0 * (1.0 - a.dados.resistencia_empurrao) * mult_empurrao * (total - 1.0)
+		a.velocity.y = minf(a.velocity.y, -50.0)
+	elif a is Minion:
+		a.velocity = Vector2(lado * 70.0 * mult_empurrao * total, -60.0)
+	_investida(lado)
+	partida.criar_corte(global_position + Vector2(lado * 12.0, 0.0), lado < 0.0)
+	partida.fx("cetro", position + Vector2(lado * 8.0, 0.0), lado)
+	partida.fx("golpe", position + Vector2(lado * 6.0, 0.0), lado)
+	Jogo.tocar("espada")
+	partida.tremer(0.6)
 
 
 func _onda_pouso() -> void:
@@ -526,7 +571,7 @@ func _onda_pouso() -> void:
 		if a is Lutador:
 			a.velocity.x += s * dados.empurrao_pouso * (1.0 - a.dados.resistencia_empurrao) * mult_empurrao
 		elif a is Minion:
-			a.empurrar(Vector2(s * dados.empurrao_pouso, -100.0))
+			a.velocity = Vector2(s * dados.empurrao_pouso, -100.0)
 
 
 func _atualizar_fantasmas(delta: float) -> void:
@@ -546,14 +591,8 @@ func _atravessar_plataforma() -> void:
 
 func _tentar_atacar() -> void:
 	if atk_tipo() == ClasseDados.TipoAtaque.INVOCAR:
-		if _vez_do_guarda() and partida.contar_guardas(self) == 0:
-			# O Guarda não ocupa vaga dos lacaios
-			partida.criar_guarda(self)
-			invocacoes += 1
-			_cd_ataque = atk_intervalo()
-		elif partida.contar_lacaios(self) < atk_max_lacaios():
+		if partida.contar_lacaios(self) < atk_max_lacaios():
 			partida.criar_lacaio(self)
-			invocacoes += 1  # com Guarda vivo, a vez dele vira lacaio e a conta segue
 			_cd_ataque = atk_intervalo()
 		else:
 			_cd_ataque = 0.3
@@ -632,7 +671,7 @@ func _golpear(lado: float) -> void:
 			acertou = true
 			# O Orc arremessa lacaios para longe (abre caminho até o Rei)
 			if a is Minion and a.dono != null and dados.resistencia_lacaios > 0.0:
-				a.empurrar(Vector2(s * 200.0, -140.0))
+				a.velocity = Vector2(s * 200.0, -140.0)
 	partida.criar_corte(global_position + Vector2(s * 12.0, 0.0), s < 0.0)
 	partida.fx("golpe", position + Vector2(s * 6.0, 0.0), s)
 	Jogo.tocar("espada")
@@ -662,8 +701,8 @@ func receber_dano(qtd: float, origem, fonte := "", _pos_golpe := Vector2.INF) ->
 	var origem_valida: bool = origem != null and is_instance_valid(origem)
 	if fonte == "lacaio" or fonte == "lanca":
 		qtd *= 1.0 - dados.resistencia_lacaios  # Orc: pele grossa contra lacaios
-	# Guarda real: com lacaios vivos, o Rei leva menos dano de projéteis
-	if fonte == "projetil" and dados.tipo_ataque == ClasseDados.TipoAtaque.INVOCAR and partida.contar_lacaios(self) > 0:  # só os lacaios (o Guarda Real não conta)
+	# Proteção do Rei: com lacaios vivos, o Rei leva menos dano de projéteis
+	if fonte == "projetil" and dados.tipo_ataque == ClasseDados.TipoAtaque.INVOCAR and partida.contar_lacaios(self) > 0:
 		qtd *= GUARDA_REAL
 	# Dano entre jogadores passa pelas regras da partida (Recruta, PvP, morte súbita)
 	if origem_valida and origem is Lutador and origem != self:

@@ -21,10 +21,6 @@ const TEX_LACAIO := {
 	1: preload("res://assets/sprites/lacaio_1.png"),
 	2: preload("res://assets/sprites/lacaio_2.png"),
 }
-const TEX_GUARDA := {
-	1: preload("res://assets/sprites/guarda_1.png"),
-	2: preload("res://assets/sprites/guarda_2.png"),
-}
 const TEX_CORTE := preload("res://assets/sprites/corte.png")
 const TEX_BRILHO := preload("res://assets/sprites/brilho.png")
 
@@ -623,25 +619,6 @@ func criar_lacaio(rei: Lutador) -> void:
 	Jogo.tocar("invocar")
 
 
-func criar_guarda(rei: Lutador) -> void:
-	## Guarda real: guarda-costas lento, de escudo, sólido para os lutadores inimigos.
-	var d: ClasseDados = rei.ataque
-	var m: Minion = CENA_MINION.instantiate()
-	var dano_lacaio := rei.atk_dano() * rei.mult_lacaio
-	m.configurar(self, rei.equipe, rei, TEX_GUARDA[rei.equipe],
-			d.vida_guarda * rei.mult_lacaio, dano_lacaio * d.dano_guarda,
-			d.velocidade_guarda, 2000.0, 3)
-	m.guarda = true
-	m.intervalo_ataque = d.intervalo_guarda
-	m.resistencia_empurrao = d.resistencia_guarda
-	m.escudo = d.escudo_guarda
-	m.position = rei.position
-	entidades.add_child(m)
-	criar_brilho(m.position)
-	fx("invocar", m.position, rei.equipe)
-	Jogo.tocar("invocar")
-
-
 func criar_lanca(lacaio: Minion, alvo) -> void:
 	## Lança arremessada por um lacaio: mais fraca e lenta que as flechas.
 	var p := Projetil.new()
@@ -658,18 +635,9 @@ func criar_lanca(lacaio: Minion, alvo) -> void:
 
 
 func contar_lacaios(rei: Lutador) -> int:
-	## Lacaios vivos do Rei (o Guarda real não conta: não ocupa vaga).
 	var n := 0
 	for a in get_tree().get_nodes_in_group("alvo"):
-		if a is Minion and a.dono == rei and not a.guarda:
-			n += 1
-	return n
-
-
-func contar_guardas(rei: Lutador) -> int:
-	var n := 0
-	for a in get_tree().get_nodes_in_group("alvo"):
-		if a is Minion and a.dono == rei and a.guarda:
+		if a is Minion and a.dono == rei:
 			n += 1
 	return n
 

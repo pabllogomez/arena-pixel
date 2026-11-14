@@ -214,10 +214,6 @@ func fx(nome: String, pos: Vector2, a = 0.0, b = 0.0) -> void:
 			var forca := clampf(float(b) / 12.0, 0.4, 2.2)
 			_leque(pos, int(4 + 5 * forca), a, 0.9, 40.0, 70.0 + 50.0 * forca, 0.36, FAISCA, 2, 260.0, 1.5, true)
 			_leque(pos, int(2 + 2 * forca), a, 0.4, 20.0, 50.0, 0.22, BRANCO, 2, 0.0, 4.0)
-		"faisca_escudo":
-			# escudo do Guarda real barrou o golpe (a = ângulo de quem bateu)
-			_leque(pos, 6, a, 0.6, 40.0, 100.0, 0.3, FAISCA, 2, 200.0, 1.5, true)
-			_leque(pos, 3, a, 0.3, 20.0, 50.0, 0.18, BRANCO, 2, 0.0, 4.0)
 		"acerto_time":
 			# pixels da cor de quem apanhou (a = ângulo, b = time)
 			_leque(pos, 5, a, 0.7, 40.0, 110.0, 0.45, RAMPA_TIME.get(int(b), ROXO), 1, 320.0, 0.5, true)
@@ -227,6 +223,9 @@ func fx(nome: String, pos: Vector2, a = 0.0, b = 0.0) -> void:
 				var ang := lerpf(-1.1, 1.1, i / 8.0)
 				var dir := Vector2(float(a) * cos(ang), sin(ang))
 				emitir(pos + dir * 7.0, dir * randf_range(30.0, 70.0), randf_range(0.12, 0.22), BRANCO, 2 if i % 2 == 0 else 1, 0.0, 5.0)
+		"cetro":
+			# cetrada do Rei: leque dourado rente ao chão (a = lado: -1 ou 1)
+			_leque(pos, 6, 0.0 if float(a) >= 0.0 else PI, 0.5, 50.0, 110.0, 0.25, FAISCA, 2, 120.0, 2.0)
 		"pulo":
 			for lado in [-1.0, 1.0]:
 				_leque(pos, 3, 0.0 if lado > 0.0 else PI, 0.3, 14.0, 34.0, 0.26, POEIRA, 1, -20.0, 3.0)

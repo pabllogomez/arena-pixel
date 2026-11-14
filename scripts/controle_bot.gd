@@ -257,17 +257,20 @@ func _mover(l, delta: float) -> void:
 
 
 func _tentar_investida(l, dif: Vector2) -> void:
-	## Classes com investida (Orc): usa o dash como carga quando o alvo está ao
-	## alcance dela (o dash dura 0,15 s a 3x a velocidade), na mesma linha.
-	if l.dados.dano_investida <= 0.0 or dificuldade == Dificuldade.FACIL or not l.dash_pronto():
+	## Classes com investida (Orc) ou cetro (Rei): usa o dash como carga quando o
+	## alvo está ao alcance dele (o dash dura 0,15 s a 3x a velocidade), na mesma
+	## linha. O Rei só arranca com o alvo fora do alcance do cetro normal.
+	var cetro: bool = l._tem_cetro()
+	if (l.dados.dano_investida <= 0.0 and not cetro) or dificuldade == Dificuldade.FACIL or not l.dash_pronto():
 		return
 	var alcance_carga: float = l.velocidade * l._mult_vel() * l.DASH_MULT * l.DASH_DURACAO
 	var dx := absf(dif.x)
-	if dx < l.atk_alcance() * 0.9 or dx > alcance_carga + 10.0 or absf(dif.y) > 12.0:
+	var minimo: float = l.ataque.alcance_cetro * 1.2 if cetro else l.atk_alcance() * 0.9
+	if dx < minimo or dx > alcance_carga + 10.0 or absf(dif.y) > 12.0:
 		return
 	if not l.is_on_floor() and not l._linha_livre(_alvo.global_position):
 		return
-	if randf() < 0.2:
+	if randf() < (0.1 if cetro else 0.2):
 		dash_apertou = true
 		dash_dir = signf(dif.x)
 
