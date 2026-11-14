@@ -4,14 +4,13 @@ extends Node2D
 ##   "efeito" - orbe com "?" parado (flutuando); todos iguais por fora. O efeito
 ##              (encolher, gigante, gravidade invertida, ataque trocado) só é
 ##              sorteado na hora em que alguém pega.
-##   "bola"   - bola com ↻ que voa por caminhos aleatórios, atravessando paredes;
-##              quem encostar troca de classe.
+##   "bola"   - bola com ↻ parada no topo central da arena (flutua e gira no
+##              lugar); quem encostar troca de classe.
 
 const TEX_ITEM := preload("res://assets/sprites/item.png")
 const TEX_BOLA := preload("res://assets/sprites/bola.png")
 const EFEITOS := ["pequeno", "grande", "gravidade", "ataque"]
 const RAIO_PEGAR := 12.0
-const VELOCIDADE_BOLA := 45.0
 
 var tipo := "efeito"
 var duracao := 25.0
@@ -50,21 +49,9 @@ func _physics_process(delta: float) -> void:
 	if duracao <= 0.0:
 		queue_free()
 		return
+	position = _base + Vector2(0, roundf(sin(_t * 3.0) * 2.0))
 	if tipo == "bola":
-		_voar(delta)
-	else:
-		position = _base + Vector2(0, roundf(sin(_t * 3.0) * 2.0))
-
-
-func _voar(delta: float) -> void:
-	# Escolhe pontos aleatórios na arena e vai até eles, fazendo curvas suaves
-	if position.distance_to(_destino) < 8.0:
-		_destino = Vector2(randf_range(24.0, GeradorArena.LARGURA - 24.0),
-				randf_range(24.0, GeradorArena.ALTURA - 32.0))
-	var desejada := (_destino - position).normalized() * VELOCIDADE_BOLA
-	velocity = velocity.lerp(desejada, 2.0 * delta)
-	position += velocity * delta
-	_sprite.rotation += delta * 3.0
+		_sprite.rotation += delta * 3.0
 
 
 func tocando(l: Lutador) -> bool:

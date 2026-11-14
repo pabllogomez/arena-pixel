@@ -249,6 +249,10 @@ func _testar_dinamica() -> void:
 	var bolas := root.get_tree().get_nodes_in_group("item").filter(func(i): return i.tipo == "bola")
 	if bolas.size() != 1 or bolas[0].position.distance_to(pos) > 4.0:
 		_falha("Bola não apareceu no topo central")
+	for f in 120:  # 2 s: continua no lugar (só flutua)
+		await physics_frame
+	if is_instance_valid(bolas[0]) and bolas[0].position.distance_to(pos) > 6.0:
+		_falha("Bola saiu do topo central: %s" % bolas[0].position)
 	p._iniciar_morte_subita()
 	await process_frame
 	if root.get_tree().get_nodes_in_group("item").any(func(i): return is_instance_valid(i) and i.tipo == "bola" and not i.is_queued_for_deletion()):
