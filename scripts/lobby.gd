@@ -161,9 +161,9 @@ func _process(delta: float) -> void:
 	var botoes := _botoes()
 	if not botoes.is_empty():
 		_sel = clampi(_sel, 0, botoes.size() - 1)
-		if Input.is_action_just_pressed("menu_cima"):
+		if Jogo.menu_pulso("menu_cima"):
 			_sel = wrapi(_sel - 1, 0, botoes.size())
-		elif Input.is_action_just_pressed("menu_baixo"):
+		elif Jogo.menu_pulso("menu_baixo"):
 			_sel = wrapi(_sel + 1, 0, botoes.size())
 		elif Input.is_action_just_pressed("menu_ok"):
 			_acionar(botoes[_sel][0])

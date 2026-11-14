@@ -26,6 +26,23 @@ var botoes_tela := false
 var tutorial_visto := false
 const ARQUIVO_OPCOES := "user://opcoes.cfg"
 
+## Mapeamento "cru" estilo Xbox (xpad), usado quando o navegador não diz que o
+## controle é "standard" e o Godot não o conhece (o campo platform é ignorado
+## por add_joy_mapping, então não é preciso informá-lo).
+const MAPEAMENTO_XBOX := "a:b0,b:b1,y:b3,x:b2,start:b7,guide:b8,back:b6,leftstick:b9,rightstick:b10," \
+		+ "leftshoulder:b4,rightshoulder:b5,dpup:-a7,dpleft:-a6,dpdown:+a7,dpright:+a6," \
+		+ "leftx:a0,lefty:a1,rightx:a3,righty:a4,lefttrigger:a2,righttrigger:a5"
+## Por controle (número do dispositivo): "reconhecido" ou "corrigido automaticamente"
+var estado_controle := {}
+
+## Repetição ao segurar cima/baixo nos menus (teclado, direcional e analógico)
+const ACOES_REPETIVEIS: Array[String] = ["menu_cima", "menu_baixo"]
+const ATRASO_REPETICAO := 0.4
+const INTERVALO_REPETICAO := 0.15
+var _relogio := 0.0
+var _rep_proximo := {}
+var _pulso := {}
+
 var _musica: AudioStreamPlayer
 var _musica_atual := ""
 
@@ -35,6 +52,9 @@ var _sons := {}
 func _ready() -> void:
 	_criar_controles()
 	_carregar_opcoes()
+	Input.joy_connection_changed.connect(_ao_mudar_controle)
+	for dev in Input.get_connected_joypads():
+		_verificar_controle(dev)
 	_musica = AudioStreamPlayer.new()
 	_musica.volume_db = -8.0
 	add_child(_musica)
@@ -45,6 +65,76 @@ func _ready() -> void:
 		p.max_polyphony = 4
 		add_child(p)
 		_sons[nome] = p
+
+
+func _process(delta: float) -> void:
+	_atualizar_pulsos(delta / maxf(Engine.time_scale, 0.05))
+
+
+func _atualizar_pulsos(delta: float) -> void:
+	## Calcula, uma vez por quadro, quais ações de menu "disparam" agora: ao apertar
+	## e depois, com a tecla/direcional/analógico segurado, a cada INTERVALO_REPETICAO.
+	_relogio += delta
+	for a in ACOES_REPETIVEIS:
+		var dispara := false
+		if Input.is_action_just_pressed(a):
+			dispara = true
+			_rep_proximo[a] = _relogio + ATRASO_REPETICAO
+		elif Input.is_action_pressed(a):
+			if _rep_proximo.has(a) and _relogio >= _rep_proximo[a]:
+				dispara = true
+				_rep_proximo[a] = _relogio + INTERVALO_REPETICAO
+			elif not _rep_proximo.has(a):
+				_rep_proximo[a] = _relogio + ATRASO_REPETICAO
+		else:
+			_rep_proximo.erase(a)
+		_pulso[a] = dispara
+
+
+func menu_pulso(acao: String) -> bool:
+	## Use nos menus no lugar de is_action_just_pressed para cima/baixo: repete ao segurar.
+	return _pulso.get(acao, false)
+
+
+# ------------------------------------------------------------------ Controles
+
+static func mapeamento_xbox(guid: String, nome: String) -> String:
+	## Linha de mapeamento SDL para um controle "compatível com Xbox" que o Godot não conhece.
+	if guid.strip_edges() == "":
+		return ""
+	var limpo := nome.replace(",", " ").replace("\n", " ").strip_edges()
+	if limpo == "":
+		limpo = "Controle"
+	return "%s,%s,%s" % [guid.strip_edges(), limpo, MAPEAMENTO_XBOX]
+
+
+func _ao_mudar_controle(dev: int, conectado: bool) -> void:
+	if conectado:
+		_verificar_controle(dev)
+	else:
+		estado_controle.erase(dev)
+
+
+func _verificar_controle(dev: int) -> void:
+	## Controle que o Godot reconhece fica como está; os desconhecidos recebem o
+	## mapeamento estilo Xbox (senão LB/RB/Start chegam trocados no navegador).
+	if not dev in Input.get_connected_joypads():
+		return
+	if Input.is_joy_known(dev):
+		estado_controle[dev] = "reconhecido"
+		return
+	var m := mapeamento_xbox(Input.get_joy_guid(dev), Input.get_joy_name(dev))
+	if m == "":
+		return
+	Input.add_joy_mapping(m, true)
+	estado_controle[dev] = "corrigido automaticamente"
+	print("Controle %d (%s): mapeamento estilo Xbox aplicado" % [dev, Input.get_joy_name(dev)])
+
+
+func texto_estado_controle(dev: int) -> String:
+	if estado_controle.has(dev):
+		return estado_controle[dev]
+	return "reconhecido" if Input.is_joy_known(dev) else "desconhecido"
 
 
 func _input(event: InputEvent) -> void:
@@ -253,14 +343,16 @@ func _criar_controles() -> void:
 		_acao("p%d_dash_esq" % j, [])
 		_acao("p%d_dash_dir" % j, [])
 	# Menus
-	_acao("menu_cima", [KEY_W, KEY_UP])
-	_acao("menu_baixo", [KEY_S, KEY_DOWN])
+	_acao("menu_cima", [KEY_W, KEY_UP], 0.5)
+	_acao("menu_baixo", [KEY_S, KEY_DOWN], 0.5)
 	_acao("menu_ok", [KEY_SPACE, KEY_ENTER, KEY_KP_ENTER, KEY_KP_0, KEY_0])
 	_acao("menu_voltar", [KEY_ESCAPE, KEY_BACKSPACE])
 	_acao("pausar", [KEY_ESCAPE, KEY_P])
 	for dev in [0, 1]:
 		_botao("menu_cima", dev, JOY_BUTTON_DPAD_UP)
 		_botao("menu_baixo", dev, JOY_BUTTON_DPAD_DOWN)
+		_eixo("menu_cima", dev, JOY_AXIS_LEFT_Y, -1.0)
+		_eixo("menu_baixo", dev, JOY_AXIS_LEFT_Y, 1.0)
 		_botao("menu_ok", dev, JOY_BUTTON_A)
 		_botao("menu_voltar", dev, JOY_BUTTON_B)
 		_botao("pausar", dev, JOY_BUTTON_START)
@@ -279,9 +371,9 @@ func _criar_controles() -> void:
 		_eixo("p%d_descer" % j, dev, JOY_AXIS_LEFT_Y, 1.0)
 
 
-func _acao(nome: String, teclas: Array) -> void:
+func _acao(nome: String, teclas: Array, zona_morta := 0.3) -> void:
 	if not InputMap.has_action(nome):
-		InputMap.add_action(nome, 0.3)
+		InputMap.add_action(nome, zona_morta)
 	for t in teclas:
 		var ev := InputEventKey.new()
 		ev.physical_keycode = t

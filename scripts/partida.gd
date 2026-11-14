@@ -288,9 +288,9 @@ func _process(delta: float) -> void:
 
 	if fim:
 		_t_fim += delta
-		if _t_fim > 1.0 and (Input.is_action_just_pressed("p1_pular") or Input.is_action_just_pressed("menu_ok")):
+		if _t_fim > 1.5 and (Input.is_action_just_pressed("p1_pular") or Input.is_action_just_pressed("menu_ok")):
 			revanche.emit()
-	if fim and _t_fim > 1.0 and Input.is_action_just_pressed("menu_voltar"):
+	if fim and _t_fim > 1.5 and Input.is_action_just_pressed("menu_voltar"):
 		voltar.emit()
 
 
@@ -927,7 +927,7 @@ func _process_convidado(delta: float) -> void:
 			Rede.enviar_escolha(1)
 	if not fim and not pausado and Input.is_action_just_pressed("pausar"):
 		pausar()
-	if fim and _t_fim > 1.0 and Input.is_action_just_pressed("menu_voltar"):
+	if fim and _t_fim > 1.5 and Input.is_action_just_pressed("menu_voltar"):
 		voltar.emit()
 
 

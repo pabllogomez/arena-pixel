@@ -2,6 +2,7 @@ extends Control
 ## Painel de opções, usado na pausa (com "Continuar" e "Voltar ao menu
 ## inicial") e no item "OPÇÕES" do menu inicial (com "Voltar").
 ## Botões grandes para o toque; no teclado: W/S ou setas + Espaço/Enter, Esc fecha.
+## No controle: direcional ou analógico + A, B fecha. Sair para o menu pede confirmação.
 
 signal continuar
 signal sair_para_menu
@@ -10,7 +11,8 @@ signal sair_para_menu
 var na_pausa := true
 
 var _sel := 0
-var _tutorial: Control = null
+var _tutorial: Control = null  # tutorial ou teste do controle aberto por cima
+var _confirmando := false      # "voltar ao menu" apertado uma vez (falta confirmar)
 var _quadros := 0  # ignora o teclado no 1º quadro (a tecla que abriu o painel)
 const LARG := 190.0
 const ALT_ITEM := 18.0
@@ -34,7 +36,11 @@ func _itens() -> Array:
 	if Jogo.toque:
 		itens.append(["botoes", "Botões na tela: " + ("LIGADOS" if Jogo.botoes_tela else "DESLIGADOS")])
 		itens.append(["como_jogar", "COMO JOGAR"])
-	itens.append(["menu", "VOLTAR AO MENU INICIAL" if na_pausa else "VOLTAR"])
+	itens.append(["teste_controle", "TESTE DO CONTROLE"])
+	var rotulo_menu := "VOLTAR AO MENU INICIAL" if na_pausa else "VOLTAR"
+	if _confirmando:
+		rotulo_menu = "SAIR DA PARTIDA? APERTE DE NOVO"
+	itens.append(["menu", rotulo_menu])
 	return itens
 
 
@@ -47,6 +53,8 @@ func _rect_item(i: int) -> Rect2:
 
 func _acionar(id: String) -> void:
 	Jogo.tocar("pulo")
+	if id != "menu":
+		_confirmando = false
 	match id:
 		"continuar":
 			continuar.emit()
@@ -68,9 +76,15 @@ func _acionar(id: String) -> void:
 		"como_jogar":
 			_tutorial = preload("res://scripts/tutorial.gd").new()
 			add_child(_tutorial)
+		"teste_controle":
+			_tutorial = preload("res://scripts/teste_controle.gd").new()
+			add_child(_tutorial)
 		"menu":
 			if na_pausa:
-				sair_para_menu.emit()
+				if _confirmando:
+					sair_para_menu.emit()
+				else:
+					_confirmando = true
 			else:
 				continuar.emit()
 
@@ -80,6 +94,8 @@ func _gui_input(event: InputEvent) -> void:
 		var itens := _itens()
 		for i in itens.size():
 			if _rect_item(i).grow(2).has_point(event.position):
+				if _sel != i:
+					_confirmando = false
 				_sel = i
 				_acionar(itens[i][0])
 				accept_event()
@@ -92,14 +108,19 @@ func _process(_delta: float) -> void:
 	if _quadros < 2 or (_tutorial != null and is_instance_valid(_tutorial)):
 		return
 	var itens := _itens()
-	if Input.is_action_just_pressed("menu_cima"):
+	if Jogo.menu_pulso("menu_cima"):
 		_sel = wrapi(_sel - 1, 0, itens.size())
-	elif Input.is_action_just_pressed("menu_baixo"):
+		_confirmando = false
+	elif Jogo.menu_pulso("menu_baixo"):
 		_sel = wrapi(_sel + 1, 0, itens.size())
+		_confirmando = false
 	elif Input.is_action_just_pressed("menu_ok"):
 		_acionar(itens[_sel][0])
 	elif Input.is_action_just_pressed("menu_voltar") or Input.is_action_just_pressed("pausar"):
-		continuar.emit()
+		if _confirmando:
+			_confirmando = false  # B/Esc só cancela a confirmação
+		else:
+			continuar.emit()
 	queue_redraw()
 
 

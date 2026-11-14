@@ -358,5 +358,7 @@ func _fim() -> void:
 		dica = "Aguardando quem criou a partida pedir revanche..."
 	elif not Jogo.toque:
 		dica = "ESPAÇO: revanche (mapa novo)     ESC: menu"
+		if Jogo.tem_controle():
+			dica = "ESPAÇO ou A: revanche (mapa novo)     ESC ou B: menu"
 	if int(_t * 2.0) % 4 != 3:
 		UI.texto(self, centro + Vector2(0, 19), dica, UI.P, UI.LUZ)

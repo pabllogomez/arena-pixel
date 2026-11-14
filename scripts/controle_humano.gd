@@ -9,7 +9,18 @@ func _init(n: int) -> void:
 	numero = n
 
 
-func atualizar(_l, _delta: float) -> void:
+func atualizar(l, _delta: float) -> void:
+	# Em rede a pausa não congela o jogo: os botões que navegam no painel
+	# (direcional, A, B) não podem andar, pular ou dar dash.
+	if l != null and l.partida != null and l.partida.pausado:
+		eixo = 0.0
+		pulo_apertou = false
+		pulo_soltou = false
+		descer_apertou = false
+		dash_apertou = false
+		dash_dir = 0.0
+		opcao = -1
+		return
 	eixo = Input.get_axis(_a("esquerda"), _a("direita"))
 	pulo_apertou = Input.is_action_just_pressed(_a("pular"))
 	pulo_soltou = Input.is_action_just_released(_a("pular"))

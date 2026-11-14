@@ -109,10 +109,10 @@ func _process(delta: float) -> void:
 	if _painel != null:
 		return  # o painel de opções cuida do teclado enquanto está aberto
 	var opcoes := MODOS if _tela == "modo" else DIFICULDADES
-	if Input.is_action_just_pressed("menu_cima"):
+	if Jogo.menu_pulso("menu_cima"):
 		_sel = wrapi(_sel - 1, 0, opcoes.size())
 		Jogo.tocar("pulo")
-	elif Input.is_action_just_pressed("menu_baixo"):
+	elif Jogo.menu_pulso("menu_baixo"):
 		_sel = wrapi(_sel + 1, 0, opcoes.size())
 		Jogo.tocar("pulo")
 	elif Input.is_action_just_pressed("menu_ok"):
@@ -127,6 +127,9 @@ func _deslocamento() -> Vector2:
 
 
 func _draw() -> void:
+	# Versão no canto, embaixo do botão de opções (na build de teste: "0.1-teste · commit")
+	draw_set_transform(Vector2.ZERO)
+	UI.texto(self, Vector2(size.x - 4.0, 32.0), "v" + str(ProjectSettings.get_setting("application/config/version", "")), UI.P, UI.BORDA, UI.DIR)
 	var cx := roundf(size.x / 2.0)
 	draw_set_transform(_deslocamento())
 	_desenhar_titulo(cx)

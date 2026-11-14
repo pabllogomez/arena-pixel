@@ -34,6 +34,7 @@ func _initialize() -> void:
 	await _testar_dash()
 	_testar_dash_rede()
 	_testar_mapeamento_controle()
+	await _testar_controle_menus()
 	await _testar_cartas_layout()
 	await _testar_partidas()
 	print("RESULTADO: ", "OK" if _falhas == 0 else "%d FALHA(S)" % _falhas)
@@ -473,6 +474,62 @@ func _testar_mapeamento_controle() -> void:
 		_falha("usando_controle não desligou com toque")
 	jogo.usando_controle = false
 	print("Controle (mapeamento e último dispositivo): ok")
+
+
+func _testar_controle_menus() -> void:
+	## Mapeamento automático (string e registro), analógico nos menus e repetição ao segurar.
+	var jogo = root.get_node("Jogo")
+	# (a) string de mapeamento
+	var m: String = jogo.mapeamento_xbox("guidfalso123", "Controle, Falso\nX")
+	var campos := m.split(",")
+	if campos[0] != "guidfalso123" or campos[1] != "Controle  Falso X" or campos.size() != 23:
+		_falha("mapeamento_xbox: cabeçalho errado: %s" % m)
+	if not m.contains("leftshoulder:b4") or not m.contains("dpup:-a7") or not m.contains("start:b7"):
+		_falha("mapeamento_xbox: campos do mapeamento faltando")
+	if m.contains("platform"):
+		_falha("mapeamento_xbox: não deveria ter platform")
+	if jogo.mapeamento_xbox("", "x") != "":
+		_falha("mapeamento_xbox: GUID vazio deveria dar string vazia")
+	if jogo.mapeamento_xbox("abc", "").split(",")[1] != "Controle":
+		_falha("mapeamento_xbox: nome vazio deveria virar 'Controle'")
+	Input.add_joy_mapping(m, true)  # não pode quebrar
+	jogo._verificar_controle(7)     # dispositivo inexistente: não pode quebrar
+	jogo._ao_mudar_controle(7, false)
+	Input.joy_connection_changed.emit(7, true)
+	Input.joy_connection_changed.emit(7, false)
+	# (b) analógico esquerdo (Y) nos menus
+	var casos := [[0, -1.0, "menu_cima", true], [0, 1.0, "menu_baixo", true], [1, -1.0, "menu_cima", true],
+			[0, -1.0, "menu_baixo", false], [0, -0.3, "menu_cima", false], [0, 0.4, "menu_baixo", false]]
+	for c in casos:
+		var ev := InputEventJoypadMotion.new()
+		ev.device = c[0]
+		ev.axis = JOY_AXIS_LEFT_Y
+		ev.axis_value = c[1]
+		if ev.is_action_pressed(c[2]) != c[3]:
+			_falha("analógico Y %.1f dispositivo %d ação %s (esperava %s)" % [c[1], c[0], c[2], c[3]])
+	# (c) repetição ao segurar: 1 pulso ao apertar, nada até 0,4 s, depois a cada 0,15 s
+	Input.action_press("menu_baixo")
+	var pulsos: Array[float] = []
+	var t := 0.0
+	for i in 70:
+		await process_frame
+		t += 1.0 / 60.0
+		if jogo.menu_pulso("menu_baixo"):
+			pulsos.append(t)
+	Input.action_release("menu_baixo")
+	await process_frame
+	if jogo.menu_pulso("menu_baixo"):
+		_falha("repetição: continuou disparando depois de soltar")
+	if pulsos.size() < 5 or pulsos.size() > 8:
+		_falha("repetição: %d pulsos em ~1,1 s (esperava 5 a 8)" % pulsos.size())
+	elif pulsos[1] - pulsos[0] < 0.35 or pulsos[2] - pulsos[1] > 0.2:
+		_falha("repetição: intervalos errados %s" % [pulsos])
+	# Tela de teste: nomes amigáveis e o que o jogo entende
+	var teste = load("res://scripts/teste_controle.gd")
+	var lb := _botao_joy(0, JOY_BUTTON_LEFT_SHOULDER)
+	if not teste.nome_entrada(lb).begins_with("LB (botão") or not teste.entendimento(lb).contains("escolher melhoria 1"):
+		_falha("teste_controle: LB → %s / %s" % [teste.nome_entrada(lb), teste.entendimento(lb)])
+	print("Controle (mapeamento automático, analógico e repetição nos menus): ok")
 
 
 func _testar_cartas_layout() -> void:
