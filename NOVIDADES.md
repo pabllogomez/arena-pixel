@@ -3,6 +3,13 @@
 Cada publicação na `main` cria a tag e o Release com a seção da versão atual
 (`config/version` em `project.godot`). Escreva a seção antes de publicar.
 
+## v0.3
+- Rei: o Guarda Real saiu. No lugar, o Rei ganhou o GOLPE DE CETRO: um golpe fraco que empurra o inimigo para longe. Usado durante o dash, o empurrão fica 25% mais forte.
+- ACERTO CRÍTICO: acertar alguém pelas costas causa dano x3 (todos os personagens). O Recruta que golpeia com dash causa x2.
+- Os críticos aparecem em cores: número vermelho (pelas costas) e azul claro (dash), com "CRÍTICO!" ou "DASH!" embaixo da vida de quem acertou.
+- Corpo a corpo só acerta quem está na frente: ninguém revida de costas.
+- MOB DE CURA: uma gosma verde fujona que nasce longe dos jogadores. Quem derrotar recupera 10% da vida. Aparece na fase de Recruta e na Torre da Tormenta.
+
 ## v0.2
 - Novo modo: TORRE DA TORMENTA! Escolha um personagem e enfrente todos em sequência, andar por andar (9 lutas, 1:30 cada). Ganhe nível e melhorias a cada vitória; perdeu, é Game Over. Vença a torre para liberar o MUITO DIFÍCIL daquele personagem.
 - Menu novo: SINGLE PLAYER (Torre da Tormenta e Arena) e DUELO (Local e Rede). A escolha de personagem mostra o sprite de cada um.
