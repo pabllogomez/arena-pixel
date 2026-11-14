@@ -7,13 +7,15 @@ extends Controle
 ## uma decisão e outra, ele segue o caminho e se posiciona para o ataque
 ## automático acertar.
 
-enum Dificuldade { FACIL, NORMAL, DIFICIL }
+## MUITO_DIFICIL só existe na Torre da Tormenta (as partidas comuns oferecem até DIFICIL)
+enum Dificuldade { FACIL, NORMAL, DIFICIL, MUITO_DIFICIL }
 
-const NOMES := ["FÁCIL", "NORMAL", "DIFÍCIL"]
+const NOMES := ["FÁCIL", "NORMAL", "DIFÍCIL", "MUITO DIFÍCIL"]
 const PARAMS := {
 	Dificuldade.FACIL: {"reacao": 0.5, "erro": 0.2, "portas": false, "foge": false, "melhor_melhoria": 0.0},
 	Dificuldade.NORMAL: {"reacao": 0.25, "erro": 0.07, "portas": true, "foge": true, "melhor_melhoria": 0.7},
 	Dificuldade.DIFICIL: {"reacao": 0.1, "erro": 0.02, "portas": true, "foge": true, "melhor_melhoria": 1.0},
+	Dificuldade.MUITO_DIFICIL: {"reacao": 0.05, "erro": 0.0, "portas": true, "foge": true, "melhor_melhoria": 1.0},
 }
 ## Preferência de melhorias por tipo de ataque (da melhor para a pior)
 const PREFERENCIAS := {
@@ -271,12 +273,17 @@ func _escolher_melhoria(l, delta: float) -> void:
 	if _t_escolha < p["reacao"] * 4.0:
 		return
 	_t_escolha = 0.0
-	var par: Array = l.escolhas[0]
-	opcao = randi() % 2
-	if randf() < p["melhor_melhoria"]:
-		var pref: Array = PREFERENCIAS[l.dados.tipo_ataque]
+	opcao = indice_melhoria(l.dados.tipo_ataque, l.escolhas[0], p["melhor_melhoria"])
+
+
+static func indice_melhoria(tipo: ClasseDados.TipoAtaque, par: Array, melhor: float) -> int:
+	## Escolhe 0 ou 1: ao acaso, ou a melhor da lista de preferências com chance `melhor`.
+	var opcao_escolhida := randi() % 2
+	if randf() < melhor:
+		var pref: Array = PREFERENCIAS[tipo]
 		var a: int = pref.find(par[0]["id"])
 		var b: int = pref.find(par[1]["id"])
 		a = 99 if a < 0 else a
 		b = 99 if b < 0 else b
-		opcao = 0 if a <= b else 1
+		opcao_escolhida = 0 if a <= b else 1
+	return opcao_escolhida

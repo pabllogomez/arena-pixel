@@ -58,6 +58,11 @@ var roubo_vida := 0.0
 var raio_explosao := 0.0
 ## Ids das melhorias escolhidas (para reaplicar quando a Bola troca a classe)
 var historico: Array[String] = []
+## Estatísticas da luta (a Torre da Tormenta soma entre andares): dano que
+## de fato tirou de vida (sem contar o excesso do golpe final)
+var dano_causado := 0.0
+var dano_recebido := 0.0
+var maior_golpe := 0.0
 
 ## Classe cujo ataque está sendo usado (normalmente a própria; o item
 ## "ataque trocado" empresta o de outra por alguns segundos)
@@ -157,6 +162,38 @@ func trocar_classe(d: ClasseDados) -> void:
 		novos.append(novo_id)
 	historico = novos
 	vida = vida_max * proporcao
+
+
+func indice_classe() -> int:
+	## Posição em Jogo.CLASSES, ou -1 se ainda é Recruta.
+	return -1 if eh_recruta else Jogo.CLASSES.find(dados.nome.to_lower())
+
+
+func exportar_estado() -> Dictionary:
+	## Estado que atravessa partidas (Torre da Tormenta): classe, nível, melhorias
+	## e a fração de vida. Ver importar_estado.
+	return {
+		"classe": indice_classe(), "nivel": nivel, "historico": historico.duplicate(),
+		"vida": clampf(vida / vida_max, 0.0, 1.0),
+	}
+
+
+func importar_estado(e: Dictionary) -> void:
+	## Monta o personagem a partir de um estado: classe (sem a cura de receber_classe),
+	## nível, melhorias já escolhidas (`historico`) e, em `auto_melhorias`, melhorias
+	## sorteadas e escolhidas como um bot de dificuldade `dif` escolheria. Chamar com o
+	## nó já na árvore (precisa do sprite). A vida vem por último.
+	nivel = e.get("nivel", 1)
+	var c: int = e.get("classe", -1)
+	if c >= 0:
+		eh_recruta = false
+		_aplicar_classe(Jogo.dados_classe(c))
+	for id in e.get("historico", []):
+		Melhorias.aplicar(self, Melhorias.por_id(id))
+	for i in int(e.get("auto_melhorias", 0)):
+		var par := Melhorias.sortear(self)
+		Melhorias.aplicar(self, par[ControleBot.indice_melhoria(dados.tipo_ataque, par, ControleBot.PARAMS[e.get("dif", 1)]["melhor_melhoria"])])
+	vida = vida_max * clampf(e.get("vida", 1.0), 0.0, 1.0)
 
 
 # ------------------------------------------------------------------ Ataque atual
@@ -378,7 +415,7 @@ func _physics_process(delta: float) -> void:
 			_tentar_atacar()
 
 	_sem_dano += delta
-	if _sem_dano > REGEN_ESPERA and vida < vida_max and not partida.morte_subita:
+	if partida.regen and _sem_dano > REGEN_ESPERA and vida < vida_max and not partida.morte_subita:
 		curar(vida_max * REGEN_TAXA * delta)
 
 	if _flash > 0.0:
@@ -540,6 +577,11 @@ func receber_dano(qtd: float, origem, fonte := "") -> void:
 		qtd *= partida.mult_pvp(origem, self)
 	if qtd <= 0.0:
 		return
+	var efetivo := minf(qtd, vida)
+	dano_recebido += efetivo
+	if origem_valida and origem is Lutador and origem != self:
+		origem.dano_causado += efetivo
+		origem.maior_golpe = maxf(origem.maior_golpe, efetivo)
 	vida -= qtd
 	_sem_dano = 0.0
 	_flash = 0.12
@@ -611,7 +653,7 @@ func xp_para_proximo() -> int:
 
 
 func ganhar_xp(qtd: int) -> void:
-	if not vivo:
+	if not vivo or not partida.xp_ligado:
 		return
 	# Quem está atrás em nível ganha 50% a mais (ajuda a alcançar o oponente)
 	var outro: Lutador = partida.oponente(self)

@@ -6,6 +6,8 @@ extends Node2D
 
 signal revanche
 signal voltar
+## Torre da Tormenta: a luta acabou e o resultado já apareceu (vencedor 0 = empate)
+signal fim_de_luta(vencedor: int)
 
 const CENA_LUTADOR := preload("res://scenes/lutador.tscn")
 const CENA_MINION := preload("res://scenes/minion.tscn")
@@ -91,7 +93,17 @@ const MAX_ITENS := 2
 ## central da arena, e fica lá até alguém pegar ou começar a Morte Súbita.
 const MOMENTO_BOLA := 120.0
 var _t_item := 0.0
-var itens_ligados := true  ## (só os testes de equilíbrio desligam)
+var itens_ligados := true  ## (só os testes de equilíbrio e a Torre desligam)
+## Regras que a Torre da Tormenta desliga (o padrão é o comportamento normal)
+var monstros_ligados := true
+var morte_subita_ligada := true  ## false: no fim do tempo vence quem tem mais % de vida
+var regen := true                ## regeneração lenta fora de combate
+var xp_ligado := true            ## false: o nível só muda por fora (vitória na Torre)
+## Torre da Tormenta (vazio nas outras partidas): {"andar", "final", "adversario", ...}
+var torre := {}
+## Segundos da tela de apresentação do andar (só conta sem cartas de melhoria pendentes)
+var intro_t := 0.0
+var _fim_avisado := false
 ## Momentos (tempo restante, em segundos) em que a Bola aparece; sorteados por partida
 var momentos_bola: Array[float] = []
 ## Jogo pausado pelo botão de pausa / Esc
@@ -123,7 +135,10 @@ const TEX_PROJETIL := {
 
 func iniciar(config: Dictionary) -> void:
 	## config: {"semente": int, "tempo": float, "bots": {1: dif, 2: dif}}
-	##   dificuldade -1 = humano; 0, 1, 2 = bot fácil, normal, difícil.
+	##   dificuldade -1 = humano; 0, 1, 2, 3 = bot fácil, normal, difícil, muito difícil.
+	## Chaves opcionais (padrão = partida normal): "itens", "monstros", "morte_subita",
+	## "regen", "xp" (bool), "lutadores" ({n: estado}, ver Lutador.importar_estado) e
+	## "torre" (dados do andar da Torre da Tormenta; ligam a apresentação e o fim de luta).
 	rede = config.get("rede", "")
 	if rede != "":
 		Rede.partida = self
@@ -172,13 +187,27 @@ func iniciar(config: Dictionary) -> void:
 		return  # quem simula monstros, tempo e regras é o anfitrião
 	_sortear_momentos_bola(rng)
 	itens_ligados = config.get("itens", true)
+	monstros_ligados = config.get("monstros", true)
+	morte_subita_ligada = config.get("morte_subita", true)
+	regen = config.get("regen", true)
+	xp_ligado = config.get("xp", true)
+	torre = config.get("torre", {})
 	# Só para testes: começa com classes definidas
 	var classes: Dictionary = config.get("classes", {})
 	for n in classes:
 		jogadores[n].nivel = 2
 		jogadores[n].receber_classe(Jogo.dados_classe(classes[n]))
-	for i in 2:
-		_criar_monstro()
+	var estados: Dictionary = config.get("lutadores", {})
+	for n in estados:
+		jogadores[n].importar_estado(estados[n])
+		# Melhoria ganha na vitória do andar anterior: escolher antes da contagem
+		if estados[n].get("pendente", false):
+			jogadores[n].escolhas.append(Melhorias.sortear(jogadores[n]))
+	if not torre.is_empty():
+		intro_t = 2.4
+	if monstros_ligados:
+		for i in 2:
+			_criar_monstro()
 	_congelar(true)  # tudo parado durante a contagem inicial
 	if rede == "anfitriao":
 		var remoto := config.duplicate()
@@ -206,6 +235,13 @@ func _congelar(sim: bool) -> void:
 
 func congelado() -> bool:
 	return (pausado and rede == "") or contagem > 0.0
+
+
+func espera_inicio() -> bool:
+	## Torre: a contagem só começa depois das cartas de melhoria e da apresentação do andar.
+	if contagem <= 0.0 or torre.is_empty():
+		return false
+	return intro_t > 0.0 or not jogadores[1].escolhas.is_empty()
 
 
 func _retomar_com_contagem() -> void:
@@ -270,7 +306,9 @@ func _process(delta: float) -> void:
 	if rede == "convidado":
 		_process_convidado(delta)
 		return
-	if contagem > -1.0 and (not pausado or rede != "") and not (tutorial_aberto and rede == ""):
+	if not torre.is_empty() and not pausado and contagem > 0.0 and jogadores[1].escolhas.is_empty():
+		intro_t = maxf(intro_t - delta, 0.0)
+	if contagem > -1.0 and (not pausado or rede != "") and not (tutorial_aberto and rede == "") and not espera_inicio():
 		var antes := contagem
 		contagem -= delta
 		if antes > 0.0 and contagem <= 0.0:
@@ -288,6 +326,12 @@ func _process(delta: float) -> void:
 
 	if fim:
 		_t_fim += delta
+		if not torre.is_empty():
+			# Na Torre quem decide o que vem depois é o controlador (sem revanche nem ESC aqui)
+			if _t_fim > 2.6 and not _fim_avisado:
+				_fim_avisado = true
+				fim_de_luta.emit(vencedor)
+			return
 		if _t_fim > 1.5 and (Input.is_action_just_pressed("p1_pular") or Input.is_action_just_pressed("menu_ok")):
 			revanche.emit()
 	if fim and _t_fim > 1.5 and Input.is_action_just_pressed("menu_voltar"):
@@ -316,6 +360,9 @@ func _physics_process(delta: float) -> void:
 		tempo_restante -= delta
 		if tempo_restante <= 0.0:
 			tempo_restante = 0.0
+			if not morte_subita_ligada:
+				_decidir_por_vida()
+				return
 			_iniciar_morte_subita()
 		_t_monstro += delta
 		var nivel := nivel_monstros()
@@ -325,7 +372,7 @@ func _physics_process(delta: float) -> void:
 			# Fase de Recruta: muitos monstros fracos valendo pouco XP
 			intervalo = INTERVALO_MONSTRO_RECRUTA
 			maximo = MAX_MONSTROS_RECRUTA
-		if _t_monstro >= intervalo:
+		if monstros_ligados and _t_monstro >= intervalo:
 			_t_monstro = 0.0
 			if _contar_equipe(0) < maximo:
 				_criar_monstro()
@@ -729,15 +776,31 @@ func _decidir_vencedor() -> void:
 		vencedor = 1 if v1 > v2 else (2 if v2 > v1 else 0)
 	else:
 		return
+	await _encerrar(true)
+
+
+func _decidir_por_vida() -> void:
+	## Fim do tempo sem Morte Súbita: vence quem tem a maior porcentagem de vida.
+	## Empate vence o jogador 2 (na Torre, a CPU).
+	if fim:
+		return
+	var f1: float = jogadores[1].vida / jogadores[1].vida_max
+	var f2: float = jogadores[2].vida / jogadores[2].vida_max
+	vencedor = 1 if f1 > f2 else 2
+	await _encerrar(false)
+
+
+func _encerrar(camera_lenta: bool) -> void:
 	fim = true
 	for j in jogadores.values():
 		j.ativo = false
 	_quadros_impacto = 0
-	_camera_lenta = true
-	Engine.time_scale = 0.3
-	await get_tree().create_timer(0.7, true, false, true).timeout
-	_camera_lenta = false
-	Engine.time_scale = 1.0
+	if camera_lenta:
+		_camera_lenta = true
+		Engine.time_scale = 0.3
+		await get_tree().create_timer(0.7, true, false, true).timeout
+		_camera_lenta = false
+		Engine.time_scale = 1.0
 	Jogo.tocar("vitoria")
 
 

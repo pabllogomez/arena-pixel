@@ -35,6 +35,7 @@ Os testes rodam no CI antes de cada publicação; se falharem, nada é publicado
 - `scripts/navegacao.gd`: grafo de navegação (validação de mapas, bot e lacaios).
 - `scripts/lutador.gd`: personagem; recebe comandos de um `Controle` (`controle_humano.gd` ou `controle_bot.gd`).
 - `scripts/partida.gd`: regras (PvP, Recruta, sorteio de classe, cronômetro, Morte Súbita, monstros).
+- `scripts/torre.gd` (+ `torre_fim.gd`): modo single player Torre da Tormenta (9 andares: subida de 5 + etapa final de 4). O `Torre` (criado pelo `main.gd`) guarda personagem, dificuldade, ordem dos adversários, estado do jogador entre lutas (`Lutador.exportar_estado`/`importar_estado`) e estatísticas; cada andar é uma `Partida` nova via `config` (`monstros`, `itens`, `morte_subita`, `regen`, `xp`, `lutadores`, `torre`; padrões = partida normal). MUITO DIFÍCIL (`ControleBot.Dificuldade.MUITO_DIFICIL`) só existe na torre e é desbloqueado por personagem em `user://opcoes.cfg`.
 - `scripts/mapa_controle.gd`: índices de botão do controle por plataforma (no navegador o Godot entrega os índices crus W3C; os atalhos do InputMap em `Jogo._criar_controles` usam `MapaControle.botao()`; gatilhos não são ligados). O `Jogo` também trata a pausa (`pausa_pedida`: Start/Back/Esc/P) e o analógico nos menus (pulsos de `menu_cima`/`menu_baixo`).
 - `scripts/controles_toque.gd`: botões na tela para celular.
 - `resources/classes/*.tres`: atributos das classes (balanceamento).

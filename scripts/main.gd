@@ -7,6 +7,8 @@ const CENA_PARTIDA := preload("res://scenes/partida.tscn")
 var _atual: Node
 var _toque: Control
 var _cortina: Control
+## Torre da Tormenta em andamento (null fora do modo)
+var _torre: Torre
 
 
 func _ready() -> void:
@@ -40,6 +42,8 @@ func _abrir_menu() -> void:
 	var m = CENA_MENU.instantiate()
 	m.jogar.connect(_nova_partida, CONNECT_DEFERRED)
 	m.jogar_rede.connect(_abrir_lobby, CONNECT_DEFERRED)
+	m.jogar_torre.connect(_iniciar_torre, CONNECT_DEFERRED)
+	_encerrar_torre()
 	_toque.partida = null
 	_trocar(m)
 	Jogo.tocar_musica("menu")
@@ -65,3 +69,37 @@ func _nova_partida(config: Dictionary = {}) -> void:
 	p.iniciar(config)
 	p.revanche.connect(_nova_partida, CONNECT_DEFERRED)
 	p.voltar.connect(_abrir_menu, CONNECT_DEFERRED)
+	p.fim_de_luta.connect(_ao_fim_de_luta.bind(p), CONNECT_DEFERRED)
+
+
+# ------------------------------------------------------------------ Torre da Tormenta
+
+func _iniciar_torre(personagem: int, dificuldade: int) -> void:
+	_encerrar_torre()
+	Jogo.solo = true
+	_torre = Torre.new()
+	add_child(_torre)
+	_torre.comecar(personagem, dificuldade)
+	_nova_partida(_torre.config_andar())
+
+
+func _encerrar_torre() -> void:
+	if _torre != null:
+		_torre.queue_free()
+		_torre = null
+
+
+func _ao_fim_de_luta(vencedor: int, p: Node) -> void:
+	if _torre == null or p != _atual:
+		return
+	_torre.registrar(vencedor, p)
+	if _torre.estado == "andar":
+		_nova_partida(_torre.config_andar())
+		return
+	var t: Control = preload("res://scripts/torre_fim.gd").new()
+	t.torre = _torre
+	t.de_novo.connect(func() -> void: _iniciar_torre(_torre.personagem, _torre.dificuldade), CONNECT_DEFERRED)
+	t.menu.connect(_abrir_menu, CONNECT_DEFERRED)
+	_toque.partida = null
+	_trocar(t)
+	Jogo.tocar_musica("menu")

@@ -85,6 +85,7 @@ func _draw() -> void:
 			_painel(partida.jogadores[n], n)
 	_cronometro()
 	_contagem()
+	_apresentacao_torre()
 	_anuncio()
 	for n in [1, 2]:
 		if mostra_cartas(n):
@@ -177,12 +178,15 @@ func _cronometro() -> void:
 			sobe = -1.0
 	UI.moldura(self, caixa, Color(UI.TINTA, 0.92), borda, borda.lightened(0.3))
 	UI.texto(self, Vector2(x, 8 + sobe), texto, UI.M, cor)
+	if not partida.torre.is_empty():
+		var rotulo := "ETAPA FINAL %d/9" % partida.torre["andar"] if partida.torre["final"] else "ANDAR %d/9" % partida.torre["andar"]
+		UI.texto(self, Vector2(x, 25), rotulo, UI.P, UI.OURO if partida.torre["final"] else UI.LUZ)
 
 
 func _contagem() -> void:
 	var centro := (size / 2.0).round()
 	var c: float = partida.contagem
-	if partida.tutorial_aberto:
+	if partida.tutorial_aberto or partida.espera_inicio():
 		return
 	if c > 0.0:
 		var batida := 1.0 - (c - floorf(c))  # 0 no começo de cada número
@@ -197,7 +201,40 @@ func _contagem() -> void:
 		var alt := minf(e / 0.1, 1.0) * 34.0
 		UI.faixa(self, centro.y - 10 - alt / 2.0, alt, size.x, UI.OURO)
 		if e < 0.7 or int(_t * 20.0) % 2 == 0:
-			UI.texto(self, centro + Vector2(0, -10), "LUTE!", tam2, UI.OURO)
+			UI.texto(self, centro + Vector2(0, -10), "LUTEM!" if not partida.torre.is_empty() else "LUTE!", tam2, UI.OURO)
+
+
+func _apresentacao_torre() -> void:
+	## Torre da Tormenta: antes da contagem, mostra o andar, o adversário e a vida
+	## do jogador (aparece depois das cartas de melhoria, se houver).
+	if partida.torre.is_empty() or partida.contagem <= 0.0 or partida.intro_t <= 0.0 \
+			or not partida.jogadores[1].escolhas.is_empty():
+		return
+	var info: Dictionary = partida.torre
+	var centro := (size / 2.0).round()
+	var painel := Rect2(centro.x - 112.0, centro.y - 62.0, 224.0, 118.0)
+	UI.moldura(self, painel, Color("23263a"), UI.OURO if info["final"] else UI.BORDA, UI.BRANCO if info["final"] else UI.LUZ)
+	var y := painel.position.y
+	UI.texto(self, Vector2(centro.x, y + 17.0), "ETAPA FINAL" if info["final"] else "ANDAR %d" % info["andar"], UI.G, UI.OURO)
+	if info["final"]:
+		UI.texto(self, Vector2(centro.x, y + 36.0), "ANDAR %d DE 9" % info["andar"], UI.P, UI.LUZ)
+	else:
+		UI.texto(self, Vector2(centro.x, y + 36.0), "ANDAR %d DE 9" % info["andar"] if info["andar"] > 1 else "SUBIDA: 5 ANDARES", UI.P, UI.LUZ)
+	draw_rect(Rect2(painel.position.x + 10.0, y + 45.0, painel.size.x - 20.0, 1), UI.BORDA)
+	# Adversário: retrato, classe e nível
+	var cpu: Lutador = partida.jogadores[2]
+	var quadro := 2 + int(_t * 8.0) % 4
+	var retrato := Rect2(painel.position.x + 14.0, y + 52.0, 28, 28)
+	UI.moldura(self, retrato, Color("5d275d"), Jogo.COR_TIME[2], Jogo.COR_TIME[2].lightened(0.4))
+	draw_texture_rect_region(cpu.sprite.texture, Rect2(retrato.position + Vector2(2, 2), Vector2(24, 24)), Rect2(quadro * 16, 0, 16, 16))
+	UI.texto(self, Vector2(retrato.end.x + 8.0, y + 58.0), "ADVERSÁRIO", UI.P, UI.LUZ, UI.ESQ)
+	UI.texto(self, Vector2(retrato.end.x + 8.0, y + 70.0), "%s  Nv %d" % [cpu.dados.nome.to_upper(), cpu.nivel], UI.P, Jogo.COR_TIME[2], UI.ESQ)
+	# Vida do jogador
+	var eu: Lutador = partida.jogadores[1]
+	var f := clampf(eu.vida / eu.vida_max, 0.0, 1.0)
+	UI.texto(self, Vector2(painel.position.x + 14.0, y + 92.0), "SUA VIDA", UI.P, UI.LUZ, UI.ESQ)
+	UI.texto(self, Vector2(painel.end.x - 14.0, y + 92.0), "%d%%" % roundi(f * 100.0), UI.P, UI.BRANCO, UI.DIR)
+	UI.barra(self, Rect2(painel.position.x + 14.0, y + 100.0, painel.size.x - 28.0, 6), f, Jogo.COR_TIME[1])
 
 
 func _anuncio() -> void:
@@ -353,6 +390,8 @@ func _fim() -> void:
 		var x := centro.x - (larg_classe + 20.0) / 2.0
 		draw_texture_rect_region(tex, Rect2(roundf(x), centro.y - 3, 16, 16), Rect2(quadro * 16, 0, 16, 16))
 		UI.texto(self, Vector2(x + 20.0, centro.y + 6), classe, UI.P, UI.BRANCO, UI.ESQ)
+	if not partida.torre.is_empty():
+		return  # na Torre o controlador cuida do que vem depois
 	var dica := "Revanche joga em um mapa novo"
 	if partida.rede == "convidado":
 		dica = "Aguardando quem criou a partida pedir revanche..."

@@ -28,6 +28,10 @@ var botoes_tela := false
 ## O tutorial dos controles de toque já foi mostrado neste aparelho
 var tutorial_visto := false
 const ARQUIVO_OPCOES := "user://opcoes.cfg"
+## Arquivo em uso (os testes trocam por outro para não mexer no do jogador)
+var arquivo_opcoes := ARQUIVO_OPCOES
+## Torre da Tormenta: classes (nomes de Jogo.CLASSES) com MUITO DIFÍCIL desbloqueado
+var torre_desbloqueada: Array[String] = []
 
 ## Pausa pedida por Start/Back do controle, Esc ou P (tratada em _input, antes da
 ## interface, para valer mesmo com um botão focado). Quem pausa/despausa escuta aqui.
@@ -230,6 +234,16 @@ static func tem_controle() -> bool:
 	return Jogo.usando_controle or not Input.get_connected_joypads().is_empty()
 
 
+func torre_muito_dificil(classe: String) -> bool:
+	return torre_desbloqueada.has(classe)
+
+
+func desbloquear_torre_muito_dificil(classe: String) -> void:
+	if not torre_desbloqueada.has(classe):
+		torre_desbloqueada.append(classe)
+		_salvar_opcoes()
+
+
 func dados_classe(indice: int) -> ClasseDados:
 	return load("res://resources/classes/%s.tres" % CLASSES[indice])
 
@@ -358,12 +372,16 @@ func pintar_clarao(sprite: Sprite2D, ligado: bool) -> void:
 
 func _carregar_opcoes() -> void:
 	var cfg := ConfigFile.new()
-	if cfg.load(ARQUIVO_OPCOES) == OK:
+	torre_desbloqueada.clear()
+	if cfg.load(arquivo_opcoes) == OK:
 		som = cfg.get_value("opcoes", "som", true)
 		iluminacao = cfg.get_value("opcoes", "iluminacao", true)
 		impacto = cfg.get_value("opcoes", "impacto", true)
 		botoes_tela = cfg.get_value("opcoes", "botoes_tela", false)
 		tutorial_visto = cfg.get_value("opcoes", "tutorial_visto", false)
+		for c in CLASSES:
+			if cfg.get_value("torre", "muito_dificil_" + c, false):
+				torre_desbloqueada.append(c)
 	AudioServer.set_bus_mute(0, not som)
 
 
@@ -374,7 +392,9 @@ func _salvar_opcoes() -> void:
 	cfg.set_value("opcoes", "impacto", impacto)
 	cfg.set_value("opcoes", "botoes_tela", botoes_tela)
 	cfg.set_value("opcoes", "tutorial_visto", tutorial_visto)
-	cfg.save(ARQUIVO_OPCOES)
+	for c in torre_desbloqueada:
+		cfg.set_value("torre", "muito_dificil_" + c, true)
+	cfg.save(arquivo_opcoes)
 
 
 func tocar(nome: String) -> void:

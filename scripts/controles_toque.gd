@@ -84,7 +84,7 @@ func _botoes() -> Dictionary:
 		else:
 			# Tela limpa: a metade direita inteira é o botão de pular (invisível)
 			b["pular"] = {"rect": Rect2(tela.x / 2.0 + 4.0, 0, tela.x / 2.0, tela.y), "acao": "p1_pular"}
-	elif modo == "fim":
+	elif modo == "fim" and partida.torre.is_empty():  # (na Torre não há revanche)
 		var c := get_viewport().get_visible_rect().size / 2.0
 		c = c.round()
 		b["revanche"] = {"rect": Rect2(c.x - 92, c.y + 34, 88, 18), "acao": "menu_ok", "simbolo": "REVANCHE"}

@@ -12,9 +12,14 @@ const MAPAS := 1500
 const NOMES_DIF := ["FÁCIL", "NORMAL", "DIFÍCIL"]
 
 var _falhas := 0
+## Scripts que dependem do autoload Jogo: carregados em _initialize (não dá para citar a classe aqui)
+var _torre_script: GDScript
+var _bot_script: GDScript
 
 
 func _initialize() -> void:
+	_torre_script = load("res://scripts/torre.gd")
+	_bot_script = load("res://scripts/controle_bot.gd")
 	var args := OS.get_cmdline_user_args()
 	var i := args.find("--equilibrio")
 	if i >= 0:
@@ -38,6 +43,10 @@ func _initialize() -> void:
 	await _testar_controle_menus()
 	await _testar_pausa_partida()
 	await _testar_cartas_layout()
+	_testar_bot_muito_dificil()
+	await _testar_menu_navegacao()
+	await _testar_torre()
+	await _testar_torre_fim_do_tempo()
 	await _testar_partidas()
 	print("RESULTADO: ", "OK" if _falhas == 0 else "%d FALHA(S)" % _falhas)
 	quit(1 if _falhas else 0)
@@ -728,6 +737,450 @@ func _testar_cartas_layout() -> void:
 	main.queue_free()
 	await process_frame
 	print("Cartas (layout 1 e 2 humanos): ok")
+
+
+# ------------------------------------------------------------------ Torre da Tormenta
+
+func _perto(a: float, b: float, tol := 0.01) -> bool:
+	return absf(a - b) <= tol
+
+
+func _testar_bot_muito_dificil() -> void:
+	var P: Dictionary = _bot_script.PARAMS
+	var d = _bot_script.Dificuldade
+	if P.size() != 4 or _bot_script.NOMES.size() != 4:
+		_falha("bot: esperava 4 dificuldades em PARAMS e NOMES")
+	var mdif: Dictionary = P[d.MUITO_DIFICIL]
+	if not (_perto(mdif["reacao"], 0.05) and mdif["erro"] == 0.0 and mdif["portas"] and mdif["foge"] and mdif["melhor_melhoria"] == 1.0):
+		_falha("bot: parâmetros do MUITO_DIFICIL errados: %s" % [mdif])
+	# As três antigas continuam iguais
+	if not (_perto(P[d.FACIL]["reacao"], 0.5) and _perto(P[d.FACIL]["erro"], 0.2) and not P[d.FACIL]["portas"] \
+			and _perto(P[d.NORMAL]["reacao"], 0.25) and _perto(P[d.NORMAL]["erro"], 0.07) and _perto(P[d.NORMAL]["melhor_melhoria"], 0.7) \
+			and _perto(P[d.DIFICIL]["reacao"], 0.1) and _perto(P[d.DIFICIL]["erro"], 0.02) and P[d.DIFICIL]["melhor_melhoria"] == 1.0):
+		_falha("bot: as dificuldades antigas foram alteradas")
+	if d.MUITO_DIFICIL != 3 or d.DIFICIL != 2 or d.FACIL != 0:
+		_falha("bot: valores do enum mudaram")
+	print("Bot (MUITO_DIFICIL e as três antigas): ok")
+
+
+func _evento_clique(pos: Vector2) -> InputEventMouseButton:
+	var e := InputEventMouseButton.new()
+	e.button_index = MOUSE_BUTTON_LEFT
+	e.pressed = true
+	e.position = pos
+	return e
+
+
+func _testar_menu_navegacao() -> void:
+	## Menu: SINGLE PLAYER > (TORRE > personagem > dificuldade | CONTRA A CPU > dificuldade),
+	## DUELO > (LOCAL | REDE), OPÇÕES; "voltar" sobe um nível; MUITO DIFÍCIL trancado.
+	var jogo = root.get_node("Jogo")
+	var desbloqueadas_antes: Array[String] = jogo.torre_desbloqueada.duplicate()
+	jogo.torre_desbloqueada.clear()
+	var menu = load("res://scenes/menu.tscn").instantiate()
+	root.add_child(menu)
+	await process_frame
+	var eventos: Array = []
+	menu.jogar.connect(func() -> void: eventos.append(["jogar", jogo.solo, jogo.dificuldade]))
+	menu.jogar_rede.connect(func() -> void: eventos.append(["rede"]))
+	menu.jogar_torre.connect(func(c: int, d: int) -> void: eventos.append(["torre", c, d]))
+	if menu.PRINCIPAL != ["SINGLE PLAYER", "DUELO", "OPÇÕES"] or menu.SINGLE != ["TORRE DA TORMENTA", "CONTRA A CPU"] \
+			or menu.DUELO != ["LOCAL", "REDE"] or menu.DIFICULDADES.size() != 3 or menu.DIFICULDADES_TORRE != ["NORMAL", "DIFÍCIL", "MUITO DIFÍCIL"]:
+		_falha("menu: listas de opções erradas")
+	if menu._tela != "principal":
+		_falha("menu: deveria abrir na tela principal")
+	# SINGLE PLAYER > CONTRA A CPU > dificuldade
+	menu._sel = 0
+	menu._confirmar()
+	if menu._tela != "single":
+		_falha("menu: SINGLE PLAYER não abriu a tela single (%s)" % menu._tela)
+	menu._sel = 1
+	menu._confirmar()
+	if menu._tela != "dificuldade" or not jogo.solo:
+		_falha("menu: CONTRA A CPU deveria abrir a dificuldade")
+	menu._sel = 2
+	menu._confirmar()
+	if eventos != [["jogar", true, 2]]:
+		_falha("menu: CPU difícil → %s" % [eventos])
+	menu._voltar()
+	if menu._tela != "single" or menu._sel != 1:
+		_falha("menu: voltar da dificuldade deveria ir para single/CONTRA A CPU (%s, %d)" % [menu._tela, menu._sel])
+	jogo.dificuldade = 1
+	menu._voltar()
+	if menu._tela != "principal" or menu._sel != 0:
+		_falha("menu: voltar de single deveria ir para a principal")
+	menu._voltar()
+	if menu._tela != "principal":
+		_falha("menu: voltar na principal não deveria sair dela")
+	# DUELO
+	eventos.clear()
+	menu._sel = 1
+	menu._confirmar()
+	if menu._tela != "duelo":
+		_falha("menu: DUELO não abriu a tela duelo")
+	menu._sel = 0
+	menu._confirmar()
+	if eventos.size() != 1 or eventos[0][0] != "jogar" or eventos[0][1]:
+		_falha("menu: DUELO > LOCAL deveria emitir jogar com solo = false (%s)" % [eventos])
+	menu._sel = 1
+	menu._confirmar()
+	if eventos.size() != 2 or eventos[1] != ["rede"]:
+		_falha("menu: DUELO > REDE deveria emitir jogar_rede (%s)" % [eventos])
+	menu._voltar()
+	if menu._tela != "principal" or menu._sel != 1:
+		_falha("menu: voltar de duelo deveria ir para a principal/DUELO")
+	# OPÇÕES
+	menu._sel = 2
+	menu._confirmar()
+	if menu._painel == null:
+		_falha("menu: OPÇÕES não abriu o painel")
+	else:
+		menu._painel.queue_free()
+		menu._painel = null
+	# TORRE > personagem > dificuldade (MUITO DIFÍCIL trancado até vencer com o personagem)
+	eventos.clear()
+	menu._mudar_tela("principal", 0)
+	menu._confirmar()
+	menu._sel = 0
+	menu._confirmar()
+	if menu._tela != "personagem" or menu._opcoes() != ["ARQUEIRO", "ORC", "MAGO", "REI"]:
+		_falha("menu: TORRE DA TORMENTA deveria abrir a escolha de personagem (%s %s)" % [menu._tela, menu._opcoes()])
+	menu._sel = 2  # mago
+	menu._confirmar()
+	if menu._tela != "torre_dif" or menu._personagem != 2:
+		_falha("menu: personagem escolhido não levou à dificuldade da torre")
+	menu._sel = 2
+	menu._confirmar()
+	if not eventos.is_empty() or menu._tela != "torre_dif" or not menu._bloqueada(2) or menu._bloqueada(1):
+		_falha("menu: MUITO DIFÍCIL deveria estar trancado para o Mago (%s)" % [eventos])
+	jogo.torre_desbloqueada.append("orc")  # outro personagem desbloqueado não vale para o Mago
+	if not menu._bloqueada(2):
+		_falha("menu: o desbloqueio do Orc não deveria valer para o Mago")
+	jogo.torre_desbloqueada.append("mago")
+	menu._confirmar()
+	menu._sel = 0
+	menu._confirmar()
+	menu._sel = 1
+	menu._confirmar()
+	if eventos != [["torre", 2, 2], ["torre", 2, 0], ["torre", 2, 1]]:
+		_falha("menu: torre emitiu %s" % [eventos])
+	menu._voltar()
+	if menu._tela != "personagem" or menu._sel != 2:
+		_falha("menu: voltar da dificuldade da torre deveria ir para o personagem (%s, %d)" % [menu._tela, menu._sel])
+	# Clique/toque: opção e botão VOLTAR
+	menu._mudar_tela("principal", 0)
+	var desl: Vector2 = menu._deslocamento()
+	menu._gui_input(_evento_clique(menu._rect_opcao(1).get_center() + desl))
+	if menu._tela != "duelo":
+		_falha("menu: clique em DUELO não abriu a tela")
+	menu._gui_input(_evento_clique(menu._rect_voltar().get_center() + desl))
+	if menu._tela != "principal":
+		_falha("menu: clique em VOLTAR não subiu um nível")
+	menu._mudar_tela("personagem", 0)
+	menu._gui_input(_evento_clique(Vector2(menu._x_classe(menu.size.x / 2.0, 3), 100.0) + desl))
+	if menu._tela != "torre_dif" or menu._personagem != 3:
+		_falha("menu: clique no personagem (Rei) não o escolheu")
+	# Esc/B (menu_voltar) sobe um nível
+	Input.action_press("menu_voltar")
+	await process_frame
+	Input.action_release("menu_voltar")
+	if menu._tela != "personagem":
+		_falha("menu: menu_voltar não subiu um nível (%s)" % menu._tela)
+	menu.queue_free()
+	jogo.torre_desbloqueada = desbloqueadas_antes
+	await process_frame
+	print("Menu (single, duelo, torre, voltar, cadeado): ok")
+
+
+func _esperar_andar(main, andar: int) -> Node:
+	## Espera o main montar a partida do andar (as trocas de tela são adiadas).
+	for i in 900:
+		await process_frame
+		var a = main._atual
+		if a != null and a.get("torre") != null and not a.torre.is_empty() and a.torre["andar"] == andar:
+			await process_frame
+			return a
+	_falha("a torre não chegou ao andar %d" % andar)
+	return null
+
+
+func _esperar_tela_fim(main) -> Node:
+	for i in 900:
+		await process_frame
+		if main._atual != null and main._atual.has_signal("de_novo"):
+			return main._atual
+	_falha("a tela final da torre não apareceu")
+	return null
+
+
+func _testar_torre() -> void:
+	## Campanha completa pelo main com vitórias forçadas (oponente com vida 0).
+	var jogo = root.get_node("Jogo")
+	var desbloqueadas_antes: Array[String] = jogo.torre_desbloqueada.duplicate()
+	jogo.arquivo_opcoes = "user://opcoes_teste_torre.cfg"
+	jogo.torre_desbloqueada.clear()
+	# (a) ordem dos adversários
+	for semente in 50:
+		var t = _torre_script.new()
+		t.comecar(1, 0, semente)
+		var sub: Array = t.ordem.slice(1, 5)
+		var fin: Array = t.ordem.slice(5, 9)
+		sub.sort()
+		fin.sort()
+		if t.ordem.size() != 9 or t.ordem[0] != -1 or sub != [0, 1, 2, 3] or fin != [0, 1, 2, 3]:
+			_falha("torre: ordem inválida %s" % [t.ordem])
+		t.free()
+	var ordens := {}
+	for semente in 30:
+		var t = _torre_script.new()
+		t.comecar(0, 0, semente)
+		ordens[str(t.ordem)] = true
+		t.free()
+	if ordens.size() < 5:
+		_falha("torre: a ordem dos adversários não varia (%d ordens em 30 sementes)" % ordens.size())
+
+	var main = load("res://scenes/main.tscn").instantiate()
+	root.add_child(main)
+	await process_frame
+	main._iniciar_torre(1, 0)  # Orc, NORMAL
+	var torre = main._torre
+	var p = await _esperar_andar(main, 1)
+	if p == null:
+		main.queue_free()
+		return
+	var classe_jogador := 1
+	var nivel_jogador := [1, 2, 3, 4, 5, 6, 6, 6, 6]
+	var nivel_cpu := [1, 3, 4, 5, 6, 7, 7, 7, 7]
+	var vida_antes := [0.2, 0.4, 0.5, 0.65, 0.1, 0.6, 0.35, 0.8, 0.5]
+	var vida_esperada := [0.0, 0.5, 0.7, 0.8, 0.95, 0.9, 0.6, 0.35, 0.8]  # no começo de cada andar (índice 0 = andar 1, não usado)
+	var classes_cpu: Array[int] = []
+	var dano_somado := 0.0
+	for a in range(1, 10):
+		var eu = p.jogadores[1]
+		var cpu = p.jogadores[2]
+		var rotulo := "torre andar %d" % a
+		if p.torre["andar"] != a or p.torre["final"] != (a > 5):
+			_falha("%s: dados do andar errados %s" % [rotulo, p.torre])
+		# níveis, classes, vida, melhorias
+		if eu.nivel != nivel_jogador[a - 1]:
+			_falha("%s: jogador nível %d (esperava %d)" % [rotulo, eu.nivel, nivel_jogador[a - 1]])
+		if cpu.nivel != nivel_cpu[a - 1]:
+			_falha("%s: CPU nível %d (esperava %d)" % [rotulo, cpu.nivel, nivel_cpu[a - 1]])
+		if a >= 2 and cpu.nivel != eu.nivel + 1:
+			_falha("%s: CPU deveria ter o nível do jogador + 1" % rotulo)
+		if a == 1:
+			if not eu.eh_recruta or not cpu.eh_recruta or eu.indice_classe() != -1 or cpu.indice_classe() != -1:
+				_falha("%s: o andar 1 é Recruta x Recruta" % rotulo)
+		else:
+			if eu.eh_recruta or eu.indice_classe() != classe_jogador:
+				_falha("%s: o jogador deveria ser o personagem escolhido (índice %d)" % [rotulo, eu.indice_classe()])
+			if cpu.eh_recruta or cpu.indice_classe() != torre.ordem[a - 1]:
+				_falha("%s: CPU com a classe errada" % rotulo)
+			classes_cpu.append(cpu.indice_classe())
+			if cpu.historico.size() != maxi(0, cpu.nivel - 2):
+				_falha("%s: CPU com %d melhorias (nível %d)" % [rotulo, cpu.historico.size(), cpu.nivel])
+			if not _perto(float(eu.vida) / eu.vida_max, vida_esperada[a - 1], 0.015):
+				_falha("%s: vida do jogador %.3f no começo (esperava %.3f)" % [rotulo, eu.vida / eu.vida_max, vida_esperada[a - 1]])
+		if not _perto(cpu.vida, cpu.vida_max):
+			_falha("%s: a CPU deveria começar com a vida cheia" % rotulo)
+		if eu.escolhas.size() != (1 if (a >= 3 and a <= 6) else 0):
+			_falha("%s: %d escolhas de melhoria pendentes" % [rotulo, eu.escolhas.size()])
+		if cpu.controle.get_script() != _bot_script or cpu.controle.dificuldade != _bot_script.Dificuldade.NORMAL:
+			_falha("%s: CPU deveria ser bot NORMAL" % rotulo)
+		# regras da partida
+		if p.tempo_restante != 90.0 or p.monstros_ligados or p.itens_ligados or p.morte_subita_ligada or p.regen or p.xp_ligado:
+			_falha("%s: flags da partida erradas" % rotulo)
+		if p.get_tree().get_nodes_in_group("alvo").size() != 2:
+			_falha("%s: deveria haver só os 2 lutadores (sem monstros)" % rotulo)
+		# apresentação do andar e escolha de melhoria antes da contagem
+		if a == 3:
+			for i in 30:
+				await process_frame
+			if p.contagem != 3.0 or not p.espera_inicio():
+				_falha("%s: a contagem não deveria começar antes da escolha da melhoria" % rotulo)
+			p.escolher(1, 0)
+			if not eu.escolhas.is_empty() or eu.historico.size() != 1:
+				_falha("%s: a escolha da melhoria não foi aplicada" % rotulo)
+			for i in 150:
+				await process_frame
+			if p.contagem >= 3.0:
+				_falha("%s: a contagem deveria ter começado depois da apresentação" % rotulo)
+		elif a == 2:
+			for i in 60:
+				await process_frame
+			if p.contagem != 3.0 or p.intro_t <= 0.0:
+				_falha("%s: a apresentação do andar deveria segurar a contagem" % rotulo)
+		elif a >= 4 and a <= 6:
+			p.escolher(1, 1)
+		# estatísticas: um golpe de 10 de dano base na CPU
+		var antes: float = cpu.vida
+		cpu.receber_dano(10.0, eu)
+		var tirou: float = antes - cpu.vida
+		if tirou <= 0.0 or not _perto(eu.dano_causado, tirou, 0.001) or not _perto(cpu.dano_recebido, tirou, 0.001) or eu.maior_golpe < tirou - 0.001:
+			_falha("%s: estatísticas de dano erradas (tirou %.3f, causado %.3f)" % [rotulo, tirou, eu.dano_causado])
+		dano_somado += tirou
+		# o nível não sobe por XP (abater lacaios, por exemplo)
+		var nivel_antes: int = eu.nivel
+		eu.ganhar_xp(500)
+		if eu.nivel != nivel_antes or eu.xp != 0:
+			_falha("%s: XP não deveria contar na torre" % rotulo)
+		eu.vida = eu.vida_max * vida_antes[a - 1]
+		# vence o andar
+		cpu.receber_dano(99999.0, eu)
+		dano_somado += cpu.dano_recebido - tirou
+		if a < 9:
+			p = await _esperar_andar(main, a + 1)
+		else:
+			p = await _esperar_tela_fim(main)
+		if p == null:
+			main.queue_free()
+			return
+	var perm := classes_cpu.slice(0, 4)
+	perm.sort()
+	var perm2 := classes_cpu.slice(4, 8)
+	perm2.sort()
+	if perm != [0, 1, 2, 3] or perm2 != [0, 1, 2, 3]:
+		_falha("torre: andares 2-5 e 6-9 deveriam ter as 4 classes cada (%s)" % [classes_cpu])
+	# Campeão
+	if torre.estado != "campeao" or torre.abates != 9 or torre.nivel_final != 6 or torre.melhorias_finais.size() != 4:
+		_falha("torre: estado final errado (%s, abates %d, nível %d, melhorias %s)" % [torre.estado, torre.abates, torre.nivel_final, torre.melhorias_finais])
+	if torre.dano_causado <= 0.0 or torre.dano_recebido != 0.0 or torre.tempo_total < 0.0 or torre.maior_golpe <= 0.0:
+		_falha("torre: estatísticas finais erradas (causado %.1f, tempo %.1f)" % [torre.dano_causado, torre.tempo_total])
+	if not torre.desbloqueou_agora or not jogo.torre_muito_dificil("orc") or jogo.torre_muito_dificil("arqueiro"):
+		_falha("torre: vencer deveria desbloquear MUITO DIFÍCIL só para o Orc")
+	var cfg := ConfigFile.new()
+	if cfg.load(jogo.arquivo_opcoes) != OK or not cfg.get_value("torre", "muito_dificil_orc", false) or cfg.get_value("torre", "muito_dificil_mago", false):
+		_falha("torre: o desbloqueio não foi salvo no arquivo")
+	jogo._carregar_opcoes()
+	if not jogo.torre_muito_dificil("orc") or jogo.torre_desbloqueada.size() != 1:
+		_falha("torre: o desbloqueio não foi lido de volta (%s)" % [jogo.torre_desbloqueada])
+	if main._atual.torre != torre:
+		_falha("tela final: não recebeu a torre")
+	if main._atual._linhas().size() != 6 or main._atual._rotulos() != ["JOGAR DE NOVO", "MENU"] or main._atual.formatar_tempo(125.4) != "2:05":
+		_falha("tela final: linhas/rótulos do campeão errados")
+	# Vencer de novo com o personagem já desbloqueado: sem o aviso
+	main._atual.de_novo.emit()
+	p = await _esperar_andar(main, 1)
+	torre = main._torre
+	if torre.andar != 1 or torre.personagem != 1 or torre.dificuldade != 0 or torre.estado != "andar" or torre.dano_causado != 0.0:
+		_falha("torre: TENTAR DE NOVO deveria recomeçar do zero com o mesmo personagem e dificuldade")
+	torre.andar = 9
+	torre.jogador = {"classe": 1, "nivel": 6, "historico": [], "vida": 1.0}
+	main._nova_partida(torre.config_andar())
+	p = await _esperar_andar(main, 9)
+	p.jogadores[2].receber_dano(99999.0, p.jogadores[1])
+	var fim = await _esperar_tela_fim(main)
+	if torre.estado != "campeao" or torre.desbloqueou_agora:
+		_falha("torre: segunda vitória não deveria mostrar o desbloqueio de novo")
+	# Derrota → game over → TENTAR DE NOVO / MENU
+	fim.de_novo.emit()
+	p = await _esperar_andar(main, 1)
+	torre = main._torre
+	torre.andar = 4
+	torre.jogador = {"classe": 1, "nivel": 4, "historico": [], "vida": 1.0}
+	main._nova_partida(torre.config_andar())
+	p = await _esperar_andar(main, 4)
+	p.jogadores[1].receber_dano(99999.0, p.jogadores[2])
+	fim = await _esperar_tela_fim(main)
+	if torre.estado != "game_over" or torre.andar_alcancado != 4 or torre.abates != 0:
+		_falha("torre: derrota deveria levar ao game over no andar 4 (%s, %d)" % [torre.estado, torre.andar_alcancado])
+	if fim._rotulos() != ["TENTAR DE NOVO", "MENU"]:
+		_falha("tela final: o game over deveria oferecer TENTAR DE NOVO e MENU")
+	fim.de_novo.emit()
+	p = await _esperar_andar(main, 1)
+	if main._torre == null or main._torre.andar != 1 or main._torre.personagem != 1:
+		_falha("torre: depois do game over, TENTAR DE NOVO deveria recomeçar")
+	# Pausa durante a luta funciona; voltar ao menu encerra a torre
+	jogo.pausa_pedida.emit()
+	await process_frame
+	if not p.pausado:
+		_falha("torre: a pausa não abriu")
+	p.voltar.emit()
+	for i in 4:
+		await process_frame
+	if main._torre != null or main._atual == null or not main._atual.has_signal("jogar_torre"):
+		_falha("torre: voltar ao menu pela pausa deveria encerrar a torre")
+	# Game over → MENU
+	main._iniciar_torre(0, 1)
+	p = await _esperar_andar(main, 1)
+	var dif_cpu = p.jogadores[2].controle.dificuldade
+	p.jogadores[1].receber_dano(99999.0, p.jogadores[2])
+	fim = await _esperar_tela_fim(main)
+	if main._torre.estado != "game_over" or dif_cpu != _bot_script.Dificuldade.DIFICIL:
+		_falha("torre: derrota no andar 1 / dificuldade DIFÍCIL (%s)" % main._torre.estado)
+	fim.menu.emit()
+	for i in 4:
+		await process_frame
+	if main._torre != null or not main._atual.has_signal("jogar_torre"):
+		_falha("torre: MENU do game over não voltou ao menu")
+	# MUITO DIFÍCIL usa o bot MUITO_DIFICIL
+	main._iniciar_torre(2, 2)
+	p = await _esperar_andar(main, 1)
+	if p.jogadores[2].controle.dificuldade != _bot_script.Dificuldade.MUITO_DIFICIL:
+		_falha("torre: dificuldade 2 deveria usar o bot MUITO_DIFICIL")
+	main.queue_free()
+	await process_frame
+	# Restaura o arquivo de opções do jogador
+	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://opcoes_teste_torre.cfg"))
+	jogo.arquivo_opcoes = jogo.ARQUIVO_OPCOES
+	jogo.torre_desbloqueada = desbloqueadas_antes
+	print("Torre (9 andares, níveis, vida, melhorias, campeão, game over, desbloqueio): ok")
+
+
+func _testar_torre_fim_do_tempo() -> void:
+	## Sem Morte Súbita: no fim dos 90 s vence quem tem maior % de vida; empate = CPU.
+	## Também: sem regeneração lenta, sem monstros, sem itens, sem a Bola.
+	var main = load("res://scenes/main.tscn").instantiate()
+	root.add_child(main)
+	await process_frame
+	var casos := [["jogador na frente", 0.8, 0.5, 1], ["CPU na frente", 0.3, 0.6, 2], ["empate", 0.5, 0.5, 2]]
+	for c in casos:
+		var t = _torre_script.new()
+		t.comecar(0, 1, 7)
+		t.andar = 3
+		t.jogador = {"classe": 0, "nivel": 3, "historico": [], "vida": 1.0}
+		var config: Dictionary = t.config_andar()
+		main._nova_partida(config)
+		await process_frame
+		var p = main._atual
+		if p.torre.is_empty() or p.tempo_restante != 90.0:
+			_falha("fim do tempo (%s): partida da torre não montou" % c[0])
+			continue
+		var eu = p.jogadores[1]
+		var cpu = p.jogadores[2]
+		eu.vida = eu.vida_max * c[1]
+		cpu.vida = cpu.vida_max * c[2]
+		var vida_eu: float = eu.vida
+		# começa a luta sem ninguém agindo; força itens/monstros a "vencerem" o relógio
+		p.contagem = -5.0
+		p._congelar(false)
+		eu.ativo = false
+		cpu.ativo = false
+		eu._sem_dano = 100.0
+		cpu._sem_dano = 100.0
+		p._t_monstro = 100.0
+		p._t_item = 100.0
+		p.momentos_bola.clear()
+		p.momentos_bola.append(p.tempo_restante)
+		for i in 20:
+			await physics_frame
+		if not _perto(eu.vida, vida_eu, 0.0001):
+			_falha("fim do tempo (%s): a vida regenerou na torre (%.2f → %.2f)" % [c[0], vida_eu, eu.vida])
+		if p.get_tree().get_nodes_in_group("alvo").size() != 2 or not p.get_tree().get_nodes_in_group("item").is_empty():
+			_falha("fim do tempo (%s): apareceram monstros ou itens" % c[0])
+		p.tempo_restante = 0.01
+		for i in 5:
+			await physics_frame
+		if not p.fim or p.vencedor != c[3] or p.morte_subita:
+			_falha("fim do tempo (%s): vencedor %d, fim %s, súbita %s (esperava %d, sem súbita)" % [c[0], p.vencedor, p.fim, p.morte_subita, c[3]])
+		# O controlador soma o tempo e decide: vitória avança, derrota/empate = game over
+		t.registrar(p.vencedor, p)
+		if not _perto(t.tempo_total, 89.99, 0.1) or t.estado != ("andar" if c[3] == 1 else "game_over") or t.andar != (4 if c[3] == 1 else 3):
+			_falha("fim do tempo (%s): controlador com estado %s, andar %d, tempo %.2f" % [c[0], t.estado, t.andar, t.tempo_total])
+		t.free()
+	main.queue_free()
+	await process_frame
+	print("Torre (fim do tempo por % de vida, empate = CPU, sem regen/monstros/itens): ok")
 
 
 func jogo_melhoria(l, id: String) -> void:
