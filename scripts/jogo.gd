@@ -26,9 +26,15 @@ var botoes_tela := false
 var tutorial_visto := false
 const ARQUIVO_OPCOES := "user://opcoes.cfg"
 
-## Mapeamento "cru" estilo Xbox (xpad), usado quando o navegador não diz que o
-## controle é "standard" e o Godot não o conhece (o campo platform é ignorado
-## por add_joy_mapping, então não é preciso informá-lo).
+## Mapeamentos para controles que o Godot não conhece (o campo platform é
+## ignorado por add_joy_mapping, então não é preciso informá-lo).
+## Ordem "padrão" do navegador, mas sem a etiqueta mapping="standard" (o Brave
+## esconde a etiqueta; Chrome/Edge às vezes também). Os gatilhos chegam como
+## botões 6 e 7, porque o Godot só os converte em eixo quando há a etiqueta.
+const MAPEAMENTO_PADRAO := "a:b0,b:b1,x:b2,y:b3,leftshoulder:b4,rightshoulder:b5," \
+		+ "lefttrigger:b6,righttrigger:b7,back:b8,start:b9,leftstick:b10,rightstick:b11," \
+		+ "dpup:b12,dpdown:b13,dpleft:b14,dpright:b15,guide:b16,leftx:a0,lefty:a1,rightx:a2,righty:a3"
+## Ordem "crua" estilo Xbox (xpad), como o Firefox entrega no Linux.
 const MAPEAMENTO_XBOX := "a:b0,b:b1,y:b3,x:b2,start:b7,guide:b8,back:b6,leftstick:b9,rightstick:b10," \
 		+ "leftshoulder:b4,rightshoulder:b5,dpup:-a7,dpleft:-a6,dpdown:+a7,dpright:+a6," \
 		+ "leftx:a0,lefty:a1,rightx:a3,righty:a4,lefttrigger:a2,righttrigger:a5"
@@ -99,13 +105,41 @@ func menu_pulso(acao: String) -> bool:
 # ------------------------------------------------------------------ Controles
 
 static func mapeamento_xbox(guid: String, nome: String) -> String:
-	## Linha de mapeamento SDL para um controle "compatível com Xbox" que o Godot não conhece.
+	## Linha de mapeamento SDL (layout cru estilo Xbox) para um controle desconhecido.
+	return _linha_mapeamento(guid, nome, MAPEAMENTO_XBOX)
+
+
+static func mapeamento_padrao(guid: String, nome: String) -> String:
+	## Linha de mapeamento SDL (ordem padrão do navegador, sem a etiqueta "standard").
+	return _linha_mapeamento(guid, nome, MAPEAMENTO_PADRAO)
+
+
+static func _linha_mapeamento(guid: String, nome: String, campos: String) -> String:
 	if guid.strip_edges() == "":
 		return ""
 	var limpo := nome.replace(",", " ").replace("\n", " ").strip_edges()
 	if limpo == "":
 		limpo = "Controle"
-	return "%s,%s,%s" % [guid.strip_edges(), limpo, MAPEAMENTO_XBOX]
+	return "%s,%s,%s" % [guid.strip_edges(), limpo, campos]
+
+
+static func layout_por_formato(botoes: int, eixos: int) -> String:
+	## Decide o layout pelo formato que o navegador informa: a ordem padrão tem
+	## 16+ botões e até 4 eixos; a crua estilo Xbox, ~11 botões e 6–8 eixos.
+	if botoes >= 16 and eixos <= 4:
+		return "padrao"
+	return "xbox"
+
+
+func _formato_no_navegador(dev: int) -> Vector2i:
+	## (botões, eixos) do controle segundo o navegador; (-1, -1) fora do navegador.
+	if not OS.has_feature("web"):
+		return Vector2i(-1, -1)
+	var r = JavaScriptBridge.eval("(function(){var p=(navigator.getGamepads?navigator.getGamepads():[])[%d];return p?(p.buttons.length+','+p.axes.length):''})()" % dev, true)
+	var partes := str(r).split(",")
+	if partes.size() != 2:
+		return Vector2i(-1, -1)
+	return Vector2i(int(partes[0]), int(partes[1]))
 
 
 func _ao_mudar_controle(dev: int, conectado: bool) -> void:
@@ -123,12 +157,21 @@ func _verificar_controle(dev: int) -> void:
 	if Input.is_joy_known(dev):
 		estado_controle[dev] = "reconhecido"
 		return
-	var m := mapeamento_xbox(Input.get_joy_guid(dev), Input.get_joy_name(dev))
+	var formato := _formato_no_navegador(dev)
+	if formato.x < 0:
+		# Fora do navegador o Godot usa o banco de controles do sistema; não mexe.
+		estado_controle[dev] = "desconhecido"
+		return
+	var layout := layout_por_formato(formato.x, formato.y)
+	var guid := Input.get_joy_guid(dev)
+	var nome := Input.get_joy_name(dev)
+	var m := mapeamento_padrao(guid, nome) if layout == "padrao" else mapeamento_xbox(guid, nome)
 	if m == "":
 		return
 	Input.add_joy_mapping(m, true)
-	estado_controle[dev] = "corrigido automaticamente"
-	print("Controle %d (%s): mapeamento estilo Xbox aplicado" % [dev, Input.get_joy_name(dev)])
+	estado_controle[dev] = "corrigido (%s, %d botões, %d eixos)" % [
+			"ordem padrão" if layout == "padrao" else "layout Xbox", formato.x, formato.y]
+	print("Controle %d (%s): %s" % [dev, nome, estado_controle[dev]])
 
 
 func texto_estado_controle(dev: int) -> String:

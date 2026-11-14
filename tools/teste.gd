@@ -488,6 +488,13 @@ func _testar_controle_menus() -> void:
 		_falha("mapeamento_xbox: campos do mapeamento faltando")
 	if m.contains("platform"):
 		_falha("mapeamento_xbox: não deveria ter platform")
+	var mp: String = jogo.mapeamento_padrao("guidfalso123", "Pad")
+	if not ("leftshoulder:b4" in mp and "start:b9" in mp and "righttrigger:b7" in mp and "dpleft:b14" in mp):
+		_falha("mapeamento_padrao: campos errados: %s" % mp)
+	if jogo.layout_por_formato(17, 4) != "padrao" or jogo.layout_por_formato(16, 4) != "padrao":
+		_falha("formato 16/17 botões e 4 eixos deveria ser a ordem padrão")
+	if jogo.layout_por_formato(11, 8) != "xbox" or jogo.layout_por_formato(11, 6) != "xbox":
+		_falha("formato 11 botões e 6/8 eixos deveria ser o layout Xbox")
 	if jogo.mapeamento_xbox("", "x") != "":
 		_falha("mapeamento_xbox: GUID vazio deveria dar string vazia")
 	if jogo.mapeamento_xbox("abc", "").split(",")[1] != "Controle":
