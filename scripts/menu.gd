@@ -1,5 +1,5 @@
 extends Control
-## Menu inicial: SINGLE PLAYER (Torre da Tormenta ou contra a CPU), DUELO
+## Menu inicial: SINGLE PLAYER (Torre da Tormenta ou Arena, contra a CPU), DUELO
 ## (local ou em rede) e opções, com as telas de personagem e dificuldade.
 ## Fica dentro da masmorra: título que cai letra por letra, as classes
 ## correndo numa plataforma e botões em pixel art.
@@ -10,7 +10,7 @@ signal jogar_rede
 signal jogar_torre(personagem: int, dificuldade: int)
 
 const PRINCIPAL := ["SINGLE PLAYER", "DUELO", "OPÇÕES"]
-const SINGLE := ["TORRE DA TORMENTA", "CONTRA A CPU"]
+const SINGLE := ["TORRE DA TORMENTA", "ARENA"]
 const DUELO := ["LOCAL", "REDE"]
 ## Tela de onde o "voltar" leva: [tela, opção selecionada ao chegar]
 ## (a tela da dificuldade da torre volta para o personagem escolhido)

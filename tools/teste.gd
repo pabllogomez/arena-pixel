@@ -1188,7 +1188,7 @@ func _evento_clique(pos: Vector2) -> InputEventMouseButton:
 
 
 func _testar_menu_navegacao() -> void:
-	## Menu: SINGLE PLAYER > (TORRE > personagem > dificuldade | CONTRA A CPU > dificuldade),
+	## Menu: SINGLE PLAYER > (TORRE > personagem > dificuldade | ARENA > dificuldade),
 	## DUELO > (LOCAL | REDE), OPÇÕES; "voltar" sobe um nível; MUITO DIFÍCIL trancado.
 	var jogo = root.get_node("Jogo")
 	var desbloqueadas_antes: Array[String] = jogo.torre_desbloqueada.duplicate()
@@ -1200,12 +1200,12 @@ func _testar_menu_navegacao() -> void:
 	menu.jogar.connect(func() -> void: eventos.append(["jogar", jogo.solo, jogo.dificuldade]))
 	menu.jogar_rede.connect(func() -> void: eventos.append(["rede"]))
 	menu.jogar_torre.connect(func(c: int, d: int) -> void: eventos.append(["torre", c, d]))
-	if menu.PRINCIPAL != ["SINGLE PLAYER", "DUELO", "OPÇÕES"] or menu.SINGLE != ["TORRE DA TORMENTA", "CONTRA A CPU"] \
+	if menu.PRINCIPAL != ["SINGLE PLAYER", "DUELO", "OPÇÕES"] or menu.SINGLE != ["TORRE DA TORMENTA", "ARENA"] \
 			or menu.DUELO != ["LOCAL", "REDE"] or menu.DIFICULDADES.size() != 3 or menu.DIFICULDADES_TORRE != ["NORMAL", "DIFÍCIL", "MUITO DIFÍCIL"]:
 		_falha("menu: listas de opções erradas")
 	if menu._tela != "principal":
 		_falha("menu: deveria abrir na tela principal")
-	# SINGLE PLAYER > CONTRA A CPU > dificuldade
+	# SINGLE PLAYER > ARENA > dificuldade
 	menu._sel = 0
 	menu._confirmar()
 	if menu._tela != "single":
@@ -1213,14 +1213,14 @@ func _testar_menu_navegacao() -> void:
 	menu._sel = 1
 	menu._confirmar()
 	if menu._tela != "dificuldade" or not jogo.solo:
-		_falha("menu: CONTRA A CPU deveria abrir a dificuldade")
+		_falha("menu: ARENA deveria abrir a dificuldade")
 	menu._sel = 2
 	menu._confirmar()
 	if eventos != [["jogar", true, 2]]:
 		_falha("menu: CPU difícil → %s" % [eventos])
 	menu._voltar()
 	if menu._tela != "single" or menu._sel != 1:
-		_falha("menu: voltar da dificuldade deveria ir para single/CONTRA A CPU (%s, %d)" % [menu._tela, menu._sel])
+		_falha("menu: voltar da dificuldade deveria ir para single/ARENA (%s, %d)" % [menu._tela, menu._sel])
 	jogo.dificuldade = 1
 	menu._voltar()
 	if menu._tela != "principal" or menu._sel != 0:
