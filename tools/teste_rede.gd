@@ -57,8 +57,9 @@ func _initialize() -> void:
 		var p = main._atual
 		await create_timer(8.0).timeout
 		_checar(p.jogadores[2].position.distance_to(p.mapa["inicio"][2]) > 20.0, "comandos do convidado não moveram o P2")
-		p.jogadores[2].ganhar_xp(16)
-		p.jogadores[2].ganhar_xp(12)
+		# Exatamente o XP para ganhar a classe e depois subir um nível (uma escolha)
+		p.jogadores[2].ganhar_xp(p.jogadores[2].xp_para_proximo())
+		p.jogadores[2].ganhar_xp(p.jogadores[2].xp_para_proximo())
 		_checar(await _esperar(func(): return p.jogadores[2].escolhas.is_empty(), 8.0), "escolha de melhoria do convidado não chegou")
 		# Itens: efeito de tamanho no convidado e a Bola voando
 		p.jogadores[2].aplicar_efeito("grande")

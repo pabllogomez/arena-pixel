@@ -19,9 +19,9 @@ enum TipoAtaque { FLECHA, CORPO_A_CORPO, MAGIA, INVOCAR }
 
 @export_group("Peso")
 ## Quão rápido chega à velocidade máxima (menor = mais pesado).
-@export var aceleracao := 1000.0
+@export var aceleracao := 1250.0
 ## Quão rápido para ao soltar o direcional (menor = escorrega mais).
-@export var atrito := 1200.0
+@export var atrito := 1500.0
 ## Gravidade da classe (maior = cai mais rápido, pulo mais curto).
 @export var mult_gravidade := 1.0
 ## 0 = empurrado normalmente pelos golpes; 1 = não se mexe.

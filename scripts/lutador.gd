@@ -10,8 +10,10 @@ const GRAVIDADE := 700.0
 const QUEDA_MAX := 360.0
 const TEMPO_COYOTE := 0.1
 const TEMPO_BUFFER := 0.12
-## XP que o Recruta precisa para ganhar a classe (6 monstros iniciais, de 2 XP)
-const XP_PARA_CLASSE := 11
+## XP que o Recruta precisa para ganhar a classe (4 monstros iniciais, de 2 XP)
+const XP_PARA_CLASSE := 8
+## Fração da vida máxima recuperada ao subir de nível
+const CURA_NIVEL := 0.05
 ## Regeneração fora de combate: depois de REGEN_ESPERA s sem tomar dano,
 ## recupera REGEN_TAXA da vida máxima por segundo.
 const REGEN_ESPERA := 5.0
@@ -619,7 +621,7 @@ func ganhar_xp(qtd: int) -> void:
 	while xp >= xp_para_proximo():
 		xp -= xp_para_proximo()
 		nivel += 1
-		curar(vida_max * 0.15)
+		curar(vida_max * CURA_NIVEL)
 		Jogo.tocar("nivel")
 		partida.fx("nivel", position)
 		if eh_recruta:

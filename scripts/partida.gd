@@ -38,6 +38,8 @@ const INTERVALO_MONSTRO_RECRUTA := 3.0
 const MAX_MONSTROS_RECRUTA := 5
 ## Dano entre jogadores (fração do dano normal)
 const PVP_BASE := 0.4
+## Aumento geral do dano PvP (vale para tudo, inclusive Recruta e Morte Súbita)
+const PVP_GERAL := 1.35
 ## Recruta atacando jogador
 const PVP_RECRUTA_ATACA := 0.25
 ## Jogador com classe atacando Recruta
@@ -85,7 +87,9 @@ var _t_monstro := 0.0
 # Itens
 const INTERVALO_ITEM := 20.0
 const MAX_ITENS := 2
-const DURACAO_BOLA := 15.0
+## A Bola da troca aparece uma vez, depois deste tempo de partida, no topo
+## central da arena, e fica lá até alguém pegar ou começar a Morte Súbita.
+const MOMENTO_BOLA := 120.0
 var _t_item := 0.0
 var itens_ligados := true  ## (só os testes de equilíbrio desligam)
 ## Momentos (tempo restante, em segundos) em que a Bola aparece; sorteados por partida
@@ -341,7 +345,7 @@ func mult_pvp(atacante: Lutador, alvo: Lutador) -> float:
 		m *= PVP_RECRUTA_ATACA
 	elif alvo.eh_recruta:
 		m *= PVP_CONTRA_RECRUTA
-	return m
+	return m * PVP_GERAL
 
 
 # ------------------------------------------------------------------ Classes
@@ -461,6 +465,10 @@ func _iniciar_morte_subita() -> void:
 	tempo_morte_subita = 0.0
 	Jogo.musica_tensa(true)
 	_fechar_portas()
+	# A Bola da troca não sobrevive à Morte Súbita
+	for it in get_tree().get_nodes_in_group("item"):
+		if it.tipo == "bola":
+			it.queue_free()
 	for l in jogadores.values():
 		if l.vivo and l.eh_recruta:
 			sortear_classe(l)
@@ -739,22 +747,12 @@ func _exit_tree() -> void:
 
 # ------------------------------------------------------------------ Itens
 
-func _sortear_momentos_bola(rng: RandomNumberGenerator) -> void:
-	## 2 ou 3 aparições da Bola em momentos aleatórios, separados por 30+ s.
+func _sortear_momentos_bola(_rng: RandomNumberGenerator) -> void:
+	## Uma única aparição da Bola, aos MOMENTO_BOLA s de partida (em tempo restante).
 	momentos_bola.clear()
-	var qtd := rng.randi_range(2, 3)
-	for tentativa in 40:
-		if momentos_bola.size() >= qtd:
-			break
-		var t := rng.randf_range(20.0, 140.0)
-		var longe := true
-		for m in momentos_bola:
-			if absf(m - t) < 30.0:
-				longe = false
-		if longe:
-			momentos_bola.append(t)
-	momentos_bola.sort()
-	momentos_bola.reverse()  # do mais cedo (mais tempo restante) para o mais tarde
+	var t := tempo_restante - MOMENTO_BOLA
+	if t > 0.0:
+		momentos_bola.append(t)
 
 
 func _atualizar_itens(delta: float) -> void:
@@ -787,7 +785,11 @@ func _criar_item(tipo: String) -> void:
 	var it := Item.new()
 	it.tipo = tipo
 	if tipo == "bola":
-		it.duracao = DURACAO_BOLA
+		it.duracao = INF  # some só quando alguém pega ou começa a Morte Súbita
+		it.position = _ponto_topo_central() + Vector2(0, -2)
+		entidades.add_child(it)
+		criar_brilho(it.position)
+		return
 	# Nasce longe dos jogadores
 	var pontos: Array = mapa["pontos_monstro"]
 	var pos: Vector2 = pontos.pick_random()
@@ -803,6 +805,22 @@ func _criar_item(tipo: String) -> void:
 	it.position = pos + Vector2(0, -2)
 	entidades.add_child(it)
 	criar_brilho(it.position)
+
+
+func _ponto_topo_central() -> Vector2:
+	## Ponto alcançável (onde nascem monstros) no andar mais alto da arena,
+	## o mais perto possível do centro na horizontal.
+	var pontos: Array = mapa["pontos_monstro"]
+	var topo := INF
+	for p in pontos:
+		topo = minf(topo, (p as Vector2).y)
+	var meio := GeradorArena.LARGURA / 2.0
+	var melhor := Vector2(INF, INF)
+	for p in pontos:
+		var v: Vector2 = p
+		if v.y <= topo + TAM * 2.0 and absf(v.x - meio) < absf(melhor.x - meio):
+			melhor = v
+	return melhor
 
 
 func _pegar_item(it: Item, l: Lutador) -> void:

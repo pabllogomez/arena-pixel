@@ -30,6 +30,7 @@ func _initialize() -> void:
 		return
 	_testar_mapas()
 	await _testar_pulos_e_itens()
+	await _testar_dinamica()
 	await _testar_dash()
 	_testar_dash_rede()
 	_testar_mapeamento_controle()
@@ -222,6 +223,44 @@ func _testar_pulos_e_itens() -> void:
 		if not Melhorias.e_especial(l.historico[1]) or Melhorias.ESPECIAIS[l.dados.tipo_ataque]["id"] != l.historico[1]:
 			_falha("a melhoria especial não virou a da classe nova")
 	print("Itens e Bola: ok")
+	main.queue_free()
+	await process_frame
+
+
+func _testar_dinamica() -> void:
+	## Bola única aos 2 min no topo central, que some na Morte Súbita; PvP +35%.
+	var main = load("res://scenes/main.tscn").instantiate()
+	root.add_child(main)
+	await process_frame
+	main._nova_partida({"semente": 31, "tempo": 180.0, "bots": {1: -1, 2: -1}})
+	await process_frame
+	var p = main._atual
+	if p.momentos_bola.size() != 1 or absf(p.momentos_bola[0] - 60.0) > 0.01:
+		_falha("Bola deveria aparecer uma vez com 60 s restantes: %s" % [p.momentos_bola])
+	var pos: Vector2 = p._ponto_topo_central()
+	var topo := INF
+	for q in p.mapa["pontos_monstro"]:
+		topo = minf(topo, (q as Vector2).y)
+	if pos.y > topo + p.TAM * 2.0:
+		_falha("Bola não nasceu no alto da arena (y %.0f, topo %.0f)" % [pos.y, topo])
+	for l in p.jogadores.values():
+		l.eh_recruta = false
+	p._criar_item("bola")
+	var bolas := root.get_tree().get_nodes_in_group("item").filter(func(i): return i.tipo == "bola")
+	if bolas.size() != 1 or bolas[0].position.distance_to(pos) > 4.0:
+		_falha("Bola não apareceu no topo central")
+	p._iniciar_morte_subita()
+	await process_frame
+	if root.get_tree().get_nodes_in_group("item").any(func(i): return is_instance_valid(i) and i.tipo == "bola" and not i.is_queued_for_deletion()):
+		_falha("Bola continuou depois da Morte Súbita")
+	p.morte_subita = false
+	var a = p.jogadores[1]
+	var b = p.jogadores[2]
+	if absf(p.mult_pvp(a, b) - p.PVP_BASE * 1.35) > 0.001:
+		_falha("PvP deveria ser 0,4 x 1,35: %.3f" % p.mult_pvp(a, b))
+	if a.XP_PARA_CLASSE != 8 or a.CURA_NIVEL != 0.05:
+		_falha("Recruta/cura com valores inesperados")
+	print("Dinâmica (Bola, PvP, Recruta): ok")
 	main.queue_free()
 	await process_frame
 
