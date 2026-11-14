@@ -21,7 +21,7 @@ Equilíbrio entre classes (6 confrontos em paralelo, bot difícil x bot difícil
 ```
 GODOT=/caminho/do/godot tools/confrontos.sh 60   # partidas por par
 ```
-Referência atual (60 por par, v0.1): Orc 53%, Rei 52%, Mago 51%, Arqueiro 43%.
+Referência atual (60 por par, depois do dano +35%): Arqueiro 52%, Mago 51%, Rei 50%, Orc 46%.
 
 Rede (duas instâncias, ENet em localhost):
 ```
