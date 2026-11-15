@@ -20,13 +20,22 @@ const TEMPO_FINAL := 240.0
 const CURA_VITORIA := 0.3
 ## Vida máxima recuperada ao entrar na etapa final (no lugar dos 30% do andar 4)
 const CURA_ETAPA_FINAL := 0.5
-const NOMES_DIFICULDADE := ["NORMAL", "DIFÍCIL", "MUITO DIFÍCIL"]
+const NOMES_DIFICULDADE := ["NORMAL", "DIFÍCIL", "INSANO"]
+## Bot da CPU por dificuldade da torre (INSANO = o Difícil "cheio")
 const DIFICULDADES_BOT := [
-	ControleBot.Dificuldade.NORMAL, ControleBot.Dificuldade.DIFICIL, ControleBot.Dificuldade.MUITO_DIFICIL,
+	ControleBot.Dificuldade.NORMAL, ControleBot.Dificuldade.DIFICIL, ControleBot.Dificuldade.DIFICIL,
+]
+## Ajuste da CPU por dificuldade: NORMAL = -1 nível, DIFÍCIL = -0,5 nível, INSANO = sem ajuste.
+## `atributos` multiplica vida, velocidade e dano (inclusive lacaios); `reacao` e `erro`
+## deixam o bot um pouco menos esperto (reação mais lenta, mais erros).
+const AJUSTE_CPU := [
+	{"atributos": 0.90, "reacao": 1.3, "erro": 0.03},
+	{"atributos": 0.95, "reacao": 1.15, "erro": 0.015},
+	{},
 ]
 
 var personagem := 0        ## índice em Jogo.CLASSES
-var dificuldade := 0       ## 0 normal, 1 difícil, 2 muito difícil
+var dificuldade := 0       ## 0 normal, 1 difícil, 2 insano
 ## "andar" (próxima luta), "game_over" ou "campeao"
 var estado := "andar"
 var andar := 1             ## 1 a 5 (5 = etapa final)
@@ -113,6 +122,7 @@ func _estado_cpu(classe: int) -> Dictionary:
 	return {
 		"classe": classe, "nivel": nivel, "vida": 1.0,
 		"dif": DIFICULDADES_BOT[dificuldade], "auto_melhorias": maxi(0, nivel - NIVEL_INICIAL),
+		"ajuste": AJUSTE_CPU[dificuldade],
 	}
 
 

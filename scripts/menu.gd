@@ -28,7 +28,7 @@ const ESPACO_OPCOES := 20.0
 const LARG_OPCAO := 140.0
 const ALT_OPCAO := 17.0
 const DIFICULDADES := ["FÁCIL", "NORMAL", "DIFÍCIL"]
-const DIFICULDADES_TORRE := ["NORMAL", "DIFÍCIL", "MUITO DIFÍCIL"]
+const DIFICULDADES_TORRE := ["NORMAL", "DIFÍCIL", "INSANO"]
 const TITULO := "ARENA PIXEL"
 const TAM_TITULO := 40
 const Y_TITULO := 44.0
@@ -79,7 +79,7 @@ func _opcoes() -> Array:
 
 
 func _bloqueada(i: int) -> bool:
-	## Só MUITO DIFÍCIL da torre tranca (até vencer a torre com o personagem).
+	## Só INSANO da torre tranca (até vencer a torre com o personagem).
 	return _tela == "torre_dif" and i == 2 and not Jogo.torre_muito_dificil(Jogo.CLASSES[_personagem])
 
 

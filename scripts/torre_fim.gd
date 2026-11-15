@@ -1,6 +1,6 @@
 extends Control
 ## Tela final da Torre da Tormenta: GAME OVER (andar alcançado e estatísticas)
-## ou CAMPEÃO (resumo da subida, com o aviso de MUITO DIFÍCIL desbloqueado).
+## ou CAMPEÃO (resumo da subida, com o aviso de INSANO desbloqueado).
 
 signal de_novo
 signal menu
@@ -105,7 +105,7 @@ func _draw() -> void:
 	UI.texto(self, Vector2(cx, 44), sub, UI.P, UI.LUZ)
 	if campeao and torre.desbloqueou_agora:
 		var aceso := int(_t * 3.0) % 2 == 0
-		UI.texto(self, Vector2(cx, 56), "MUITO DIFÍCIL DESBLOQUEADO!", UI.P, UI.VERDE if aceso else UI.BRANCO)
+		UI.texto(self, Vector2(cx, 56), "INSANO DESBLOQUEADO!", UI.P, UI.VERDE if aceso else UI.BRANCO)
 
 	# Painel: personagem à esquerda, estatísticas à direita
 	var painel := Rect2(cx - 190.0, 66.0, 380.0, 138.0)

@@ -1121,7 +1121,7 @@ func _testar_menu_navegacao() -> void:
 	menu.jogar_rede.connect(func() -> void: eventos.append(["rede"]))
 	menu.jogar_torre.connect(func(c: int, d: int) -> void: eventos.append(["torre", c, d]))
 	if menu.PRINCIPAL != ["SINGLE PLAYER", "DUELO", "OPÇÕES"] or menu.SINGLE != ["TORRE DA TORMENTA", "ARENA"] \
-			or menu.DUELO != ["LOCAL", "REDE"] or menu.DIFICULDADES.size() != 3 or menu.DIFICULDADES_TORRE != ["NORMAL", "DIFÍCIL", "MUITO DIFÍCIL"]:
+			or menu.DUELO != ["LOCAL", "REDE"] or menu.DIFICULDADES.size() != 3 or menu.DIFICULDADES_TORRE != ["NORMAL", "DIFÍCIL", "INSANO"]:
 		_falha("menu: listas de opções erradas")
 	if menu._tela != "principal":
 		_falha("menu: deveria abrir na tela principal")
@@ -1558,11 +1558,24 @@ func _testar_torre() -> void:
 		await process_frame
 	if main._torre != null or not main._atual.has_signal("jogar_torre"):
 		_falha("torre: MENU do game over não voltou ao menu")
-	# MUITO DIFÍCIL usa o bot MUITO_DIFICIL
-	main._iniciar_torre(2, 2)
-	p = await _esperar_andar(main, 1)
-	if p.jogadores[2].controle.dificuldade != _bot_script.Dificuldade.MUITO_DIFICIL:
-		_falha("torre: dificuldade 2 deveria usar o bot MUITO_DIFICIL")
+	# INSANO = o Difícil cheio (sem ajuste); NORMAL/DIFÍCIL deixam a CPU mais fraca
+	var vidas := []
+	var reacoes := []
+	for dif_t in 3:
+		main._iniciar_torre(2, dif_t)
+		p = await _esperar_andar(main, 1)
+		var cpu = p.jogadores[2]
+		var esperado = _bot_script.Dificuldade.NORMAL if dif_t == 0 else _bot_script.Dificuldade.DIFICIL
+		if cpu.controle.dificuldade != esperado:
+			_falha("torre: dificuldade %d usou o bot errado" % dif_t)
+		vidas.append(cpu.vida_max)
+		reacoes.append(float(cpu.controle.p["reacao"]))
+	if not (vidas[0] < vidas[1] and vidas[1] < vidas[2]):
+		_falha("torre: vida da CPU deveria crescer NORMAL < DIFÍCIL < INSANO (%s)" % [vidas])
+	if absf(vidas[1] / vidas[2] - 0.95) > 0.01 or absf(vidas[0] / vidas[2] - 0.90) > 0.01:
+		_falha("torre: ajuste de vida da CPU errado (%s)" % [vidas])
+	if not (reacoes[1] > reacoes[2] and absf(reacoes[2] - float(_bot_script.PARAMS[_bot_script.Dificuldade.DIFICIL]["reacao"])) < 0.001):
+		_falha("torre: reação da CPU errada (%s)" % [reacoes])
 	main.queue_free()
 	await process_frame
 	# Restaura o arquivo de opções do jogador

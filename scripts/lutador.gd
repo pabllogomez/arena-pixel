@@ -209,7 +209,25 @@ func importar_estado(e: Dictionary) -> void:
 	for i in int(e.get("auto_melhorias", 0)):
 		var par := Melhorias.sortear(self)
 		Melhorias.aplicar(self, par[ControleBot.indice_melhoria(dados.tipo_ataque, par, ControleBot.PARAMS[e.get("dif", 1)]["melhor_melhoria"])])
+	_aplicar_ajuste(e.get("ajuste", {}))
 	vida = vida_max * clampf(e.get("vida", 1.0), 0.0, 1.0)
+
+
+func _aplicar_ajuste(a: Dictionary) -> void:
+	## Ajuste da CPU na torre (ver Torre.AJUSTE_CPU): atributos menores e bot um
+	## pouco menos esperto. Vazio = sem ajuste.
+	if a.is_empty():
+		return
+	var f: float = a.get("atributos", 1.0)
+	vida_max *= f
+	velocidade *= f
+	dano *= f
+	mult_lacaio *= f
+	if controle is ControleBot:
+		var p: Dictionary = controle.p.duplicate()
+		p["reacao"] = float(p["reacao"]) * float(a.get("reacao", 1.0))
+		p["erro"] = float(p["erro"]) + float(a.get("erro", 0.0))
+		controle.p = p
 
 
 # ------------------------------------------------------------------ Ataque atual

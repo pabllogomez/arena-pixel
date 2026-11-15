@@ -30,7 +30,7 @@ var tutorial_visto := false
 const ARQUIVO_OPCOES := "user://opcoes.cfg"
 ## Arquivo em uso (os testes trocam por outro para não mexer no do jogador)
 var arquivo_opcoes := ARQUIVO_OPCOES
-## Torre da Tormenta: classes (nomes de Jogo.CLASSES) com MUITO DIFÍCIL desbloqueado
+## Torre da Tormenta: classes (nomes de Jogo.CLASSES) com INSANO desbloqueado
 var torre_desbloqueada: Array[String] = []
 
 ## Pausa pedida por Start/Back do controle, Esc ou P (tratada em _input, antes da
