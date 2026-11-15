@@ -97,17 +97,21 @@ func _draw() -> void:
 # ------------------------------------------------------------------ Painel do jogador
 
 func _barra_dash(l: Lutador, bx: float, larg: float, dir: bool) -> void:
-	## Linha de 1 px (y = 19, entre a vida e a experiência) que enche conforme o dash recarrega; pronto = clara e com brilho curto.
+	## Barra da recarga do dash numa aba logo abaixo do painel (4 px): enche em
+	## azul claro enquanto recarrega; pronta = branca pulsando.
 	var f := l.recarga_dash() if l.vivo else 0.0
-	var area := Rect2(bx, 19, larg, 1)
-	draw_rect(area, Color(UI.TINTA, 0.8))
+	var aba := Rect2(bx - 1.0, ALT_PAINEL, larg + 2.0, 6.0)
+	draw_rect(aba, Color(UI.TINTA, 0.92))
+	draw_rect(Rect2(aba.position.x, aba.end.y - 1.0, aba.size.x, 1.0), UI.BORDA.darkened(0.25))
+	var area := Rect2(bx, ALT_PAINEL + 1.0, larg, 4.0)
+	draw_rect(area, Color("1a1c2c"))
 	if f >= 1.0:
-		var brilho := 0.6 + 0.4 * (0.5 + 0.5 * sin(_t * 8.0))
+		var brilho := 0.7 + 0.3 * (0.5 + 0.5 * sin(_t * 8.0))
 		draw_rect(area, Color(UI.BRANCO, brilho))
 	elif f > 0.0:
 		var w := roundf(larg * f)
-		var r := Rect2(bx + larg - w if dir else bx, 19, w, 1)
-		draw_rect(r, Color("73eff7", 0.85))
+		draw_rect(Rect2(bx + larg - w if dir else bx, area.position.y, w, area.size.y), Color("73eff7"))
+
 
 func _rotulo_critico(l: Lutador, x0: float) -> void:
 	## Crítico que este jogador acertou: letras grandes logo abaixo do painel de
@@ -120,7 +124,7 @@ func _rotulo_critico(l: Lutador, x0: float) -> void:
 	var cor: Color = Lutador.COR_CRITICO[l._rotulo_critico]
 	var novo := l._rotulo_t > Lutador.ROTULO_CRITICO_TEMPO - 0.12
 	var larg := UI.largura(texto, UI.M) + 16.0
-	var placa := Rect2(roundf(x0 + LARG_PAINEL / 2.0 - larg / 2.0), ALT_PAINEL + 3.0, larg, 20.0)
+	var placa := Rect2(roundf(x0 + LARG_PAINEL / 2.0 - larg / 2.0), ALT_PAINEL + 9.0, larg, 20.0)
 	UI.moldura(self, placa, Color(UI.TINTA, 0.9), cor.darkened(0.3), cor)
 	UI.texto(self, placa.get_center() + Vector2(0, -1), texto, UI.M, UI.BRANCO if novo else cor)
 

@@ -936,6 +936,10 @@ func _draw() -> void:
 		draw_rect(Rect2(-2 + i, -19 + i, 5 - 2 * i, 1), cor)
 	draw_rect(Rect2(-8, -14, 16, 3), Color("1a1c2c"))
 	draw_rect(Rect2(-7, -13, roundf(14.0 * vida / vida_max), 1), cor)
+	# Recarga do dash logo abaixo da vida (azul claro enchendo; cheia = branca)
+	var fd := recarga_dash()
+	draw_rect(Rect2(-8, -11, 16, 2), Color("1a1c2c"))
+	draw_rect(Rect2(-7, -11, roundf(14.0 * fd), 1), Color.WHITE if fd >= 1.0 else Color("73eff7"))
 
 
 func _desenhar_fantasmas(cor: Color) -> void:
