@@ -224,9 +224,9 @@ func _draw() -> void:
 		UI.botao(self, r, opcoes[i], i == _sel, false, UI.P, _t)
 		if _tela == "personagem" and i < _texturas.size():
 			# Ícone com o sprite do personagem (anda quando selecionado)
-			var quadro := (2 + int(_t * 8.0) % 4) if i == _sel else 0
+			var quadro: int = Lutador.quadro_de("correr", _t) if i == _sel else Lutador.QUADROS["parado"][0]
 			draw_texture_rect_region(_texturas[i], Rect2(r.position.x + 4.0, r.position.y, 16, 16),
-					Rect2(quadro * 16, 0, 16, 16), Color.WHITE if i == _sel else Color(1, 1, 1, 0.7))
+					Rect2(quadro * Lutador.TAM_QUADRO + 2, 1, 16, 16), Color.WHITE if i == _sel else Color(1, 1, 1, 0.7))
 		if _bloqueada(i):
 			if i != _sel:
 				draw_rect(r.grow(-2), Color(UI.TINTA, 0.6))
@@ -320,9 +320,10 @@ func _desenhar_classes(cx: float, escolhida := -1) -> void:
 		var e := clampf((_t - 0.7 - i * 0.08) / 0.15, 0.0, 1.0)
 		if e <= 0.0:
 			continue
-		var quadro := 2 + int(_t * 8.0 + i) % 4
+		var quadro: int = Lutador.quadro_de("correr", _t + i * 0.1)
 		var sobe := roundf(pow(1.0 - e, 2.0) * 10.0)
-		draw_texture_rect_region(_texturas[i], Rect2(x - 16, 85 - sobe, 32, 32), Rect2(quadro * 16, 0, 16, 16),
+		draw_texture_rect_region(_texturas[i], Rect2(x - 20, 77 - sobe, 40, 40),
+				Rect2(quadro * Lutador.TAM_QUADRO, 0, Lutador.TAM_QUADRO, Lutador.TAM_QUADRO),
 				Color(1, 1, 1, 0.35) if apagada else Color.WHITE)
 		UI.texto(self, Vector2(x, 128), Jogo.CLASSES[i].to_upper(), UI.P, UI.OURO if i == escolhida else UI.BORDA)
 

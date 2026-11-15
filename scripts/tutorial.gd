@@ -75,11 +75,12 @@ func _draw() -> void:
 	var chao := cy + 4.0
 	draw_rect(Rect2(ex - 70, chao, 140, 1), UI.BORDA)
 	var px := ex + roundf(vai * 46.0)
-	var quadro := 2 + int(_t * 10.0) % 4
-	var destino := Rect2(px - 8, chao - 16, 16, 16)
+	var quadro: int = Lutador.quadro_de("correr", _t)
+	var tq := float(Lutador.TAM_QUADRO)
+	var destino := Rect2(px - tq / 2.0, chao - tq, tq, tq)
 	if cos(_t * 2.4) < 0.0:
-		destino = Rect2(px + 8, chao - 16, -16, 16)
-	draw_texture_rect_region(_tex, destino, Rect2(quadro * 16, 0, 16, 16))
+		destino = Rect2(px + tq / 2.0, chao - tq, -tq, tq)
+	draw_texture_rect_region(_tex, destino, Rect2(quadro * Lutador.TAM_QUADRO, 0, Lutador.TAM_QUADRO, Lutador.TAM_QUADRO))
 	# O dedo arrastando embaixo, com setas para os lados
 	var dy0 := cy + 30.0
 	UI.seta(self, Vector2(ex - 34, dy0), -1.0, UI.BORDA)
@@ -100,10 +101,11 @@ func _draw() -> void:
 	if no_ar:
 		var u := ciclo / 0.6
 		altura = roundf(4.0 * 26.0 * u * (1.0 - u))
-	var q := 0
+	var q: int = Lutador.QUADROS["parado"][0]
 	if no_ar:
-		q = 6 if ciclo < 0.3 else 7
-	draw_texture_rect_region(_tex, Rect2(dx - 8, chao - 16 - altura, 16, 16), Rect2(q * 16, 0, 16, 16))
+		q = Lutador.QUADROS["pulo"][0] if ciclo < 0.3 else Lutador.QUADROS["queda"][0]
+	draw_texture_rect_region(_tex, Rect2(dx - Lutador.TAM_QUADRO / 2.0, chao - Lutador.TAM_QUADRO - altura, Lutador.TAM_QUADRO, Lutador.TAM_QUADRO),
+			Rect2(q * Lutador.TAM_QUADRO, 0, Lutador.TAM_QUADRO, Lutador.TAM_QUADRO))
 	_dedo(Vector2(dx, dy0), ciclo < 0.18)
 	UI.texto(self, Vector2(dx, cy + 54), "Segure para pular mais alto", UI.P, UI.BORDA)
 	UI.texto(self, Vector2(dx, cy + 66), "Arraste rápido para o lado: dash", UI.P, UI.BORDA)

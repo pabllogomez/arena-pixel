@@ -28,12 +28,30 @@ const ROTULO_CRITICO_TEMPO := 1.0   ## quanto tempo o rótulo de crítico fica s
 const DASH_RECARGA := 1.2    ## segundos entre um dash e o próximo (contados do início)
 const TEMPO_BUFFER_DASH := 0.1
 const DASH_FANTASMA_VIDA := 0.18
+## Folha de sprites dos lutadores (assets/sprites/<classe>_1.png e _2.png): uma linha única de
+## NUM_QUADROS quadros de TAM_QUADRO x TAM_QUADRO px, virados para a direita, com os pés na última
+## linha (o sprite é deslocado para os pés ficarem no chão; ver _atualizar_visual_efeito).
+## QUADROS mapeia cada animação aos índices dos quadros; para trocar a arte à mão basta manter
+## o tamanho e esta ordem (o gerador, tools/gerar_arte.py, tem o mesmo layout documentado).
+const TAM_QUADRO := 20
+const NUM_QUADROS := 19
 const QUADROS := {
-	"parado": [0, 1],
-	"correr": [2, 3, 4, 5],
-	"pulo": [6],
-	"queda": [7],
+	"parado": [0, 1, 2, 3],      ## respiração sutil
+	"correr": [4, 5, 6, 7, 8, 9],
+	"pulo": [10, 11],            ## subindo
+	"queda": [12, 13],           ## caindo
+	"ataque": [14, 15, 16, 17],  ## próprios de cada classe (ver ATAQUE_TEMPOS)
+	"dano": [18],                ## impacto, mostrado junto com o flash vermelho
 }
+## Quadros por segundo das animações em laço/sequência (o ataque usa ATAQUE_TEMPOS)
+const FPS_ANIM := {"parado": 3.0, "correr": 12.0, "pulo": 8.0, "queda": 8.0}
+## Duração (s) de cada um dos 4 quadros do ataque; o Arqueiro segura o quadro de puxar só até a
+## flecha sair (a flecha sai no começo, o ataque em si não muda)
+const ATAQUE_TEMPOS := [0.0625, 0.0625, 0.0625, 0.0625]
+const ATAQUE_TEMPOS_ARCO := [0.05, 0.05, 0.07, 0.08]
+const DASH_INCLINACAO := 15.0  ## graus que o sprite inclina para a frente durante o dash
+const DASH_INCLINA_ENTRA := 0.05  ## s para inclinar
+const DASH_INCLINA_SAI := 0.1     ## s para voltar a 0
 
 @onready var sprite: Sprite2D = $Sprite2D
 
@@ -100,6 +118,7 @@ var _buffer := 0.0
 var _descer := 0.0
 var _anim := "parado"
 var _anim_t := 0.0
+var _ataque_t := -1.0   ## >= 0 enquanto toca a animação de ataque (tempo desde o disparo)
 var _flash := 0.0
 ## Rótulo do último crítico que ESTE personagem acertou ("costas", "dash" ou ""), desenhado sob a barra de vida
 var _rotulo_critico := ""
@@ -118,7 +137,7 @@ var _investida_acertos: Array = []  ## quem já levou a investida deste dash
 var _cetro_acertos: Array = []      ## quem já levou a cetrada deste dash
 var _cd_cetro := 0.0
 var _t_fantasma := 0.0
-## Rastro do dash: cada fantasma é [posição global, espelhado, quadro, idade]
+## Rastro do dash: cada fantasma é [posição global, espelhado, quadro, idade, rotação]
 var _fantasmas: Array = []
 
 
@@ -326,8 +345,9 @@ func _atualizar_visual_efeito() -> void:
 		return
 	sprite.scale = _esticar * escala
 	sprite.flip_v = gravidade_invertida
-	# Mantém os pés no chão (ou no teto) quando o tamanho muda
-	sprite.position.y = (8.0 - 8.0 * escala * _esticar.y) * (-1.0 if gravidade_invertida else 1.0)
+	# Mantém os pés no chão (ou no teto) quando o tamanho muda: o quadro é maior que o corpo
+	# (os pés ficam em +8 do centro do corpo, o centro do sprite em 8 - TAM_QUADRO / 2)
+	sprite.position.y = (8.0 - TAM_QUADRO / 2.0 * escala * _esticar.y) * (-1.0 if gravidade_invertida else 1.0)
 
 
 func nome_efeito() -> String:
@@ -426,7 +446,7 @@ func _physics_process(delta: float) -> void:
 		_t_fantasma -= delta
 		if _t_fantasma <= 0.0:
 			_t_fantasma = 0.04
-			_fantasmas.append([global_position, sprite.flip_h, sprite.frame, 0.0])
+			_fantasmas.append([global_position, sprite.flip_h, sprite.frame, 0.0, sprite.rotation])
 	elif dir != 0.0:
 		velocity.x = move_toward(velocity.x, dir * velocidade * _mult_vel(), dados.aceleracao * delta)
 		sprite.flip_h = dir < 0.0
@@ -572,6 +592,7 @@ func _cetrada(a, lado: float, mult_emp: float) -> void:
 	elif a is Minion:
 		a.velocity = Vector2(lado * 70.0 * mult_empurrao * total, -60.0)
 	_investida(lado)
+	_iniciar_ataque()
 	partida.criar_corte(global_position + Vector2(lado * 12.0, 0.0), lado < 0.0)
 	partida.fx("cetro", position + Vector2(lado * 8.0, 0.0), lado)
 	partida.fx("golpe", position + Vector2(lado * 6.0, 0.0), lado)
@@ -615,6 +636,7 @@ func _tentar_atacar() -> void:
 	if atk_tipo() == ClasseDados.TipoAtaque.INVOCAR:
 		if partida.contar_lacaios(self) < atk_max_lacaios():
 			partida.criar_lacaio(self)
+			_iniciar_ataque()
 			_cd_ataque = atk_intervalo()
 		else:
 			_cd_ataque = 0.3
@@ -629,6 +651,7 @@ func _tentar_atacar() -> void:
 	if absf(velocity.x) < 5.0:
 		sprite.flip_h = dir_alvo.x < 0.0
 	_investida(dir_alvo.x)
+	_iniciar_ataque()
 
 	match atk_tipo():
 		ClasseDados.TipoAtaque.FLECHA:
@@ -756,6 +779,11 @@ func _recem_dash() -> bool:
 	return _dash_t > 0.0 or _dash_cd > DASH_RECARGA - 0.35
 
 
+func _iniciar_ataque() -> void:
+	## Só liga a animação de ataque (visual): o golpe, o projétil e o intervalo já foram decididos.
+	_ataque_t = 0.0
+
+
 func _investida(lado: float) -> void:
 	var tw := create_tween()
 	tw.tween_property(sprite, "position:x", signf(lado) * 2.0, 0.05)
@@ -826,7 +854,8 @@ func _morrer() -> void:
 	ativo = false
 	remove_from_group("viajante")
 	Jogo.tocar("morte")
-	sprite.frame = 7
+	sprite.frame = QUADROS["dano"][0]
+	sprite.rotation = 0.0
 	partida.tremer(3.0)
 	desfazer()
 	queue_redraw()
@@ -837,7 +866,7 @@ func desfazer() -> void:
 	## Morte: o personagem se desfaz em pixels das próprias cores.
 	Jogo.pintar_clarao(sprite, false)
 	sprite.visible = false
-	var quadro := Rect2i(sprite.frame * 16, 0, 16, 16)
+	var quadro := Rect2i(sprite.frame * TAM_QUADRO, 0, TAM_QUADRO, TAM_QUADRO)
 	partida.particulas.estilhacar(sprite.texture, quadro, position + sprite.position, sprite.flip_h,
 			escala, Vector2(velocity.x * 0.5, -40.0))
 	partida.particulas.fx("acerto_time", position, -PI / 2.0, equipe)
@@ -901,19 +930,53 @@ func escolher_melhoria(op: int) -> void:
 
 # ------------------------------------------------------------------ Visual
 
+static func quadro_de(anim: String, t: float) -> int:
+	## Quadro da folha para a animação `anim` depois de `t` segundos (parado e correr em laço;
+	## pulo e queda param no último quadro). Também usado pelo menu, HUD e telas de fim.
+	var quadros: Array = QUADROS[anim]
+	var i := int(t * FPS_ANIM.get(anim, 1.0))
+	return quadros[i % quadros.size() if anim in ["parado", "correr"] else mini(i, quadros.size() - 1)]
+
+
+func _quadro_ataque() -> int:
+	## Quadro do ataque para o tempo atual; -1 quando a animação terminou.
+	var tempos: Array = ATAQUE_TEMPOS_ARCO if dados.tipo_ataque == ClasseDados.TipoAtaque.FLECHA else ATAQUE_TEMPOS
+	var acumulado := 0.0
+	for i in tempos.size():
+		acumulado += tempos[i]
+		if _ataque_t < acumulado:
+			return QUADROS["ataque"][i]
+	return -1
+
+
 func _animar(delta: float) -> void:
 	var nova := "parado"
-	if not is_on_floor():
-		nova = "pulo" if velocity.y < 0.0 else "queda"
+	var ataque_quadro := -1
+	if _ataque_t >= 0.0:
+		_ataque_t += delta
+		ataque_quadro = _quadro_ataque()
+		if ataque_quadro < 0:
+			_ataque_t = -1.0
+	if _flash > 0.0:
+		nova = "dano"
+	elif ataque_quadro >= 0:
+		nova = "ataque"
+	elif not is_on_floor():
+		nova = "pulo" if velocity.y * (-1.0 if gravidade_invertida else 1.0) < 0.0 else "queda"
 	elif absf(velocity.x) > 10.0:
 		nova = "correr"
 	if nova != _anim:
 		_anim = nova
 		_anim_t = 0.0
 	_anim_t += delta
-	var quadros: Array = QUADROS[_anim]
-	var fps := 10.0 if _anim == "correr" else 2.0
-	sprite.frame = quadros[int(_anim_t * fps) % quadros.size()]
+	sprite.frame = ataque_quadro if nova == "ataque" else quadro_de(_anim, _anim_t)
+	# Inclinação do dash: para a frente (na direção do movimento) e volta suave ao terminar
+	var alvo := 0.0
+	var rapidez := deg_to_rad(DASH_INCLINACAO) / DASH_INCLINA_SAI
+	if _dash_t > 0.0:
+		alvo = deg_to_rad(DASH_INCLINACAO) * _dash_dir * (-1.0 if gravidade_invertida else 1.0)
+		rapidez = deg_to_rad(DASH_INCLINACAO) / DASH_INCLINA_ENTRA
+	sprite.rotation = move_toward(sprite.rotation, alvo, rapidez * delta)
 
 
 func _draw() -> void:
@@ -928,8 +991,8 @@ func _draw() -> void:
 		sprite.modulate = Color.WHITE
 	_desenhar_fantasmas(cor)
 	# Rótulo ("VOCÊ", "CPU", "P1"...), seta e barra de vida acima da cabeça
-	var acima := maxf(0.0, (escala - 1.0) * 16.0)  # sobe o rótulo quando está gigante
-	draw_set_transform(Vector2(0, -acima))
+	var acima := maxf(0.0, (escala - 1.0) * TAM_QUADRO)  # sobe o rótulo quando está gigante
+	draw_set_transform(Vector2(0, -acima - 3.0))  # o quadro 20x20 é mais alto que o antigo 16x16
 	UI.texto(self, Vector2(0, -25), nome_jogador(), UI.P, cor)
 	# Setinha em degraus apontando para o personagem
 	for i in 3:
@@ -943,15 +1006,16 @@ func _draw() -> void:
 
 
 func _desenhar_fantasmas(cor: Color) -> void:
-	## Rastro do dash: cópias do sprite na cor do time que vão sumindo.
+	## Rastro do dash: cópias do sprite (e da inclinação) na cor do time que vão sumindo.
 	if _fantasmas.is_empty() or sprite.texture == null:
 		return
-	var lado := 16.0 * escala
+	var lado := TAM_QUADRO * escala
 	for f in _fantasmas:
 		var alfa: float = 0.45 * (1.0 - float(f[3]) / DASH_FANTASMA_VIDA)
 		var c: Vector2 = to_local(f[0]) + Vector2(0, sprite.position.y)
 		var larg: float = -lado if f[1] else lado
 		var alt: float = -lado if gravidade_invertida else lado
-		var origem := Vector2(c.x - larg / 2.0, c.y - alt / 2.0)
-		draw_texture_rect_region(sprite.texture, Rect2(origem, Vector2(larg, alt)),
-				Rect2(int(f[2]) * 16, 0, 16, 16), Color(cor.r, cor.g, cor.b, alfa))
+		draw_set_transform(c, f[4] if f.size() > 4 else 0.0)
+		draw_texture_rect_region(sprite.texture, Rect2(Vector2(-larg / 2.0, -alt / 2.0), Vector2(larg, alt)),
+				Rect2(int(f[2]) * TAM_QUADRO, 0, TAM_QUADRO, TAM_QUADRO), Color(cor.r, cor.g, cor.b, alfa))
+	draw_set_transform(Vector2.ZERO)

@@ -39,6 +39,8 @@ func _initialize() -> void:
 	await _testar_dash()
 	await _testar_orc()
 	await _testar_cetro()
+	_testar_folhas_lutadores()
+	await _testar_animacoes()
 	_testar_dash_rede()
 	_testar_mapeamento_controle()
 	_testar_controle_mapa()
@@ -741,6 +743,267 @@ func _testar_orc() -> void:
 	print("Orc (investida, fúria, pouso): ok")
 	main.queue_free()
 	await process_frame
+
+
+# ------------------------------------------------------------------ Sprites e animações dos lutadores
+
+const CLASSES_SPRITE := ["recruta", "arqueiro", "orc", "mago", "rei"]
+
+
+func _constantes_lutador() -> Dictionary:
+	## Constantes de Lutador sem citar a classe (ela depende do autoload Jogo).
+	return (load("res://scripts/lutador.gd") as GDScript).get_script_constant_map()
+
+
+func _testar_folhas_lutadores() -> void:
+	## Folhas dos lutadores: quadros 20x20 em linha única, todos preenchidos e as animações com quadros distintos.
+	var k := _constantes_lutador()
+	var tam: int = k["TAM_QUADRO"]
+	var n: int = k["NUM_QUADROS"]
+	var quadros: Dictionary = k["QUADROS"]
+	if tam != 20 or n != 19:
+		_falha("folha dos lutadores: TAM_QUADRO %s / NUM_QUADROS %s (esperado 20 / 19)" % [tam, n])
+	var esperado := {"parado": 4, "correr": 6, "pulo": 2, "queda": 2, "ataque": 4, "dano": 1}
+	var soma := 0
+	for anim in esperado:
+		if quadros[anim].size() != esperado[anim]:
+			_falha("QUADROS[%s] tem %d quadros (esperado %d)" % [anim, quadros[anim].size(), esperado[anim]])
+		soma += quadros[anim].size()
+	if soma != n:
+		_falha("QUADROS soma %d quadros, a folha tem %d" % [soma, n])
+	for c in CLASSES_SPRITE:
+		for time in [1, 2]:
+			var tex: Texture2D = load("res://assets/sprites/%s_%d.png" % [c, time])
+			if tex.get_width() != n * tam or tex.get_height() != tam:
+				_falha("%s_%d.png: %dx%d (esperado %dx%d)" % [c, time, tex.get_width(), tex.get_height(), n * tam, tam])
+				continue
+			var img := tex.get_image()
+			var vistos := {}
+			for q in n:
+				var reg := img.get_region(Rect2i(q * tam, 0, tam, tam))
+				var opacos := 0
+				for y in tam:
+					for x in tam:
+						if reg.get_pixel(x, y).a > 0.5:
+							opacos += 1
+				if opacos < 40:
+					_falha("%s_%d.png: quadro %d quase vazio (%d pixels)" % [c, time, q, opacos])
+				vistos[q] = reg.get_data()
+			for anim in ["parado", "correr", "ataque"]:
+				for i in quadros[anim].size():
+					for j in range(i + 1, quadros[anim].size()):
+						if vistos[quadros[anim][i]] == vistos[quadros[anim][j]]:
+							_falha("%s_%d.png: quadros %d e %d de '%s' são idênticos" % [c, time, quadros[anim][i], quadros[anim][j], anim])
+	print("Folhas dos lutadores (20x20, 19 quadros): ok")
+
+
+func _e_script(e: Node, nome: String) -> bool:
+	## O nó usa scripts/<nome>.gd (sem citar a classe, que depende do autoload Jogo)
+	var sc: Script = e.get_script()
+	return sc != null and sc.resource_path.ends_with("/%s.gd" % nome)
+
+
+func _quadros_vistos(l, p, frames: int) -> Array:
+	var vistos := []
+	for f in frames:
+		await physics_frame
+		if not vistos.has(l.sprite.frame):
+			vistos.append(l.sprite.frame)
+	return vistos
+
+
+func _testar_animacoes() -> void:
+	## Hitbox intacta, parado (4) e correr (6), ataque de cada classe (toca e termina, flecha sai junto),
+	## quadro de dano, inclinação do dash e o que vai para o convidado.
+	var k := _constantes_lutador()
+	var quadros: Dictionary = k["QUADROS"]
+	var main = load("res://scenes/main.tscn").instantiate()
+	root.add_child(main)
+	await process_frame
+	main._nova_partida({"semente": 77, "tempo": 180.0, "bots": {1: -1, 2: -1}})
+	await process_frame
+	var p = main._atual
+	p.contagem = 0.0
+	p._congelar(false)
+	var l = p.jogadores[1]
+	var o = p.jogadores[2]
+	var c := ControleTeste.new()
+	l.controle = c
+	l.ativo = true
+	o.ativo = false
+	o.eh_recruta = false
+	var base: Vector2 = p.mapa["inicio"][1]
+	for nome in CLASSES_SPRITE:
+		var classe: ClasseDados = load("res://resources/classes/%s.tres" % nome)
+		if nome == "recruta":
+			l.eh_recruta = true
+		else:
+			l.receber_classe(classe)
+		# Hitbox e colisão iguais às de antes do sprite 20x20: corpo 10x14 em (0, 1); caixa 10x14 com os pés em +8
+		var forma: CollisionShape2D = l.get_node("CollisionShape2D")
+		if (forma.shape as RectangleShape2D).size != Vector2(10, 14) or forma.position != Vector2(0, 1):
+			_falha("%s: colisão mudou (%s em %s)" % [nome, (forma.shape as RectangleShape2D).size, forma.position])
+		l.position = Vector2(100, 100)
+		var gp: Vector2 = l.global_position
+		if l.hitbox() != Rect2(gp + Vector2(-5, -6), Vector2(10, 14)):
+			_falha("%s: hitbox mudou (%s)" % [nome, l.hitbox()])
+		l.escala = 1.5
+		if l.hitbox() != Rect2(gp + Vector2(-7.5, -13), Vector2(15, 21)):
+			_falha("%s: hitbox gigante mudou (%s)" % [nome, l.hitbox()])
+		l.escala = 1.0
+		# Pés no chão: quadro 20x20 deslocado (pés do desenho em +8 do centro do corpo)
+		l._atualizar_visual_efeito()
+		if absf(l.sprite.position.y - (-2.0)) > 0.01:
+			_falha("%s: sprite.position.y = %.2f (esperado -2 para os pés ficarem no chão)" % [nome, l.sprite.position.y])
+		l.gravidade_invertida = true
+		l._atualizar_visual_efeito()
+		if absf(l.sprite.position.y - 2.0) > 0.01:
+			_falha("%s: gravidade invertida: sprite.position.y = %.2f (esperado 2)" % [nome, l.sprite.position.y])
+		l.gravidade_invertida = false
+		l.escala = 2.0
+		l._atualizar_visual_efeito()
+		if absf(l.sprite.position.y - (8.0 - 20.0)) > 0.01:
+			_falha("%s: gigante: sprite.position.y = %.2f (esperado -12)" % [nome, l.sprite.position.y])
+		l.escala = 1.0
+		l._atualizar_visual_efeito()
+
+		# Parado: os 4 quadros da respiração; correr: os 6 quadros
+		l.position = base
+		l.velocity = Vector2.ZERO
+		o.position = base + Vector2(400, 0)
+		l._cd_ataque = 99.0
+		for f in 30:
+			await physics_frame
+		var vistos: Array = await _quadros_vistos(l, p, 100)
+		vistos.sort()
+		var quer: Array = quadros["parado"].duplicate()
+		quer.sort()
+		if vistos != quer:
+			_falha("%s: parado usou os quadros %s (esperado %s)" % [nome, vistos, quer])
+		c.eixo = 1.0
+		for f in 12:
+			await physics_frame
+		vistos = await _quadros_vistos(l, p, 40)
+		vistos.sort()
+		quer = quadros["correr"].duplicate()
+		vistos = vistos.filter(func(q) -> bool: return q != quadros["parado"][0])  # sobra de antes de começar a correr
+		if l.is_on_floor() and vistos != quer:
+			_falha("%s: correr usou os quadros %s (esperado %s)" % [nome, vistos, quer])
+		c.eixo = 0.0
+		for f in 40:
+			await physics_frame
+
+		# Ataque: o adversário na frente, a animação "ataque" toca os 4 quadros e termina
+		l.position = base
+		l.velocity = Vector2.ZERO
+		l.sprite.flip_h = false
+		o.position = base + Vector2(24, 0)
+		o.velocity = Vector2.ZERO
+		o.vida = o.vida_max
+		for f in 10:
+			await physics_frame
+		var proj_antes: int = p.entidades.get_children().filter(func(e) -> bool: return _e_script(e, "projetil")).size()
+		l._cd_ataque = 0.0
+		var seq := []
+		var flecha_no_inicio := false
+		var anim_fim := false
+		var visto_dano := false
+		for f in 40:
+			await physics_frame
+			if o._anim == "dano" and o.sprite.frame == quadros["dano"][0]:
+				visto_dano = true
+			if l._anim == "ataque":
+				if seq.is_empty() and nome == "arqueiro":
+					flecha_no_inicio = p.entidades.get_children().filter(func(e) -> bool: return _e_script(e, "projetil")).size() > proj_antes
+				if seq.is_empty() or seq[-1] != l.sprite.frame:
+					seq.append(l.sprite.frame)
+				l._cd_ataque = 99.0
+			elif not seq.is_empty():
+				anim_fim = true
+				break
+		if seq != quadros["ataque"]:
+			_falha("%s: ataque tocou os quadros %s (esperado %s)" % [nome, seq, quadros["ataque"]])
+		if not anim_fim:
+			_falha("%s: a animação de ataque não terminou" % nome)
+		if nome == "arqueiro" and not flecha_no_inicio:
+			_falha("arqueiro: a flecha não saiu junto com o início da animação de ataque")
+		if nome == "rei" and p.contar_lacaios(l) < 1:
+			_falha("rei: sem lacaio depois de invocar")
+		if (nome == "orc" or nome == "recruta") and not visto_dano:
+			_falha("%s: o adversário não mostrou o quadro de dano ao apanhar" % nome)
+		o.vida = o.vida_max
+		for lac in p.entidades.get_children():
+			if _e_script(lac, "minion"):
+				lac.queue_free()
+		for f in 5:
+			await physics_frame
+
+	# Dano direto (qualquer classe): quadro 18 junto com o flash, ~0,12 s
+	l.receber_classe(load("res://resources/classes/orc.tres"))
+	l._cd_ataque = 99.0
+	l.position = base
+	for f in 10:
+		await physics_frame
+	var vida_antes: float = l.vida
+	l.receber_dano(1.0, null)
+	await physics_frame
+	if l.sprite.frame != quadros["dano"][0] or l._anim != "dano":
+		_falha("dano: quadro %d / anim %s ao levar dano (esperado quadro %d)" % [l.sprite.frame, l._anim, quadros["dano"][0]])
+	for f in 12:
+		await physics_frame
+	if l._anim == "dano":
+		_falha("dano: o quadro de impacto durou mais de 0,2 s")
+	if l.vida >= vida_antes:
+		_falha("dano: a vida não caiu")
+
+	# Dash: inclina ~15 graus para a frente e volta a 0 (para os dois lados)
+	for sinal in [1.0, -1.0]:
+		l.position = base
+		l.velocity = Vector2.ZERO
+		l._dash_cd = 0.0
+		for f in 20:
+			await physics_frame
+		c.eixo = sinal
+		c.dash_dir = sinal
+		c.dash_apertou = true
+		await physics_frame
+		c.dash_apertou = false
+		var rot_max := 0.0
+		for f in 8:
+			await physics_frame
+			if absf(l.sprite.rotation) > absf(rot_max):
+				rot_max = l.sprite.rotation
+		c.eixo = 0.0
+		c.dash_dir = 0.0
+		if absf(rad_to_deg(rot_max) - 15.0 * sinal) > 1.0:
+			_falha("dash %+d: inclinação máxima %.1f graus (esperado %+.0f)" % [int(sinal), rad_to_deg(rot_max), 15.0 * sinal])
+		if signf(rot_max) != signf(sinal):
+			_falha("dash: inclinou para trás (%.2f)" % rot_max)
+		# o estado que o convidado recebe carrega a rotação
+		var est: Array = p._montar_estado()["j"][0]
+		if est.size() < 19 or absf(est[18] - l.sprite.rotation) > 0.0001:
+			_falha("estado do convidado sem a inclinação do dash (tamanho %d)" % est.size())
+		for f in 20:
+			await physics_frame
+		if absf(l.sprite.rotation) > 0.001:
+			_falha("dash: a inclinação não voltou a 0 (%.3f rad)" % l.sprite.rotation)
+
+	# Rede: o convidado recebe quadro (ataque/dano) e inclinação; estado antigo (18 elementos) não quebra
+	var d: Array = p._montar_estado()["j"][0]
+	l.sprite.frame = quadros["ataque"][2]
+	l.sprite.rotation = 0.0
+	d = p._montar_estado()["j"][0]
+	l.sprite.frame = 0
+	d[18] = 0.26
+	p._aplicar_jogador(l, d)
+	if l.sprite.frame != quadros["ataque"][2] or absf(l.sprite.rotation - 0.26) > 0.0001:
+		_falha("convidado: quadro %d / rotação %.2f (esperado %d / 0.26)" % [l.sprite.frame, l.sprite.rotation, quadros["ataque"][2]])
+	l.sprite.rotation = 0.0
+	p._aplicar_jogador(l, d.slice(0, 18))
+	print("Animações dos lutadores: ok")
+	main.queue_free()
+	await process_frame
+
 
 
 func _testar_dash_rede() -> void:

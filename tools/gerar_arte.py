@@ -4,9 +4,14 @@ Uso:  python3 tools/gerar_arte.py
 Requer: Pillow (pip install pillow)
 
 Tudo aqui é provisório: substitua os PNG/WAV em assets/ pelos definitivos
-mantendo o tamanho de quadro (16x16) e a ordem dos quadros:
-  personagens: 0-1 parado | 2-5 correndo | 6 pulando | 7 caindo
-  lacaio/gosma_N: 0-1 andando (N = faixa de nível do monstro)
+mantendo o tamanho de quadro e a ordem dos quadros:
+  lutadores (<classe>_1.png / _2.png = time 1 / 2): quadros de 20x20 numa linha única
+    (19 quadros = 380x20; o mesmo mapa está em Lutador.QUADROS, em scripts/lutador.gd):
+      0-3 parado (respiração) | 4-9 correr | 10-11 pulo | 12-13 queda
+      14-17 ataque (próprio de cada classe) | 18 dano (impacto)
+    O personagem olha para a direita (o jogo espelha); os pés ficam na linha 19.
+    Para trocar por arte à mão: mantenha 20x20 por quadro e esta ordem.
+  lacaio/gosma_N: 0-1 andando, 16x16 (N = faixa de nível do monstro)
 """
 import math
 import os
@@ -73,135 +78,471 @@ def folha(quadros):
     return img
 
 
-def pernas(c):
-    """Pernas genéricas; c = cor da calça."""
-    return {
-        "parado": [f"....k{c}k..k{c}k....", f"....k{c}k..k{c}k....", f"....k{c}k..k{c}k....", "...kkkk..kkkk..."],
-        "passo1": [f"...k{c}k....k{c}k...", f"..k{c}k......k{c}k..", f".k{c}k.......kkk..", ".kkk............"],
-        "passo2": [f".....k{c}kk{c}k.....", f".....k{c}kk{c}k.....", f".....k{c}kk{c}k.....", "....kkkkkkkk...."],
-        "passo3": [f"..k{c}k.....k{c}k...", f"..k{c}k......k{c}k..", "..kkk.......k" + c + "k.", "............kkk."],
-        "pulo":   [f"...k{c}k...k{c}k....", f"...k{c}kk..k{c}kk...", "....kkk...kkk...", "................"],
-        "queda":  [f"..k{c}k......k{c}k..", f"..k{c}k......k{c}k..", "..kkk......kkk..", "................"],
-    }
+# ---------------------------------------------------------------- Lutadores (20x20)
+TAM = 20  # lado do quadro dos lutadores (Lutador.TAM_QUADRO)
+CORTE = 8  # linhas 0-7 do corpo = cabeça; 8-13 = tronco; pernas ocupam 14-19
+
+# Ordem dos quadros na folha (uma linha única). Mesmo mapa de Lutador.QUADROS.
+ANIMACOES = [("parado", 4), ("correr", 6), ("pulo", 2), ("queda", 2), ("ataque", 4), ("dano", 1)]
 
 
-def manto():
-    """Parte de baixo de túnica longa (mago/rei)."""
-    return {
-        "parado": ["...kXXXXXXXk....", "...kXXXXXXXk....", "..kXXXXXXXXXk...", "..kkkkkkkkkkk..."],
-        "passo1": ["...kXXXXXXXk....", "..kXXXXXXXXXk...", ".kXXXXXXXXXXk...", ".kkk.kkkkkkkkk.."],
-        "passo2": ["...kXXXXXXXk....", "...kXXXXXXXk....", "..kXXXXXXXXXk...", "..kkkkkkkkkkk..."],
-        "passo3": ["...kXXXXXXXk....", "...kXXXXXXXXk...", "..kXXXXXXXXXXk..", "..kkkkkkkk.kkk.."],
-        "pulo":   ["...kXXXXXXXk....", "..kXXXXXXXXXk...", "..kkkXXXXXkkk...", "....kkkkkkk....."],
-        "queda":  ["..kXXXXXXXXXk...", ".kXXXXXXXXXXXk..", ".kkkkkkkkkkkkk..", "................"],
-    }
+def ponto_linha(x0, y0, x1, y1):
+    """Pixels de uma linha (Bresenham)."""
+    x0, y0, x1, y1 = round(x0), round(y0), round(x1), round(y1)
+    pts = []
+    dx, dy = abs(x1 - x0), -abs(y1 - y0)
+    sx, sy = (1 if x0 < x1 else -1), (1 if y0 < y1 else -1)
+    err = dx + dy
+    while True:
+        pts.append((x0, y0))
+        if x0 == x1 and y0 == y1:
+            return pts
+        e2 = 2 * err
+        if e2 >= dy:
+            err += dy
+            x0 += sx
+        if e2 <= dx:
+            err += dx
+            y0 += sy
 
 
+def vetor(ang, t):
+    r = math.radians(ang)
+    return math.cos(r) * t, math.sin(r) * t
+
+
+class Peca:
+    """Conjunto de pixels {(x, y): letra} desenhado por cima do corpo (braço e arma)."""
+
+    def __init__(self):
+        self.px = {}
+
+    def p(self, x, y, ch):
+        self.px[(round(x), round(y))] = ch
+
+    def linha(self, a, b, ch):
+        for x, y in ponto_linha(a[0], a[1], b[0], b[1]):
+            self.p(x, y, ch)
+
+    def ao_longo(self, h, ang, t0, t1, ch):
+        a = (h[0] + vetor(ang, t0)[0], h[1] + vetor(ang, t0)[1])
+        b = (h[0] + vetor(ang, t1)[0], h[1] + vetor(ang, t1)[1])
+        self.linha(a, b, ch)
+
+    def ponta(self, h, ang, t):
+        return h[0] + vetor(ang, t)[0], h[1] + vetor(ang, t)[1]
+
+    def braco(self, ombro, mao, manga="X"):
+        self.linha(ombro, mao, manga)
+        self.linha((ombro[0], ombro[1] + 1), (mao[0], mao[1] + 1), manga)
+        self.p(mao[0], mao[1], "e")
+        self.p(mao[0] + 1, mao[1], "e")
+
+    def deslocada(self, dx, dy):
+        n = Peca()
+        n.px = {(x + dx, y + dy): c for (x, y), c in self.px.items()}
+        return n
+
+
+def espada(h, ang, comp=7):
+    a = Peca()
+    a.ao_longo(h, ang, 1, 3, "j")           # punho
+    a.ao_longo(h, ang, 3, 3 + comp, "s")    # lâmina
+    a.ao_longo(h, ang, 4, 2 + comp, "w")    # brilho
+    nx, ny = -math.sin(math.radians(ang)), math.cos(math.radians(ang))
+    gx, gy = a.ponta(h, ang, 3)
+    a.linha((gx - nx * 2, gy - ny * 2), (gx + nx * 2, gy + ny * 2), "y")  # guarda
+    return a
+
+
+def machado(h, ang, L=6):
+    a = Peca()
+    a.ao_longo(h, ang, -2, L, "j")
+    nx, ny = -math.sin(math.radians(ang)), math.cos(math.radians(ang))
+    for t, larg in ((L - 2, 2), (L - 1, 4), (L, 4), (L + 1, 3), (L + 2, 1)):
+        bx, by = a.ponta(h, ang, t)
+        for k in range(1, larg + 1):
+            a.p(bx + nx * k, by + ny * k, "w" if k == larg else "s")
+        a.p(bx, by, "m")
+    return a
+
+
+def cajado(h, ang, brilho=0, t1=9):
+    a = Peca()
+    a.ao_longo(h, ang, -4, t1, "j")
+    ox, oy = a.ponta(h, ang, t1 + 1)
+    for dx in (-1, 0, 1):
+        for dy in (-1, 0, 1):
+            a.p(ox + dx, oy + dy, "a")
+    a.p(ox, oy, "w")
+    if brilho >= 1:
+        for dx, dy in ((-2, 0), (2, 0), (0, -2), (0, 2)):
+            a.p(ox + dx, oy + dy, "w")
+    if brilho >= 2:
+        for dx, dy in ((-2, -2), (2, -2), (-2, 2), (2, 2), (3, 0), (-3, 0), (0, 3), (0, -3)):
+            a.p(ox + dx, oy + dy, "a")
+    return a
+
+
+def cetro(h, ang, brilho=0):
+    a = Peca()
+    a.ao_longo(h, ang, -3, 7, "y")
+    ox, oy = a.ponta(h, ang, 8)
+    for dx, dy in ((0, 0), (1, 0), (0, 1), (1, 1)):
+        a.p(ox + dx, oy + dy, "r")
+    a.p(ox, oy, "w")
+    a.p(ox, oy - 1, "y")
+    a.p(ox - 1, oy, "y")
+    if brilho >= 1:
+        for dx, dy in ((-2, -2), (3, -2), (-2, 3), (3, 3)):
+            a.p(ox + dx, oy + dy, "y")
+    if brilho >= 2:
+        for dx, dy in ((0, -3), (1, 4), (-3, 0), (4, 1)):
+            a.p(ox + dx, oy + dy, "w")
+    return a
+
+
+def arco(bx, by, puxa=0, flecha=False, ang_dy=0):
+    """Arco vertical com a barriga para a direita; a corda recua `puxa` pixels."""
+    a = Peca()
+    for d in range(-6, 7):
+        a.p(bx + round(2.4 * (1 - (d / 6.5) ** 2)), by + d, "j")
+    a.p(bx + 1, by - 5, "j")
+    a.p(bx + 1, by + 5, "j")
+    ponta_c = (bx, by - 6)
+    ponta_b = (bx, by + 6)
+    meio = (bx - puxa, by)
+    a.linha(ponta_c, meio, "w")
+    a.linha(meio, ponta_b, "w")
+    if flecha:
+        a.linha((meio[0], meio[1]), (bx + 4, by), "s")
+        a.p(bx + 4, by, "w")
+        a.p(meio[0], meio[1] - 1, "y")
+        a.p(meio[0], meio[1] + 1, "y")
+    return a
+
+
+def estrela(cx, cy, ch="w"):
+    p = Peca()
+    for dx, dy in ((0, 0), (1, 0), (-1, 0), (0, 1), (0, -1)):
+        p.p(cx + dx, cy + dy, ch)
+    return p
+
+
+def _mescla(*pecas):
+    n = Peca()
+    for p in pecas:
+        n.px.update(p.px)
+    return n
+
+
+
+def contorno(grade_, peca, sobre=(".",)):
+    """Contorno 'k' ao redor dos pixels de `peca`, só onde a grade está livre (ou em `sobre`)."""
+    for (x, y) in list(peca.px):
+        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            nx, ny = x + dx, y + dy
+            if 0 <= nx < TAM and 0 <= ny < TAM and (nx, ny) not in peca.px and grade_[ny][nx] in sobre:
+                grade_[ny][nx] = "k"
+
+
+def pe(p, hip, foot, c, dobra=0):
+    """Perna de calça: do quadril até o pé (+ a ponta do pé para a frente)."""
+    meio = ((hip[0] + foot[0]) / 2.0 + dobra, (hip[1] + foot[1]) / 2.0)
+    p.linha(hip, meio, c)
+    p.linha(meio, foot, c)
+    p.p(foot[0] + 1, foot[1], c)
+
+
+def pernas_peca(c, pose):
+    """Pernas (linhas 14-19). pose: parado | corre0..5 | pulo0..1 | queda0..1 | dano."""
+    p = Peca()
+    if pose == "parado":
+        pe(p, (6, 0), (6, 4), c)
+        pe(p, (11, 0), (11, 4), c)
+    elif pose.startswith("corre"):
+        k = int(pose[5:])
+        for hx, fase in ((6, 0.0), (11, math.pi)):
+            f = 2 * math.pi * k / 6 + fase
+            f %= 2 * math.pi
+            x = -3.0 * math.cos(f)
+            lev = 3.0 * math.sin(f) if f < math.pi else 0.0
+            pe(p, (hx, 0), (hx + round(x), 4 - round(lev * 0.9)), c, 1 if lev > 0.5 else 0)
+    elif pose == "pulo0":
+        pe(p, (6, 0), (5, 3), c, -1)
+        pe(p, (11, 0), (13, 3), c, 1)
+    elif pose == "pulo1":
+        pe(p, (6, 0), (5, 2), c, -2)
+        pe(p, (11, 0), (12, 2), c, 1)
+    elif pose == "queda0":
+        pe(p, (6, 0), (4, 4), c)
+        pe(p, (11, 0), (13, 4), c)
+    elif pose == "queda1":
+        pe(p, (6, 0), (3, 4), c)
+        pe(p, (11, 0), (14, 3), c)
+    elif pose == "dano":
+        pe(p, (6, 0), (4, 4), c)
+        pe(p, (11, 0), (10, 4), c)
+    return p
+
+
+def manto_peca(pose):
+    """Parte de baixo da túnica longa (mago/rei); mexe com a corrida e o pulo."""
+    p = Peca()
+    esq, dir_, ped = 0, 0, []
+    if pose.startswith("corre"):
+        k = int(pose[5:])
+        esq = (-1, 0, 1, 1, 0, -1)[k]
+        dir_ = (1, 0, -1, 1, 0, -1)[k]
+        ped = [(14, 4)] if k in (0, 1) else ([(5, 4)] if k in (3, 4) else [])
+    elif pose.startswith("pulo"):
+        esq, dir_ = (0, 0) if pose == "pulo0" else (1, 1)
+    elif pose.startswith("queda"):
+        esq, dir_ = (-1, 1) if pose == "queda0" else (-2, 2)
+    elif pose == "dano":
+        esq, dir_ = -2, 0
+    altura = 5 if pose.startswith("pulo") and pose == "pulo1" else (4 if pose.startswith("pulo") else 5)
+    if pose.startswith("queda"):
+        altura = 4
+    for i in range(altura):
+        e = 5 - (i + 1) // 2 + (esq if i >= 2 else 0)
+        d = 12 + (i + 1) // 2 + (dir_ if i >= 2 else 0)
+        for x in range(e, d + 1):
+            p.p(x, i, "X")
+    for x, y in ped:
+        p.p(x, y + 1, "k")
+        p.p(x + 1, y + 1, "k")
+    return p
+
+
+# ---- Corpos (14 linhas x 20 colunas, virados para a direita; sem o braço da frente nem a arma).
+# Letras: as da paleta P; X/Y = cor do time; E = olho (cor muda no quadro de dano).
 CLASSES = {
-    "arqueiro": {
-        "corpo": [
-            "................",
-            "................",
-            ".....kkkkkk.....",
-            "....kggggggk.k..",
-            "...kggggggggkjk.",
-            "...kggeeeeeek.jk",
-            "...kgeekeekek.jk",
-            "...kgeeeeeek..jk",
-            "....kXXXXXXk..jk",
-            "...kXXXXXXXXkej.",
-            "...keXXhhXXk.jk.",
-            "....kXXXXXXk.k..",
-        ],
-        "pernas": pernas("h"),
-    },
     "recruta": {
         "corpo": [
-            "................",
-            "................",
-            ".....kkkkkk.....",
-            "....khhhhhhk....",
-            "...khhhhhhhhk...",
-            "...kheeeeeek....",
-            "...keekeekek..k.",
-            "...keeeeeek..kjk",
-            "....kXXXXXXk.kj.",
-            "...kXXXXXXXXkej.",
-            "...keXXhhXXk.j..",
-            "....kXXXXXXk....",
+            "....................",
+            "......kkkkkkk.......",
+            ".....khhhhhhhk......",
+            "....khhhjhhhhhk.....",
+            "....khhhhhhhhhk.....",
+            "....kheeeeeeehk.....",
+            "....kheeeEeEehk.....",
+            ".....keeeeeeek......",
+            "......kXXXXXXk......",
+            ".....kXXXYXXXXk.....",
+            "....kXXXXXXXXXXk....",
+            "....kXXXXXXXXXXk....",
+            "....khhhhhhhhhhk....",
+            ".....kXXXXXXXXk.....",
         ],
-        "pernas": pernas("h"),
+        "calca": "h", "olho": "k", "ombro": (12, 10), "manga": "X", "perna": "pernas",
+    },
+    "arqueiro": {
+        "corpo": [
+            "....................",
+            ".....kkkkkkkk.......",
+            "....kggggggggk......",
+            "...kgggggggggkk.....",
+            "...kggeeeeeeegk.....",
+            "...kgeeeEeEeegk.....",
+            "...kgeeeeeeeegk.....",
+            "....kgeeeeeegk......",
+            "......kXXXXXXk......",
+            ".....kXXXYXXXXk.....",
+            "....kXXXXXXXXXXk....",
+            "....kXXXXXXXXXXk....",
+            "....khhhhhhhhhhk....",
+            ".....kXXXXXXXXk.....",
+        ],
+        "calca": "h", "olho": "k", "ombro": (12, 10), "manga": "X", "perna": "pernas",
     },
     "orc": {
         "corpo": [
-            "................",
-            "....kkkkkkk.....",
-            "...kgggggggk....",
-            "..kgggggggggk.k.",
-            "..kggrggrgggkksk",
-            "..kgggggggggkssk",
-            "..kgwgggwggk.ksk",
-            "...kgggggggk..jk",
-            "..kXXXXXXXXXk.jk",
-            ".kgXXXXXXXXXgkj.",
-            ".kgkhhhhhhhkggk.",
-            "..kXXXXXXXXk.k..",
+            "....................",
+            ".....kkkkkkkkk......",
+            "....kgggggggggk.....",
+            "...kgggggggggggk....",
+            "...kgggggggggggk....",
+            "...kgggggEgggEgk....",
+            "...kgggggggggggk....",
+            "....kggggwggwggk....",
+            ".....kkXXXXXXkk.....",
+            "...kkgXXXXXXXXgk....",
+            "..kgkgXXXXXXXXXXk...",
+            "..kggkXXXXXXXXXXk...",
+            "...kkkhhhhhhhhhhk...",
+            ".....kXXXXXXXXXk....",
         ],
-        "pernas": pernas("h"),
+        "calca": "h", "olho": "r", "ombro": (13, 10), "manga": "g", "perna": "pernas",
     },
     "mago": {
         "corpo": [
-            "......k.........",
-            ".....kYk........",
-            "....kXXXk.......",
-            "...kXXXXXk...kak",
-            "..kkkkkkkkkk.kak",
-            "...kweeeeek...k.",
-            "...kweekeek...j.",
-            "...kwwwwwwk...j.",
-            "....kwwwwk....j.",
-            "...kXXwwXXk.kej.",
-            "...kXXXXXXXkk.j.",
-            "...kXXYYYXXk..j.",
+            ".......kk...........",
+            "......kXXk..........",
+            ".....kXXXXk.........",
+            "....kXXYXXXk........",
+            "..kkkkkkkkkkkkk.....",
+            ".....kweeeeek.......",
+            ".....kweEeEek.......",
+            ".....kwwwwwwk.......",
+            "......kwwwwk........",
+            ".....kXXwwXXk.......",
+            "....kXXXXXXXXk......",
+            "....kXXXXXXXXXk.....",
+            "....kXXYYYYXXXk.....",
+            "....kXXXXXXXXXk.....",
         ],
-        "pernas": manto(),
+        "calca": "X", "olho": "k", "ombro": (11, 10), "manga": "X", "perna": "manto",
     },
     "rei": {
         "corpo": [
-            "................",
-            "....k.k.k.k.....",
-            "....kykykyk.....",
-            "....kyyryyk.....",
-            "...kkkkkkkkk....",
-            "..kXkeeeeeek....",
-            "..kXkeekeekk.ky.",
-            "..kXkwwwwwwk.kyk",
-            "..kXXkwwwwk..kj.",
-            ".kXXkyyyyyyk.kj.",
-            ".kXXkyyYYyykekj.",
-            ".kXXkyyyyyyk.kj.",
+            "....................",
+            "......k.k.k.k.......",
+            "......kykykyk.......",
+            ".....kyyyryyyk......",
+            ".....kkkkkkkkk......",
+            "...kXkeeeeeeek......",
+            "...kXkeeeEeEek......",
+            "...kXkwwwwwwwk......",
+            "...kXXkwwwwwk.......",
+            "..kXXkyyyyyyyk......",
+            "..kXXkyyyYyyyyk.....",
+            "..kXXkyyyyyyyyk.....",
+            "..kXXkoooooooyk.....",
+            "..kXXkyyyyyyyyk.....",
         ],
-        "pernas": manto(),
+        "calca": "X", "olho": "k", "ombro": (11, 10), "manga": "o", "perna": "manto",
     },
 }
+for _d in CLASSES.values():
+    assert len(_d["corpo"]) == 14 and all(len(l) == TAM for l in _d["corpo"]), _d
 
 
-def personagem(dados, perna, respira=False):
-    corpo = dados["corpo"][:]
-    if respira:
-        corpo = ["................"] + corpo[:-1]
-    return corpo + dados["pernas"][perna]
+def arma(nome, pose):
+    """Braço da frente + arma de cada classe em cada pose ("guarda" ou "ataque0..3").
+    Devolve (Peca, deslocamento da cabeça (dx, dy), deslocamento do tronco (dx, dy))."""
+    d = CLASSES[nome]
+    om, manga = d["ombro"], d["manga"]
+    a = Peca()
+    cab, tro = (0, 0), (0, 0)
+    n = int(pose[6:]) if pose.startswith("ataque") else -1
+    if nome == "recruta":
+        mao, ang, comp = {-1: ((15, 10), -72, 7), 0: ((12, 8), -118, 6), 1: ((13, 8), -58, 6),
+                          2: ((14, 10), 0, 3), 3: ((14, 11), 40, 4)}[n]
+        a.braco(om, mao, manga)
+        a = _mescla(espada(mao, ang, comp), a)
+        cab, tro = {-1: ((0, 0), (0, 0)), 0: ((-1, 0), (0, 0)), 1: ((0, 0), (0, 0)), 2: ((1, 0), (1, 0)), 3: ((1, 0), (0, 0))}[n]
+    elif nome == "orc":
+        mao, ang, esc = {-1: ((15, 11), -80, 6), 0: ((13, 7), -105, 5), 1: ((14, 5), -55, 5),
+                         2: ((15, 9), 25, 3), 3: ((15, 11), 50, 3)}[n]
+        a.braco(om, mao, manga)
+        a = _mescla(machado(mao, ang, esc), a)
+        cab, tro = {-1: ((0, 0), (0, 0)), 0: ((-1, 0), (-1, 0)), 1: ((0, 0), (0, 0)), 2: ((1, 1), (1, 0)), 3: ((1, 1), (1, 0))}[n]
+    elif nome == "arqueiro":
+        om2 = (11, 10)
+        if n == -1:
+            a.braco(om, (15, 10), manga)
+            a = _mescla(arco(16, 10), a)
+        else:
+            by, puxa, flecha, mao2 = {0: (9, 5, True, (11, 9)), 1: (9, 1, False, (10, 9)),
+                                      2: (9, 0, False, (11, 10)), 3: (10, 0, False, (12, 10))}[n]
+            a.braco(om, (16, by), manga)
+            b2 = Peca()
+            b2.braco(om2, mao2, manga)
+            a = _mescla(arco(17, by, puxa, flecha), a, b2) if n != 3 else _mescla(arco(16, by), a)
+        cab, tro = {-1: ((0, 0), (0, 0)), 0: ((0, 0), (-1, 0)), 1: ((0, 0), (0, 0)), 2: ((0, 0), (0, 0)), 3: ((0, 0), (0, 0))}[n]
+    elif nome == "mago":
+        if n == -1:
+            mao, ang, br = (15, 10), -85, 0
+        else:
+            mao, ang, br = {0: ((13, 9), -120, 0), 1: ((15, 9), -15, 1), 2: ((15, 9), -8, 2), 3: ((14, 9), -45, 1)}[n]
+        a.braco(om, mao, manga)
+        t1 = 9 if n in (-1, 0, 3) else 3
+        a = _mescla(cajado(mao, ang, br, t1), a)
+        cab, tro = {-1: ((0, 0), (0, 0)), 0: ((-1, 0), (0, 0)), 1: ((1, 0), (1, 0)), 2: ((1, 0), (1, 0)), 3: ((0, 0), (0, 0))}[n]
+    elif nome == "rei":
+        mao, ang, br = {-1: ((15, 10), -85, 0), 0: ((15, 11), -70, 0), 1: ((15, 7), -80, 1), 2: ((15, 5), -88, 2), 3: ((15, 9), -75, 1)}[n]
+        a.braco(om, mao, manga)
+        a = _mescla(cetro(mao, ang, br), a)
+        cab, tro = {-1: ((0, 0), (0, 0)), 0: ((0, 1), (0, 0)), 1: ((0, 0), (0, 0)), 2: ((0, -1), (0, 0)), 3: ((0, 0), (0, 0))}[n]
+    return a, cab, tro
 
 
-for nome, dados in CLASSES.items():
-    for time in (1, 2):
-        quadros = [
-            personagem(dados, "parado"), personagem(dados, "parado", True),
-            personagem(dados, "passo1"), personagem(dados, "passo2"),
-            personagem(dados, "passo3"), personagem(dados, "passo2"),
-            personagem(dados, "pulo"), personagem(dados, "queda"),
-        ]
-        folha([grade(q, time) for q in quadros]).save(os.path.join(SPR, f"{nome}_{time}.png"))
+def impacto_dano(nome):
+    """Estrelinha de impacto na frente do rosto no quadro de dano."""
+    p = Peca()
+    for dx, dy, ch in ((0, 0, "w"), (1, 0, "w"), (-1, 0, "w"), (0, 1, "w"), (0, -1, "w"),
+                       (2, 2, "y"), (-2, -2, "y"), (2, -2, "y"), (-2, 2, "y")):
+        p.p(16 + dx, 5 + dy, ch)
+    return p
+
+
+def compor(nome, pose_perna, arma_pose="guarda", dy_cab=0, dy_tro=0, dano=False):
+    d = CLASSES[nome]
+    g = [["."] * TAM for _ in range(TAM)]
+
+    def colocar(peca, dx=0, dy=0, texto=None):
+        for (x, y), ch in peca.px.items():
+            x, y = x + dx, y + dy
+            if 0 <= x < TAM and 0 <= y < TAM:
+                g[y][x] = ch
+
+    # pernas (calça ou túnica) com contorno automático
+    if d["perna"] == "pernas":
+        pp = pernas_peca(d["calca"], pose_perna)
+    else:
+        pp = manto_peca(pose_perna)
+    pp = pp.deslocada(0, 14)
+    colocar(pp)
+    contorno(g, pp)
+    arm, (cdx, cdy), (tdx, tdy) = arma(nome, arma_pose)
+    if dano:
+        cdx, cdy, tdx, tdy = -2, 1, -1, 0
+    # tronco e cabeça (desenhados à mão)
+    olho = "w" if dano else d["olho"]
+    for faixa, dx, dy in ((range(CORTE, 14), tdx, dy_tro + tdy), (range(0, CORTE), cdx, dy_cab + tdy + cdy)):
+        for r in faixa:
+            for c, ch in enumerate(d["corpo"][r]):
+                if ch == ".":
+                    continue
+                x, y = c + dx, r + dy
+                if 0 <= x < TAM and 0 <= y < TAM:
+                    g[y][x] = olho if ch == "E" else ch
+    # braço da frente e arma
+    colocar(arm, tdx, dy_tro + tdy)
+    ar2 = arm.deslocada(tdx, dy_tro + tdy)
+    contorno(g, ar2)
+    if dano:
+        colocar(impacto_dano(nome))
+    return ["".join(l) for l in g]
+
+
+def quadros_lutador(nome):
+    """Lista de 19 quadros (ver ANIMACOES): parado 0-3 | correr 4-9 | pulo 10-11 | queda 12-13 | ataque 14-17 | dano 18."""
+    q = []
+    # parado: respiração sutil (cabeça e tronco descem em momentos diferentes)
+    for dc, dt in ((0, 0), (1, 0), (1, 1), (0, 1)):
+        q.append(compor(nome, "parado", "guarda", dc, dt))
+    for k in range(6):
+        q.append(compor(nome, f"corre{k}", "guarda", 0, 1 if k in (0, 3) else 0))
+    q.append(compor(nome, "pulo0", "guarda", 0, 0))
+    q.append(compor(nome, "pulo1", "guarda", 0, -1))
+    q.append(compor(nome, "queda0", "guarda", 0, 0))
+    q.append(compor(nome, "queda1", "guarda", -1, 0))
+    for k in range(4):
+        q.append(compor(nome, "parado", f"ataque{k}", 0, 0))
+    q.append(compor(nome, "dano", "guarda", 0, 0, True))
+    assert len(q) == sum(n for _, n in ANIMACOES)
+    return q
+
+
+def gerar_lutadores():
+    for nome in CLASSES:
+        for time in (1, 2):
+            folha([grade(q, time) for q in quadros_lutador(nome)]).save(os.path.join(SPR, f"{nome}_{time}.png"))
+
+
+gerar_lutadores()
 
 # ---------------------------------------------------------------- Lacaio do Rei
 LACAIO = [
@@ -602,7 +943,8 @@ def coracao(q):
 folha([coracao(0), coracao(1)]).save(os.path.join(SPR, "coracao.png"))
 
 # ---------------------------------------------------------------- Ícone
-icone = grade(personagem(CLASSES["rei"], "parado"), 1).resize((128, 128), Image.NEAREST)
+icone = Image.new("RGBA", (128, 128), (0, 0, 0, 0))
+icone.alpha_composite(grade(quadros_lutador("rei")[0], 1).resize((120, 120), Image.NEAREST), (4, 4))
 icone.save(os.path.join(RAIZ, "icon.png"))
 
 

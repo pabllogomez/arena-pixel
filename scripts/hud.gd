@@ -7,6 +7,8 @@ const LARG_PAINEL := 130.0
 const ALT_PAINEL := 24.0
 const LARG_CARTA := 184.0
 const ALT_CARTA := 38.0
+## Parte do quadro 20x20 do lutador (cabeça e tronco) mostrada 1:1 nos retratos e ícones de 16x16
+const RETRATO_REGIAO := Rect2(2, 1, 16, 16)
 
 var partida: Node
 
@@ -143,7 +145,7 @@ func _painel(l: Lutador, n: int) -> void:
 	var retrato := Rect2(rx, 2, 20, 20)
 	UI.moldura(self, retrato, Color("29366f") if n == 1 else Color("5d275d"), cor, cor.lightened(0.4))
 	if l.vivo:
-		draw_texture_rect_region(l.sprite.texture, Rect2(retrato.position + Vector2(2, 2), Vector2(16, 16)), Rect2(0, 0, 16, 16))
+		draw_texture_rect_region(l.sprite.texture, Rect2(retrato.position + Vector2(2, 2), Vector2(16, 16)), RETRATO_REGIAO)
 	else:
 		# Caveirinha: um X no retrato de quem caiu
 		for i in 6:
@@ -265,10 +267,11 @@ func _apresentacao_torre() -> void:
 	draw_rect(Rect2(painel.position.x + 10.0, y + 45.0, painel.size.x - 20.0, 1), UI.BORDA)
 	# Adversário: retrato, classe e nível
 	var cpu: Lutador = partida.jogadores[2]
-	var quadro := 2 + int(_t * 8.0) % 4
+	var quadro: int = Lutador.quadro_de("correr", _t)
 	var retrato := Rect2(painel.position.x + 14.0, y + 52.0, 28, 28)
 	UI.moldura(self, retrato, Color("5d275d"), Jogo.COR_TIME[2], Jogo.COR_TIME[2].lightened(0.4))
-	draw_texture_rect_region(cpu.sprite.texture, Rect2(retrato.position + Vector2(2, 2), Vector2(24, 24)), Rect2(quadro * 16, 0, 16, 16))
+	draw_texture_rect_region(cpu.sprite.texture, Rect2(retrato.position + Vector2(4, 4), Vector2(Lutador.TAM_QUADRO, Lutador.TAM_QUADRO)),
+			Rect2(quadro * Lutador.TAM_QUADRO, 0, Lutador.TAM_QUADRO, Lutador.TAM_QUADRO))
 	UI.texto(self, Vector2(retrato.end.x + 8.0, y + 58.0), "PRIMEIRO ADVERSÁRIO" if info["final"] else "ADVERSÁRIO", UI.P, UI.LUZ, UI.ESQ)
 	UI.texto(self, Vector2(retrato.end.x + 8.0, y + 70.0), "%s  Nv %d" % [cpu.dados.nome.to_upper(), cpu.nivel], UI.P, Jogo.COR_TIME[2], UI.ESQ)
 	# Vida do jogador
@@ -427,10 +430,10 @@ func _fim() -> void:
 	if classe != "":
 		# Retrato do vencedor e a classe com que venceu
 		var tex: Texture2D = partida.jogadores[v].sprite.texture
-		var quadro := 2 + int(_t * 8.0) % 4
+		var quadro: int = Lutador.quadro_de("correr", _t)
 		var larg_classe := UI.largura(classe, UI.P)
 		var x := centro.x - (larg_classe + 20.0) / 2.0
-		draw_texture_rect_region(tex, Rect2(roundf(x), centro.y - 3, 16, 16), Rect2(quadro * 16, 0, 16, 16))
+		draw_texture_rect_region(tex, Rect2(roundf(x), centro.y - 4, 20, 20), Rect2(quadro * Lutador.TAM_QUADRO, 0, Lutador.TAM_QUADRO, Lutador.TAM_QUADRO))
 		UI.texto(self, Vector2(x + 20.0, centro.y + 6), classe, UI.P, UI.BRANCO, UI.ESQ)
 	if not partida.torre.is_empty():
 		return  # na Torre o controlador cuida do que vem depois

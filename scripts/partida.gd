@@ -1084,7 +1084,7 @@ func _montar_estado() -> Dictionary:
 		js.append([l.position.x, l.position.y, l.sprite.frame, l.sprite.flip_h, l.vida, l.vida_max,
 				l.nivel, l.xp, l.xp_para_proximo(), _indice_classe(l), l.vivo, esc, l._flash > 0.0,
 				l.efeito, l.efeito_t, Jogo.CLASSES.find(l.ataque.nome.to_lower()),
-				[l._rotulo_critico, l._rotulo_t], l.recarga_dash()])
+				[l._rotulo_critico, l._rotulo_t], l.recarga_dash(), l.sprite.rotation])
 	var es: Array = []
 	for e in entidades.get_children():
 		if e is Minion and e.vivo:
@@ -1158,7 +1158,7 @@ func _physics_convidado() -> void:
 	_quadro += 1
 	if _quadro % 8 == 0:
 		for l in jogadores.values():
-			if l.vivo and l.sprite.frame >= 2 and l.sprite.frame <= 5:
+			if l.vivo and l.sprite.frame in Lutador.QUADROS["correr"]:
 				particulas.fx("correr", l.position + Vector2(0, 8), 1.0 if l.sprite.flip_h else -1.0)
 
 
@@ -1239,6 +1239,8 @@ func _aplicar_jogador(l: Lutador, d: Array) -> void:
 		l._rotulo_t = d[16][1]
 	if d.size() > 17:
 		l.dash_recarga_vista = d[17]
+	if d.size() > 18:
+		l.sprite.rotation = d[18]  # inclinação do dash (o quadro de ataque/dano já vem em d[2])
 	if l.efeito == "ataque" and int(d[15]) >= 0:
 		l.ataque = Jogo.dados_classe(d[15])
 	var esc: Array = d[11]

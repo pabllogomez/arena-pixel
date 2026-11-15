@@ -112,9 +112,12 @@ func _draw() -> void:
 	UI.moldura(self, painel, Color("23263a"), UI.OURO if campeao else UI.BORDA, UI.BRANCO if campeao else UI.LUZ)
 	var retrato := Rect2(painel.position.x + 14.0, painel.position.y + 14.0, 52, 52)
 	UI.moldura(self, retrato, Color("29366f"), Jogo.COR_TIME[1], Jogo.COR_TIME[1].lightened(0.4))
-	var quadro := 2 + int(_t * 8.0) % 4 if campeao else 7  # campeão corre; derrotado cai
-	draw_texture_rect_region(_texturas[torre.personagem], Rect2(retrato.position + Vector2(2, 2), Vector2(48, 48)),
-			Rect2(quadro * 16, 0, 16, 16))
+	# campeão corre; derrotado leva o impacto
+	var quadro: int = Lutador.quadro_de("correr", _t) if campeao else Lutador.QUADROS["dano"][0]
+	var lado_retrato := Lutador.TAM_QUADRO * 2.0
+	draw_texture_rect_region(_texturas[torre.personagem],
+			Rect2(retrato.position + (retrato.size - Vector2(lado_retrato, lado_retrato)) / 2.0, Vector2(lado_retrato, lado_retrato)),
+			Rect2(quadro * Lutador.TAM_QUADRO, 0, Lutador.TAM_QUADRO, Lutador.TAM_QUADRO))
 	var xt := retrato.end.x + 12.0
 	UI.texto(self, Vector2(painel.position.x + 14.0 + 26.0, retrato.end.y + 12.0), torre.nome_personagem().to_upper(), UI.P, UI.BRANCO)
 	UI.texto(self, Vector2(painel.position.x + 14.0 + 26.0, retrato.end.y + 24.0), torre.nome_dificuldade(), UI.P, UI.OURO)
