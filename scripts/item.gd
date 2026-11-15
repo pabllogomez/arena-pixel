@@ -6,9 +6,11 @@ extends Node2D
 ##              sorteado na hora em que alguém pega.
 ##   "bola"   - bola com ↻ parada no topo central da arena (flutua e gira no
 ##              lugar); quem encostar troca de classe.
+##   "coracao" - coração vermelho raro (flutua como o de efeito); cura quem pegar.
 
 const TEX_ITEM := preload("res://assets/sprites/item.png")
 const TEX_BOLA := preload("res://assets/sprites/bola.png")
+const TEX_CORACAO := preload("res://assets/sprites/coracao.png")
 const EFEITOS := ["pequeno", "grande", "gravidade", "ataque"]
 const RAIO_PEGAR := 12.0
 
@@ -25,7 +27,7 @@ var _sprite: Sprite2D
 func _ready() -> void:
 	add_to_group("item")
 	_sprite = Sprite2D.new()
-	_sprite.texture = TEX_BOLA if tipo == "bola" else TEX_ITEM
+	_sprite.texture = TEX_BOLA if tipo == "bola" else (TEX_CORACAO if tipo == "coracao" else TEX_ITEM)
 	_sprite.hframes = 2
 	var m := CanvasItemMaterial.new()
 	m.light_mode = CanvasItemMaterial.LIGHT_MODE_UNSHADED
@@ -37,7 +39,7 @@ func _ready() -> void:
 
 
 func chave_visual() -> String:
-	return "bola" if tipo == "bola" else "item"
+	return tipo if tipo == "bola" or tipo == "coracao" else "item"
 
 
 func _physics_process(delta: float) -> void:

@@ -49,6 +49,9 @@ func _initialize() -> void:
 	await _testar_menu_navegacao()
 	await _testar_sem_mob_cura()
 	await _testar_rotulo_critico()
+	await _testar_sem_regen_e_curas()
+	await _testar_coracao()
+	await _testar_barra_dash()
 	await _testar_torre()
 	await _testar_torre_fim_do_tempo()
 	await _testar_etapa_final()
@@ -279,7 +282,7 @@ func _testar_dinamica() -> void:
 	var b = p.jogadores[2]
 	if absf(p.mult_pvp(a, b) - p.PVP_BASE * 1.35) > 0.001:
 		_falha("PvP deveria ser 0,4 x 1,35: %.3f" % p.mult_pvp(a, b))
-	if a.XP_PARA_CLASSE != 8 or a.CURA_NIVEL != 0.02:
+	if a.XP_PARA_CLASSE != 8 or a.CURA_NIVEL != 0.01:
 		_falha("Recruta/cura com valores inesperados")
 	print("Dinâmica (Bola, PvP, Recruta): ok")
 	main.queue_free()
@@ -1300,6 +1303,140 @@ func _testar_sem_mob_cura() -> void:
 	print("Sem mob de cura (fase de Recruta só com monstros comuns): ok")
 
 
+func _config_torre_andar(andar: int) -> Dictionary:
+	var t = _torre_script.new()
+	t.comecar(0, 1, 7)
+	t.andar = andar
+	t.jogador = {"classe": 0, "nivel": 2 + andar, "historico": [], "vida": 1.0}
+	var cfg: Dictionary = t.config_andar()
+	t.free()
+	return cfg
+
+
+func _testar_sem_regen_e_curas() -> void:
+	## Sem regeneração passiva (Arena e Torre); subir de nível cura 1%; ganhar a classe não cura.
+	var casos := [["arena", {}], ["torre", _config_torre_andar(1)]]
+	for c in casos:
+		var p = await _nova_partida_livre(51, c[1])
+		var main = p.get_parent()
+		var l = p.jogadores[1]
+		l.receber_classe(load("res://resources/classes/orc.tres"))
+		var base: float = l.vida_max
+		l.vida = base * 0.4
+		p.contagem = -5.0
+		p._congelar(false)
+		p.tempo_restante = 600.0
+		for i in 600:   # 10 s simulados, sem dano
+			await physics_frame
+		if not _perto(l.vida, base * 0.4, 0.0001):
+			_falha("sem regen (%s): a vida mudou parada (%.2f -> %.2f)" % [c[0], base * 0.4, l.vida])
+		main.queue_free()
+		await process_frame
+	var p = await _nova_partida_livre(52)
+	var main = p.get_parent()
+	var r = p.jogadores[1]
+	if not r.eh_recruta:
+		_falha("curas: o jogador deveria começar Recruta")
+	r.vida = r.vida_max * 0.5
+	r.receber_classe(load("res://resources/classes/orc.tres"))
+	if r.vida / r.vida_max > 0.5 + 0.001:
+		_falha("curas: ganhar a classe não deveria curar (fração %.3f, esperava 0.5)" % (r.vida / r.vida_max))
+	r.vida = r.vida_max * 0.5
+	var v0: float = r.vida
+	var nv: int = r.nivel
+	r.ganhar_xp(r.xp_para_proximo())
+	if r.nivel != nv + 1 or not _perto(r.vida, v0 + r.vida_max * 0.01, 0.01):
+		_falha("curas: subir de nível deveria curar 1%% (nível %d, %.2f -> %.2f, máx %.2f)" % [r.nivel, v0, r.vida, r.vida_max])
+	main.queue_free()
+	await process_frame
+	print("Sem regeneração (arena e torre), nível cura 1%, classe não cura: ok")
+
+
+func _testar_coracao() -> void:
+	## Coração: ~8% dos itens de efeito, no máximo 1 por partida; cura 20%; nunca na torre.
+	var p = await _nova_partida_livre(53)
+	var main = p.get_parent()
+	var total := 0
+	var corac := 0
+	for k in 3000:
+		p._coracao_saiu = false
+		if p._sortear_tipo_item() == "coracao":
+			corac += 1
+		total += 1
+	var taxa := float(corac) / total
+	if taxa < 0.06 or taxa > 0.10:
+		_falha("coração: chance %.3f fora de 6%%-10%%" % taxa)
+	p._coracao_saiu = false
+	var n := 0
+	for k in 500:
+		if p._sortear_tipo_item() == "coracao":
+			n += 1
+	if n != 1:
+		_falha("coração: %d corações numa partida (esperava no máximo 1)" % n)
+	# cria, vê o snapshot e pega
+	var l = p.jogadores[1]
+	l.receber_classe(load("res://resources/classes/orc.tres"))
+	p._criar_item("coracao")
+	var it = null
+	for e in p.entidades.get_children():
+		if e.is_in_group("item") and e.tipo == "coracao":
+			it = e
+	if it == null or it.chave_visual() != "coracao" or it.duracao != 25.0:
+		_falha("coração: não nasceu como o esperado (duração %s)" % [it.duracao if it else "-"])
+	var achou := false
+	for e in p._montar_estado()["e"]:
+		if e[1] == "coracao" and p.TEX_PROJETIL.has(e[1]):
+			achou = true
+	if not achou:
+		_falha("coração: o snapshot não leva a textura certa ao convidado")
+	l.vida = l.vida_max * 0.5
+	var antes: float = l.vida
+	p._pegar_item(it, l)
+	if not _perto(l.vida, antes + l.vida_max * 0.2, 0.01):
+		_falha("coração: curou %.2f (esperava %.2f)" % [l.vida - antes, l.vida_max * 0.2])
+	l.vida = l.vida_max * 0.95
+	var it2 = load("res://scripts/item.gd").new()
+	it2.tipo = "coracao"
+	p.entidades.add_child(it2)
+	p._pegar_item(it2, l)
+	if l.vida > l.vida_max + 0.0001:
+		_falha("coração: passou da vida máxima")
+	main.queue_free()
+	await process_frame
+	# Torre: nunca itens (nem coração)
+	var t = _torre_script.new()
+	t.comecar(0, 1, 7)
+	if t.config_andar().get("itens", true):
+		_falha("coração: a torre deveria ter itens desligados")
+	t.free()
+	print("Coração (8%, 1 por partida, cura 20%, snapshot, fora da torre): ok")
+
+
+func _testar_barra_dash() -> void:
+	## Fração da recarga do dash: 0 logo após o dash, 1 quando pronto; vai no snapshot.
+	var p = await _nova_partida_livre(54)
+	var main = p.get_parent()
+	var l = p.jogadores[1]
+	l.receber_classe(load("res://resources/classes/orc.tres"))
+	if l.recarga_dash() != 1.0:
+		_falha("barra do dash: deveria começar pronta (%.2f)" % l.recarga_dash())
+	l._dash_cd = l.DASH_RECARGA
+	if l.recarga_dash() != 0.0:
+		_falha("barra do dash: deveria ser 0 logo após o dash (%.2f)" % l.recarga_dash())
+	l._dash_cd = l.DASH_RECARGA * 0.25
+	if not _perto(l.recarga_dash(), 0.75, 0.001):
+		_falha("barra do dash: fração %.2f (esperava 0.75)" % l.recarga_dash())
+	var snap: Array = p._montar_estado()["j"][0]
+	if snap.size() < 18 or not _perto(snap[17], 0.75, 0.001):
+		_falha("barra do dash: não vai no snapshot (%s)" % [snap.back()])
+	l._dash_cd = -3.0
+	if l.recarga_dash() != 1.0:
+		_falha("barra do dash: deveria ser 1 quando pronto")
+	main.queue_free()
+	await process_frame
+	print("Barra do dash (0 após o dash, 1 pronto, snapshot): ok")
+
+
 func _testar_rotulo_critico() -> void:
 	## O rótulo de crítico fica no ATACANTE (sob a barra de vida), não no alvo.
 	var p = await _nova_partida_livre(43)
@@ -1421,7 +1558,7 @@ func _testar_torre() -> void:
 			_falha("%s: CPU deveria ser bot NORMAL" % rotulo)
 		# regras da partida
 		if p.tempo_restante != (240.0 if a == 5 else 90.0) or p.monstros_ligados or p.itens_ligados or p.morte_subita_ligada \
-				or p.regen or p.xp_ligado:
+				or p.xp_ligado:
 			_falha("%s: flags da partida erradas" % rotulo)
 		# só os 2 lutadores: nenhum monstro (nem mob de cura) e nenhum item
 		if p.get_tree().get_nodes_in_group("alvo").size() != 2 or not p.get_tree().get_nodes_in_group("item").is_empty():
@@ -1568,12 +1705,11 @@ func _testar_torre() -> void:
 		var esperado = _bot_script.Dificuldade.NORMAL if dif_t == 0 else _bot_script.Dificuldade.DIFICIL
 		if cpu.controle.dificuldade != esperado:
 			_falha("torre: dificuldade %d usou o bot errado" % dif_t)
-		vidas.append(cpu.vida_max)
+		# Andar 1 (nível 2): sem melhorias, então a vida é a da classe × ajuste
+		vidas.append(cpu.vida_max / cpu.dados.vida_max)
 		reacoes.append(float(cpu.controle.p["reacao"]))
-	if not (vidas[0] < vidas[1] and vidas[1] < vidas[2]):
-		_falha("torre: vida da CPU deveria crescer NORMAL < DIFÍCIL < INSANO (%s)" % [vidas])
-	if absf(vidas[1] / vidas[2] - 0.95) > 0.01 or absf(vidas[0] / vidas[2] - 0.90) > 0.01:
-		_falha("torre: ajuste de vida da CPU errado (%s)" % [vidas])
+	if absf(vidas[0] - 0.90) > 0.01 or absf(vidas[1] - 0.95) > 0.01 or absf(vidas[2] - 1.0) > 0.01:
+		_falha("torre: ajuste de vida da CPU errado (frações da vida da classe: %s)" % [vidas])
 	if not (reacoes[1] > reacoes[2] and absf(reacoes[2] - float(_bot_script.PARAMS[_bot_script.Dificuldade.DIFICIL]["reacao"])) < 0.001):
 		_falha("torre: reação da CPU errada (%s)" % [reacoes])
 	main.queue_free()
@@ -1614,8 +1750,6 @@ func _testar_torre_fim_do_tempo() -> void:
 		p._congelar(false)
 		eu.ativo = false
 		cpu.ativo = false
-		eu._sem_dano = 100.0
-		cpu._sem_dano = 100.0
 		p._t_monstro = 100.0
 		p._t_item = 100.0
 		p.momentos_bola.clear()
@@ -1623,7 +1757,7 @@ func _testar_torre_fim_do_tempo() -> void:
 		for i in 20:
 			await physics_frame
 		if not _perto(eu.vida, vida_eu, 0.0001):
-			_falha("fim do tempo (%s): a vida regenerou na torre (%.2f → %.2f)" % [c[0], vida_eu, eu.vida])
+			_falha("fim do tempo (%s): a vida mudou na torre (%.2f → %.2f)" % [c[0], vida_eu, eu.vida])
 		if p.get_tree().get_nodes_in_group("alvo").size() != 2 or not p.get_tree().get_nodes_in_group("item").is_empty():
 			_falha("fim do tempo (%s): apareceram monstros ou itens" % c[0])
 		p.tempo_restante = 0.01
@@ -1638,7 +1772,7 @@ func _testar_torre_fim_do_tempo() -> void:
 		t.free()
 	main.queue_free()
 	await process_frame
-	print("Torre (fim do tempo por % de vida, empate = CPU, sem regen/monstros/itens): ok")
+	print("Torre (fim do tempo por % de vida, empate = CPU, sem monstros/itens): ok")
 
 
 func _partida_etapa_final(main, t, ordem_final: Array, vida := 0.8) -> Node:
@@ -1654,7 +1788,6 @@ func _partida_etapa_final(main, t, ordem_final: Array, vida := 0.8) -> Node:
 	p._congelar(false)
 	for l in p.jogadores.values():
 		l.ativo = false
-		l._sem_dano = 100.0
 	return p
 
 

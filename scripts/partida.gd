@@ -89,15 +89,19 @@ var _t_monstro := 0.0
 # Itens
 const INTERVALO_ITEM := 20.0
 const MAX_ITENS := 2
+## Chance de o item de efeito que ia nascer ser um coração de cura (no máximo 1 por partida)
+const CHANCE_CORACAO := 0.08
+## Fração da vida máxima que o coração cura
+const CURA_CORACAO := 0.2
 ## A Bola da troca aparece uma vez, depois deste tempo de partida, no topo
 ## central da arena, e fica lá até alguém pegar ou começar a Morte Súbita.
 const MOMENTO_BOLA := 120.0
 var _t_item := 0.0
+var _coracao_saiu := false
 var itens_ligados := true  ## (só os testes de equilíbrio e a Torre desligam)
 ## Regras que a Torre da Tormenta desliga (o padrão é o comportamento normal)
 var monstros_ligados := true
 var morte_subita_ligada := true  ## false: no fim do tempo vence quem tem mais % de vida
-var regen := true                ## regeneração lenta fora de combate
 var xp_ligado := true            ## false: o nível só muda por fora (vitória na Torre)
 ## Torre da Tormenta (vazio nas outras partidas): {"andar", "final", "adversario", ...}
 var torre := {}
@@ -142,6 +146,7 @@ const TEX_PROJETIL := {
 	"orbe": preload("res://assets/sprites/orbe.png"),
 	"item": preload("res://assets/sprites/item.png"),
 	"bola": preload("res://assets/sprites/bola.png"),
+	"coracao": preload("res://assets/sprites/coracao.png"),
 }
 
 
@@ -149,7 +154,7 @@ func iniciar(config: Dictionary) -> void:
 	## config: {"semente": int, "tempo": float, "bots": {1: dif, 2: dif}}
 	##   dificuldade -1 = humano; 0, 1, 2, 3 = bot fácil, normal, difícil, muito difícil.
 	## Chaves opcionais (padrão = partida normal): "itens", "monstros", "morte_subita",
-	## "regen", "xp" (bool), "lutadores" ({n: estado}, ver Lutador.importar_estado),
+	## "xp" (bool), "lutadores" ({n: estado}, ver Lutador.importar_estado),
 	## "sequencia" (lista de estados: o jogador 2 enfrenta um após o outro, ver `sequencia`) e
 	## "torre" (dados do andar da Torre da Tormenta; ligam a apresentação e o fim de luta).
 	rede = config.get("rede", "")
@@ -194,7 +199,6 @@ func iniciar(config: Dictionary) -> void:
 	itens_ligados = config.get("itens", true)
 	monstros_ligados = config.get("monstros", true)
 	morte_subita_ligada = config.get("morte_subita", true)
-	regen = config.get("regen", true)
 	xp_ligado = config.get("xp", true)
 	torre = config.get("torre", {})
 	sequencia = config.get("sequencia", [])
@@ -935,7 +939,7 @@ func _atualizar_itens(delta: float) -> void:
 	if _t_item >= INTERVALO_ITEM:
 		_t_item = 0.0
 		if efeitos < MAX_ITENS:
-			_criar_item("efeito")
+			_criar_item(_sortear_tipo_item())
 	# Bola: no momento sorteado, se os dois já tiverem classe (senão espera)
 	var tem_bola := itens.any(func(i): return i.tipo == "bola")
 	if not momentos_bola.is_empty() and tempo_restante <= momentos_bola[0] and not tem_bola and not _tem_recruta():
@@ -951,6 +955,14 @@ func _atualizar_itens(delta: float) -> void:
 			if it.tocando(l):
 				_pegar_item(it, l)
 				break
+
+
+func _sortear_tipo_item() -> String:
+	## Item de efeito, ou (raro, uma vez por partida) um coração de cura no lugar.
+	if not _coracao_saiu and randf() < CHANCE_CORACAO:
+		_coracao_saiu = true
+		return "coracao"
+	return "efeito"
 
 
 func _criar_item(tipo: String) -> void:
@@ -998,7 +1010,7 @@ func _ponto_topo_central() -> Vector2:
 func _pegar_item(it: Item, l: Lutador) -> void:
 	it.queue_free()
 	criar_brilho(it.position)
-	fx("item", it.position)
+	fx("item" if it.tipo != "coracao" else "nivel", it.position)
 	if it.tipo == "bola":
 		var outro := oponente(l)
 		var opcoes: Array[ClasseDados] = []
@@ -1012,6 +1024,14 @@ func _pegar_item(it: Item, l: Lutador) -> void:
 		_anunciar_classe(l.numero, d.nome)
 		_evento(["classe", l.numero, Jogo.CLASSES.find(d.nome.to_lower())])
 		Jogo.tocar("bola")
+	elif it.tipo == "coracao":
+		var antes := l.vida
+		l.curar(l.vida_max * CURA_CORACAO)
+		var curou := l.vida - antes
+		if curou >= 0.5:
+			mostrar_texto(l.position + Vector2(0, -24), "+%d" % roundi(curou), Color("a7f070"))
+		fx("cura", l.position)
+		Jogo.tocar("nivel")
 	else:
 		l.aplicar_efeito(Item.EFEITOS.pick_random())
 		mostrar_texto(l.position + Vector2(0, -24), l.nome_efeito(), Color("f4a2f4"))
@@ -1064,7 +1084,7 @@ func _montar_estado() -> Dictionary:
 		js.append([l.position.x, l.position.y, l.sprite.frame, l.sprite.flip_h, l.vida, l.vida_max,
 				l.nivel, l.xp, l.xp_para_proximo(), _indice_classe(l), l.vivo, esc, l._flash > 0.0,
 				l.efeito, l.efeito_t, Jogo.CLASSES.find(l.ataque.nome.to_lower()),
-				[l._rotulo_critico, l._rotulo_t]])
+				[l._rotulo_critico, l._rotulo_t], l.recarga_dash()])
 	var es: Array = []
 	for e in entidades.get_children():
 		if e is Minion and e.vivo:
@@ -1217,6 +1237,8 @@ func _aplicar_jogador(l: Lutador, d: Array) -> void:
 	if d.size() > 16:
 		l._rotulo_critico = d[16][0]
 		l._rotulo_t = d[16][1]
+	if d.size() > 17:
+		l.dash_recarga_vista = d[17]
 	if l.efeito == "ataque" and int(d[15]) >= 0:
 		l.ataque = Jogo.dados_classe(d[15])
 	var esc: Array = d[11]

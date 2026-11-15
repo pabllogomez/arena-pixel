@@ -131,7 +131,7 @@ func config_andar() -> Dictionary:
 	var config := {
 		"semente": _rng.randi(),
 		"bots": {1: -1, 2: DIFICULDADES_BOT[dificuldade]},
-		"itens": false, "monstros": false, "morte_subita": false, "regen": false, "xp": false,
+		"itens": false, "monstros": false, "morte_subita": false, "xp": false,
 	}
 	var info := {"andar": andar, "final": e_final()}
 	if e_final():

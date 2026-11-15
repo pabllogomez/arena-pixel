@@ -13,11 +13,7 @@ const TEMPO_BUFFER := 0.12
 ## XP que o Recruta precisa para ganhar a classe (4 monstros iniciais, de 2 XP)
 const XP_PARA_CLASSE := 8
 ## Fração da vida máxima recuperada ao subir de nível
-const CURA_NIVEL := 0.02
-## Regeneração fora de combate: depois de REGEN_ESPERA s sem tomar dano,
-## recupera REGEN_TAXA da vida máxima por segundo.
-const REGEN_ESPERA := 5.0
-const REGEN_TAXA := 0.03
+const CURA_NIVEL := 0.01
 ## Rei com lacaios vivos leva só esta fração do dano de projéteis
 const GUARDA_REAL := 0.9
 ## Dash: arrancada horizontal curta (sem gravidade), igual para todas as classes.
@@ -108,13 +104,13 @@ var _flash := 0.0
 ## Rótulo do último crítico que ESTE personagem acertou ("costas", "dash" ou ""), desenhado sob a barra de vida
 var _rotulo_critico := ""
 var _rotulo_t := 0.0
-var _sem_dano := 0.0
 ## Estica/achata o sprite por um instante (pulo, pouso, golpe); volta para (1, 1)
 var _esticar := Vector2.ONE
 var _t_poeira := 0.0
 # Dash
 var _dash_t := 0.0             ## tempo restante da arrancada (> 0 = dashando)
 var _dash_cd := 0.0            ## recarga restante
+var dash_recarga_vista := 1.0  ## (só o convidado em rede) fração da recarga vinda do anfitrião
 var _dash_dir := 1.0
 var _dash_ar_usado := false    ## já usou o dash no ar (volta ao tocar o chão)
 var _dash_buffer := 0.0
@@ -156,7 +152,6 @@ func receber_classe(d: ClasseDados) -> void:
 	## Recruta vira uma classe (chamado pela partida no nível 2).
 	eh_recruta = false
 	_aplicar_classe(d)
-	curar(vida_max * 0.25)
 	_cd_ataque = 0.4
 
 
@@ -480,10 +475,6 @@ func _physics_process(delta: float) -> void:
 		if _cd_ataque <= 0.0:
 			_tentar_atacar()
 
-	_sem_dano += delta
-	if partida.regen and _sem_dano > REGEN_ESPERA and vida < vida_max and not partida.morte_subita:
-		curar(vida_max * REGEN_TAXA * delta)
-
 	if _flash > 0.0:
 		_flash -= delta
 	if _rotulo_t > 0.0:
@@ -792,7 +783,6 @@ func receber_dano(qtd: float, origem, fonte := "", _pos_golpe := Vector2.INF) ->
 		origem.dano_causado += efetivo
 		origem.maior_golpe = maxf(origem.maior_golpe, efetivo)
 	vida -= qtd
-	_sem_dano = 0.0
 	_flash = 0.12
 	Jogo.tocar("acerto")
 	var texto := str(roundi(qtd)) if qtd >= 1.0 else "%.1f" % qtd
@@ -818,6 +808,13 @@ func receber_dano(qtd: float, origem, fonte := "", _pos_golpe := Vector2.INF) ->
 	if vida <= 0.0:
 		vida = 0.0
 		_morrer()
+
+
+func recarga_dash() -> float:
+	## Fração da recarga do dash: 0 logo após usar, 1 quando está pronto.
+	if partida != null and partida.rede == "convidado":
+		return dash_recarga_vista
+	return clampf(1.0 - _dash_cd / DASH_RECARGA, 0.0, 1.0)
 
 
 func curar(qtd: float) -> void:

@@ -96,6 +96,19 @@ func _draw() -> void:
 
 # ------------------------------------------------------------------ Painel do jogador
 
+func _barra_dash(l: Lutador, bx: float, larg: float, dir: bool) -> void:
+	## Linha de 1 px (y = 19, entre a vida e a experiência) que enche conforme o dash recarrega; pronto = clara e com brilho curto.
+	var f := l.recarga_dash() if l.vivo else 0.0
+	var area := Rect2(bx, 19, larg, 1)
+	draw_rect(area, Color(UI.TINTA, 0.8))
+	if f >= 1.0:
+		var brilho := 0.6 + 0.4 * (0.5 + 0.5 * sin(_t * 8.0))
+		draw_rect(area, Color(UI.BRANCO, brilho))
+	elif f > 0.0:
+		var w := roundf(larg * f)
+		var r := Rect2(bx + larg - w if dir else bx, 19, w, 1)
+		draw_rect(r, Color("73eff7", 0.85))
+
 func _rotulo_critico(l: Lutador, x0: float) -> void:
 	## Crítico que este jogador acertou: letras grandes logo abaixo do painel de
 	## vida, numa plaquinha na cor do tipo; pisca branco ao aparecer e some piscando.
@@ -158,6 +171,8 @@ func _painel(l: Lutador, n: int) -> void:
 	for q in [0.25, 0.5, 0.75]:
 		var mx := bx + roundf(larg_barra * (1.0 - q if dir else q))
 		draw_rect(Rect2(mx, 12, 1, 2), Color(UI.TINTA, 0.6))
+	# Recarga do dash: linha fina logo abaixo da vida; acende quando está pronto
+	_barra_dash(l, bx, larg_barra, dir)
 	# Experiência
 	var cor_xp := UI.BRANCO if _pulso[n] > 0.0 and int(_t * 12.0) % 2 == 0 else UI.VERDE
 	UI.barra(self, Rect2(bx, 20, larg_barra, 2), 1.0 if _pulso[n] > 0.3 else _xp_visto[n], cor_xp, -1.0, dir)

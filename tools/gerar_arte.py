@@ -566,6 +566,41 @@ def bola(q):
 
 folha([bola(0), bola(1)]).save(os.path.join(SPR, "bola.png"))
 
+
+# Coração de cura (item raro): 2 quadros 16x16 (o segundo brilha mais)
+CORACAO = [
+    "................",
+    "...kkkk..kkkk...",
+    "..kRRRRkkRRRRk..",
+    ".kRWWRRRRRRRRRk.",
+    ".kRWRRRRRRRRRRk.",
+    ".kRRRRRRRRRRRRk.",
+    ".kRRRRRRRRRRRDk.",
+    "..kRRRRRRRRRDk..",
+    "...kRRRRRRRDk...",
+    "....kRRRRRDk....",
+    ".....kRRRDk.....",
+    "......kRDk......",
+    ".......kk.......",
+    "................",
+    "................",
+    "................",
+]
+
+
+def coracao(q):
+    cores = {"k": (26, 28, 44, 255), "R": (230, 60, 80, 255) if q == 0 else (255, 100, 110, 255),
+             "D": (150, 30, 60, 255), "W": (244, 244, 244, 255)}
+    img = Image.new("RGBA", (16, 16), (0, 0, 0, 0))
+    for y, l in enumerate(CORACAO):
+        for x, ch in enumerate(l):
+            if ch in cores:
+                img.putpixel((x, y), cores[ch])
+    return img
+
+
+folha([coracao(0), coracao(1)]).save(os.path.join(SPR, "coracao.png"))
+
 # ---------------------------------------------------------------- Ícone
 icone = grade(personagem(CLASSES["rei"], "parado"), 1).resize((128, 128), Image.NEAREST)
 icone.save(os.path.join(RAIZ, "icon.png"))
